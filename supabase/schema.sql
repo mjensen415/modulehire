@@ -6,7 +6,8 @@ create table public.users (
   id uuid references auth.users(id) on delete cascade primary key,
   email text unique not null,
   name text,
-  plan text not null default 'free', -- 'free' | 'pro'
+  plan text not null default 'free' check (plan in ('free', 'pro')), -- 'free' | 'pro'
+  deleted_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -19,6 +20,7 @@ create table public.resumes (
   file_url text,           -- Supabase Storage URL (Pro users only)
   raw_text text not null,  -- Extracted text (stored for all users)
   parsed_at timestamptz,
+  deleted_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -49,6 +51,7 @@ create table public.modules (
   themes text[] not null default '{}',
   company_stage text[] not null default '{"any"}',
 
+  deleted_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -68,6 +71,7 @@ create table public.job_descriptions (
   extracted_seniority text,
   extracted_phrases text[] not null default '{}', -- exact phrases to mirror
 
+  deleted_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -80,10 +84,11 @@ create table public.generated_resumes (
   module_ids_used uuid[] not null default '{}',
   positioning_variant text check (positioning_variant in ('A', 'B', 'C', 'D')),
   company_color_hex text default '#00B4B4',
-  docx_url text,          -- Supabase Storage URL (Pro users)
-  pdf_url text,           -- Supabase Storage URL (Pro users)
-  docx_blob bytea,        -- Temp blob (free users, purged after 24h)
-  pdf_blob bytea,         -- Temp blob (free users, purged after 24h)
+  docx_url text,          -- Supabase Storage URL (Pro users or Temp path for Free)
+  pdf_url text,           -- Supabase Storage URL (Pro users or Temp path for Free)
+  is_temp boolean not null default true,
+  expires_at timestamptz,
+  deleted_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -92,8 +97,11 @@ create index idx_modules_user_id on public.modules(user_id);
 create index idx_modules_type on public.modules(type);
 create index idx_modules_themes on public.modules using gin(themes);
 create index idx_modules_role_types on public.modules using gin(role_types);
+create index idx_modules_deleted_at on public.modules(deleted_at);
+create index idx_resumes_deleted_at on public.resumes(deleted_at);
 create index idx_generated_resumes_user_id on public.generated_resumes(user_id);
 create index idx_job_descriptions_user_id on public.job_descriptions(user_id);
+create index idx_generated_resumes_expires_at on public.generated_resumes(expires_at) where is_temp = true;
 
 -- Enable RLS on all tables
 alter table public.users enable row level security;
@@ -118,6 +126,22 @@ create policy "job_descriptions_own" on public.job_descriptions
 
 create policy "generated_resumes_own" on public.generated_resumes
   for all using (auth.uid() = user_id);
+
+create or replace function public.set_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+create trigger modules_updated_at
+  before update on public.modules
+  for each row execute function public.set_updated_at();
+
+create trigger users_updated_at
+  before update on public.users
+  for each row execute function public.set_updated_at();
 
 -- Auto-create user row on signup
 create or replace function public.handle_new_user()
@@ -150,3 +174,23 @@ create policy "generated_user_folder" on storage.objects
     bucket_id = 'generated' and
     auth.uid()::text = (storage.foldername(name))[1]
   );
+
+create policy "temp_user_folder" on storage.objects
+  for all using (
+    bucket_id = 'temp' and
+    auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+-- Purge function for cron
+create or replace function public.purge_expired_temp_files()
+returns table(docx_path text, pdf_path text) language plpgsql security definer as $$
+begin
+  return query
+    update public.generated_resumes
+    set deleted_at = now()
+    where is_temp = true
+      and expires_at < now()
+      and deleted_at is null
+    returning docx_url, pdf_url;
+end;
+$$;
