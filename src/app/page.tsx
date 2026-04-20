@@ -234,7 +234,16 @@ export default function Home() {
         </div>
 
         <h1 className="hero-headline">
-          Your resume contains<br/><em>more than one story.</em><br/>
+          Your resume contains<br/>
+          <em style={{
+            fontStyle: 'normal',
+            display: 'inline',
+            background: 'linear-gradient(135deg, oklch(0.65 0.20 195), oklch(0.72 0.20 220))',
+            WebkitBackgroundClip: 'text',
+            backgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            color: 'transparent',
+          }}>more than one story.</em><br/>
           <span style={{fontWeight:300, fontSize:'0.75em', color:'var(--text2)', letterSpacing:'-0.01em'}}>ModuleHire Labs finds them all.</span>
         </h1>
 

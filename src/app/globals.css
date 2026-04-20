@@ -1007,15 +1007,8 @@ nav {
     opacity: 0; animation: fadeUp 0.7s 0.2s forwards;
     text-wrap: balance;
   }
-  .hero-headline em {
-    font-style: normal;
-    display: inline;
-    background: linear-gradient(135deg, var(--teal), oklch(0.72 0.20 220));
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: transparent;
-  }
+  /* .hero-headline em gradient is applied via inline style in page.tsx
+     to avoid Tailwind preflight interference with background-clip: text */
 
   .hero-sub {
     font-size: 17px; color: var(--text2); font-weight: 400; line-height: 1.6;
