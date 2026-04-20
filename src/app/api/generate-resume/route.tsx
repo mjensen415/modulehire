@@ -14,12 +14,12 @@ const styles = StyleSheet.create({
   section: { margin: 10, padding: 10, flexGrow: 1 }
 });
 
-const ResumePDF = ({ title, sections }: any) => (
+const ResumePDF = ({ title, sections }: { title: string, sections: Record<string, string>[] }) => (
   <PdfDoc>
     <Page size="A4" style={styles.page}>
       <View style={styles.section}>
         <Text>{title}</Text>
-        {sections.map((sec: any, idx: number) => (
+        {sections.map((sec: Record<string, string>, idx: number) => (
           <Text key={idx} style={{ marginTop: 10 }}>{sec.content}</Text>
         ))}
       </View>
@@ -87,7 +87,7 @@ ${JSON.stringify(sortedModules)}`
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const responseText = (msg.content[0] as any).text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const responseText = ((msg.content[0] as unknown) as { text: string }).text.replace(/```json/g, '').replace(/```/g, '').trim();
     const resumeData = JSON.parse(responseText);
 
     // 1. Generate DOCX
@@ -97,7 +97,7 @@ ${JSON.stringify(sortedModules)}`
         {
           children: [
             new docx.Paragraph({ text: resumeData.title, heading: docx.HeadingLevel.HEADING_1 }),
-            ...resumeData.sections.flatMap((sec: any) => [
+            ...resumeData.sections.flatMap((sec: Record<string, string>) => [
               new docx.Paragraph({ text: sec.heading, heading: docx.HeadingLevel.HEADING_2 }),
               new docx.Paragraph({ text: sec.content }),
             ])
@@ -108,6 +108,7 @@ ${JSON.stringify(sortedModules)}`
     const docxBuffer = await docx.Packer.toBuffer(doc);
 
     // 2. Generate PDF
+    // eslint-disable-next-line react-hooks/error-boundaries
     const pdfBuffer = await renderToBuffer(<ResumePDF title={resumeData.title} sections={resumeData.sections} />);
 
     // 3. Store config
@@ -149,8 +150,8 @@ ${JSON.stringify(sortedModules)}`
     if (saveError) throw saveError
 
     return NextResponse.json({ resume_id: savedResume.id, docx_url: savedResume.docx_url, pdf_url: savedResume.pdf_url })
-  } catch (error: any) {
+  } catch (error) {
     console.error(error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
   }
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -53,10 +54,10 @@ export default function SignIn() {
   return (
     <>
       <nav>
-        <a href="/" className="nav-logo">
+        <Link href="/" className="nav-logo">
           <div className="nav-logo-mark">MH</div>
           ModuleHire Labs
-        </a>
+        </Link>
       </nav>
 
       <section className="auth-page">
@@ -112,7 +113,7 @@ export default function SignIn() {
                 {activeTab === 'signin' ? 'Send magic link' : 'Create account'}
               </button>
               <p className="form-helper">
-                We'll email you a link — no password needed.
+                We&apos;ll email you a link — no password needed.
               </p>
 
               <div className="auth-divider">

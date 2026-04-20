@@ -15,7 +15,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { jd_id, user_id } = await req.json()
+    const { jd_id } = await req.json()
     const targetUserId = user.id
 
     const { data: jd, error: jdError } = await supabase
@@ -62,12 +62,12 @@ No markdown.`
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const responseText = (msg.content[0] as any).text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const responseText = ((msg.content[0] as unknown) as { text: string }).text.replace(/```json/g, '').replace(/```/g, '').trim();
     const result = JSON.parse(responseText);
 
     return NextResponse.json(result)
-  } catch (error: any) {
+  } catch (error) {
     console.error(error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
   }
 }

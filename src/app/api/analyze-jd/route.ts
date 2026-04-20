@@ -38,7 +38,7 @@ ${raw_text}`
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const responseText = (msg.content[0] as any).text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const responseText = ((msg.content[0] as unknown) as { text: string }).text.replace(/```json/g, '').replace(/```/g, '').trim();
     const extracted = JSON.parse(responseText);
 
     const { data, error } = await supabase
@@ -57,8 +57,8 @@ ${raw_text}`
     if (error) throw error
 
     return NextResponse.json({ job_description: data })
-  } catch (error: any) {
+  } catch (error) {
     console.error(error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
   }
 }

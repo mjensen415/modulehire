@@ -65,10 +65,10 @@ ${raw_text}`
       messages: [{ role: 'user', content: prompt }]
     });
 
-    const responseText = (msg.content[0] as any).text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const responseText = ((msg.content[0] as unknown) as { text: string }).text.replace(/```json/g, '').replace(/```/g, '').trim();
     const modulesData = JSON.parse(responseText);
 
-    const modulesToInsert = modulesData.map((m: any) => ({
+    const modulesToInsert = modulesData.map((m: Record<string, unknown>) => ({
       user_id: user.id,
       source_resume_id: resume_id,
       ...m
@@ -82,8 +82,8 @@ ${raw_text}`
     if (dbError) throw dbError
 
     return NextResponse.json({ modules: insertedModules, count: insertedModules.length })
-  } catch (error: any) {
+  } catch (error) {
     console.error(error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
   }
 }
