@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 import PublicNav from '@/components/layout/PublicNav';
+import PublicFooter from '@/components/layout/PublicFooter';
 
 const TWEAK_DEFAULTS = {
   accentColor: "teal",
@@ -366,22 +367,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─── FOOTER ─── */}
-      <footer>
-        <div className="footer-logo">
-          <div className="nav-logo-mark" style={{width:22,height:22,fontSize:9}}>MH</div>
-          ModuleHire Labs
-        </div>
-        <ul className="footer-links">
-          <li><Link href="/privacy">Privacy</Link></li>
-          <li><Link href="/terms">Terms</Link></li>
-          <li><Link href="/docs">Docs</Link></li>
-          <li><Link href="/status">Status</Link></li>
-        </ul>
-        <div className="footer-copy">© 2026</div>
-      </footer>
-
-      <TweaksPanel visible={tweaksVisible} tweaks={tweaks} onUpdate={handleUpdate} />
+      <PublicFooter />
     </>
   );
 }
