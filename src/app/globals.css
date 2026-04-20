@@ -1680,3 +1680,55 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
     footer { flex-direction: column; gap: 16px; text-align: center; }
     .footer-links { flex-wrap: wrap; justify-content: center; }
   }
+
+/* =========================================
+   CANONICAL OVERRIDES
+   These must come last to win the cascade
+   ========================================= */
+
+/* Reset .app-main to standard layout */
+.app-main {
+  margin-left: 220px;
+  flex: 1;
+  padding: 36px 40px;
+  min-height: 100vh;
+  display: block;
+  align-items: unset;
+  justify-content: unset;
+}
+@media (max-width: 900px) {
+  .app-main { margin-left: 0; padding: 20px; min-height: auto; }
+}
+
+/* Upload page: centered flex layout */
+.app-main-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+@media (max-width: 900px) {
+  .app-main-upload { padding: 20px; }
+}
+
+/* Settings page: horizontal flex, no side padding */
+.app-main-settings {
+  display: flex;
+  padding: 32px 0;
+}
+@media (max-width: 900px) {
+  .app-main-settings { flex-direction: column; padding: 20px 0; }
+}
+
+/* Full-bleed pages: no padding, flex column for sticky top-bar + panels */
+.app-main-fullbleed {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  height: 100vh;
+}
+@media (max-width: 900px) {
+  .app-main-fullbleed { height: auto; overflow: visible; }
+}
