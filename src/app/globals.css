@@ -1009,8 +1009,12 @@ nav {
   }
   .hero-headline em {
     font-style: normal;
+    display: inline;
     background: linear-gradient(135deg, var(--teal), oklch(0.72 0.20 220));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
   }
 
   .hero-sub {
@@ -1676,12 +1680,7 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
     nav { padding: 0 20px; }
     .nav-links { display: none; }
     .page-hero, .pricing-section, .faq-section { padding-left: 20px; padding-right: 20px; }
-    .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
-    footer { flex-direction: column; gap: 16px; text-align: center; }
-    .footer-links { flex-wrap: wrap; justify-content: center; }
-  }
-
-/* =========================================
+    .pricing-grid { grid-template-columns: 1fr; max-width: 420p/* =========================================
    CANONICAL OVERRIDES
    These must come last to win the cascade
    ========================================= */
@@ -1731,4 +1730,45 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
 }
 @media (max-width: 900px) {
   .app-main-fullbleed { height: auto; overflow: visible; }
+}
+
+/* ─── Hero CTA button overrides ───────────────────────────────────────────────
+   Must come after pricing page rules which set display:block; width:100%.
+   These restore the inline-flex / auto-width behaviour for the homepage hero.  */
+.hero-ctas .btn-primary {
+  display: inline-flex;
+  width: auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 14.5px; font-weight: 700;
+  background: var(--teal); color: #fff;
+  border: none; border-radius: 8px;
+  padding: 13px 24px; cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.2s;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+.hero-ctas .btn-primary:hover {
+  opacity: 0.9;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px oklch(0.65 0.20 195 / 0.4);
+}
+.hero-ctas .btn-secondary {
+  display: inline-flex;
+  width: auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 14.5px; font-weight: 600;
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border2); border-radius: 8px;
+  padding: 13px 24px; cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.2s;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+.hero-ctas .btn-secondary:hover {
+  background: var(--surface);
+  border-color: rgba(255,255,255,0.2);
 }
