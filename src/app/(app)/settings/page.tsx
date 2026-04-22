@@ -15,8 +15,16 @@ export default function Settings() {
   }
 
   return (
-    <div style={{ display: 'flex', margin: '-36px -40px', minHeight: '100vh' }}>
-      <div className="mobile-banner" style={{ display: 'none' }}>Best experienced on desktop.</div>
+    <>
+      <div className="app-topbar">
+        <div>
+          <span className="topbar-title">Settings</span>
+          <span className="topbar-sub">— Account &amp; preferences</span>
+        </div>
+      </div>
+
+      <div className="dash-content" style={{ padding: 0 }}>
+    <div style={{ display: 'flex', minHeight: 'calc(100vh - 56px)' }}>
 
       <nav className="settings-nav">
         <div className="settings-nav-title">Settings</div>
@@ -141,5 +149,7 @@ export default function Settings() {
         )}
       </div>
     </div>
+      </div>
+    </>
   )
 }

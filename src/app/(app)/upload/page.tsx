@@ -14,9 +14,15 @@ export default function Upload() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 112px)' }}>
-      <div className="mobile-banner">Best experienced on desktop — some features may be limited on mobile.</div>
+    <>
+      <div className="app-topbar">
+        <div>
+          <span className="topbar-title">Upload Resume</span>
+          <span className="topbar-sub">— Parse into modules</span>
+        </div>
+      </div>
 
+      <div className="dash-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div className="upload-wrap">
         <div className="page-title">Upload your resume</div>
         <p className="page-sub">We&apos;ll parse it into modules. Takes about 10 seconds.</p>
@@ -90,6 +96,7 @@ export default function Upload() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   )
 }

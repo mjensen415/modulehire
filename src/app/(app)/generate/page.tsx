@@ -13,13 +13,14 @@ export default function GenerateJD() {
 
   return (
     <>
-      <div className="mobile-banner">Best experienced on desktop.</div>
-
-      <div className="page-header">
-        <div className="page-title">New resume</div>
-        <p className="page-sub">Paste or upload a job description to get started.</p>
+      <div className="app-topbar">
+        <div>
+          <span className="topbar-title">Generate Resume</span>
+          <span className="topbar-sub">— Paste a job description to get started</span>
+        </div>
       </div>
 
+      <div className="dash-content">
       <div className="tab-bar">
         {['paste', 'upload', 'url'].map(tab => (
           <button
@@ -121,6 +122,7 @@ export default function GenerateJD() {
           </div>
         </div>
       )}
+      </div>
     </>
   )
 }
