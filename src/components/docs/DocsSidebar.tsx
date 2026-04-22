@@ -3,7 +3,19 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-const nav = [
+type NavItem = {
+  label: string
+  href: string
+  soon?: boolean
+}
+
+type NavSection = {
+  title: string
+  soon?: boolean
+  items: NavItem[]
+}
+
+const nav: NavSection[] = [
   {
     title: 'Getting Started',
     items: [
