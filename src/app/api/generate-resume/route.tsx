@@ -108,6 +108,8 @@ ${JSON.stringify(sortedModules)}`
       .replace(/,(\s*[}\]])/g, '$1')
     const resumeData = JSON.parse(cleanJson);
 
+    console.log('[generate-resume] AI response parsed, building DOCX...')
+
     // 1. Generate DOCX
     const doc = new docx.Document({
       creator: user_name,
@@ -124,10 +126,17 @@ ${JSON.stringify(sortedModules)}`
       ],
     });
     const docxBuffer = await docx.Packer.toBuffer(doc);
+    console.log('[generate-resume] DOCX built, building PDF...')
 
     // 2. Generate PDF
-    // eslint-disable-next-line react-hooks/error-boundaries
-    const pdfBuffer = await renderToBuffer(<ResumePDF title={resumeData.title} sections={resumeData.sections} />);
+    let pdfBuffer: Buffer
+    try {
+      pdfBuffer = await renderToBuffer(<ResumePDF title={resumeData.title} sections={resumeData.sections} />)
+    } catch (pdfErr) {
+      console.error('[generate-resume] PDF generation failed:', pdfErr)
+      throw pdfErr
+    }
+    console.log('[generate-resume] PDF built, uploading to storage...')
 
     // 3. Store config
     const resumeId = crypto.randomUUID()
@@ -142,12 +151,13 @@ ${JSON.stringify(sortedModules)}`
       .upload(docxPath, docxBuffer, {
         contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       })
-    if (docxUploadErr) throw docxUploadErr
+    if (docxUploadErr) { console.error('[generate-resume] DOCX upload failed:', docxUploadErr); throw docxUploadErr }
 
     const { error: pdfUploadErr } = await supabase.storage
       .from('temp')
       .upload(pdfPath, pdfBuffer, { contentType: 'application/pdf' })
-    if (pdfUploadErr) throw pdfUploadErr
+    if (pdfUploadErr) { console.error('[generate-resume] PDF upload failed:', pdfUploadErr); throw pdfUploadErr }
+    console.log('[generate-resume] Files uploaded, saving record...')
 
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
