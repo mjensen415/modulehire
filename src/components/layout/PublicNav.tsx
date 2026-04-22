@@ -11,7 +11,7 @@ export default function PublicNav() {
         <li><Link href="/how-it-works">How it works</Link></li>
         <li><Link href="/modules">Modules</Link></li>
         <li><Link href="/pricing">Pricing</Link></li>
-        <li><Link href="/docs">Docs</Link></li>
+        <li><Link href="/docs">FAQs/Docs</Link></li>
       </ul>
       <div className="nav-cta">
         <Link href="/signin" className="btn-ghost-sm">Sign in</Link>

@@ -1,17 +1,30 @@
 import { NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { aiComplete } from '@/lib/ai'
 import { createClient } from '@/lib/supabase/server'
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+import { createClient as createAnonClient } from '@supabase/supabase-js'
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    let supabase = await createClient()
+    let { data: { user } } = await supabase.auth.getUser()
 
-    if (authError || !user) {
+    // Fallback: accept a real user JWT in the Authorization header (for scripts/API callers)
+    if (!user) {
+      const authHeader = req.headers.get('authorization')
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.slice(7)
+        const authedClient = createAnonClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          { global: { headers: { Authorization: `Bearer ${token}` } } }
+        )
+        const { data } = await authedClient.auth.getUser()
+        user = data.user
+        if (user) supabase = authedClient as any
+      }
+    }
+
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -20,26 +33,35 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing raw_text or jd_id' }, { status: 400 })
     }
 
-    const prompt = `Analyze the following job description and extract these exact fields:
-- extracted_company: string
-- extracted_role_type: string (one of the valid role_types, e.g. director-community, etc)
-- extracted_themes: string[] (top 5-8 themes from valid themes list like community-building, growth, etc)
-- extracted_seniority: 'ic' | 'manager' | 'senior-manager' | 'director' | 'vp' | 'c-suite'
-- extracted_phrases: string[] (5-10 exact phrases from the JD to mirror verbatim)
+    const prompt = `Extract structured data from this job description. Output MUST be a raw JSON object starting with { and ending with }. No other text, no markdown.
 
-Return ONLY valid JSON with those keys, no markdown wrappers.
+Required keys:
+{
+  "extracted_company": "company name",
+  "extracted_role_type": "one of: vp-community, head-of-community, director-community, senior-manager-community, community-manager, developer-relations, developer-advocacy, developer-community-manager, community-marketing, community-ops, community-enablement, content-strategy, ic-community",
+  "extracted_themes": ["5-8 themes from: community-building, community-marketing, community-programs, community-ops, community-health, ambassador-programs, member-lifecycle, retention, engagement, developer-relations, developer-enablement, feedback-loops, ai, technical-content, hackathons, product-collaboration, product-advisory, cross-functional, data-driven, zero-to-one, scale, growth, brand, content-strategy, events, enablement, partnerships, lifecycle-marketing, leadership, executive, consulting, startup"],
+  "extracted_seniority": "one of: ic, manager, senior-manager, director, vp, c-suite",
+  "extracted_phrases": ["5-10 exact verbatim phrases from the job description"]
+}
 
 Job Description:
-${raw_text}`
+${raw_text}
 
-    const msg = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: prompt }]
-    });
+JSON:`
 
-    const responseText = ((msg.content[0] as unknown) as { text: string }).text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const extracted = JSON.parse(responseText);
+    const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 1024);
+
+    const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '');
+    const jsonStart = stripped.indexOf('{');
+    const jsonEnd = stripped.lastIndexOf('}');
+    if (jsonStart === -1 || jsonEnd === -1) {
+      throw new Error(`Model did not return JSON. Response: ${stripped.slice(0, 200)}`);
+    }
+    const cleanJson = stripped.slice(jsonStart, jsonEnd + 1)
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/,(\s*[}\]])/g, '$1')
+    const extracted = JSON.parse(cleanJson);
 
     const { data, error } = await supabase
       .from('job_descriptions')

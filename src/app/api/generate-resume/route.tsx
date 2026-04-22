@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { aiComplete } from '@/lib/ai'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAnonClient } from '@supabase/supabase-js'
 import * as docx from 'docx'
 import { renderToBuffer, Document as PdfDoc, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
 import React from 'react'
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
 
 const styles = StyleSheet.create({
   page: { flexDirection: 'column', backgroundColor: '#FFFFFF', padding: 30 },
@@ -29,10 +26,26 @@ const ResumePDF = ({ title, sections }: { title: string, sections: Record<string
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    let supabase = await createClient()
+    let { data: { user } } = await supabase.auth.getUser()
 
-    if (authError || !user) {
+    // Fallback: accept a real user JWT in the Authorization header (for scripts/API callers)
+    if (!user) {
+      const authHeader = req.headers.get('authorization')
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.slice(7)
+        const authedClient = createAnonClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          { global: { headers: { Authorization: `Bearer ${token}` } } }
+        )
+        const { data } = await authedClient.auth.getUser()
+        user = data.user
+        if (user) supabase = authedClient as any
+      }
+    }
+
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -81,14 +94,19 @@ Respond with JSON:
 Modules:
 ${JSON.stringify(sortedModules)}`
 
-    const msg = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 4096,
-      messages: [{ role: 'user', content: prompt }]
-    });
+    const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 4096);
 
-    const responseText = ((msg.content[0] as unknown) as { text: string }).text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const resumeData = JSON.parse(responseText);
+    const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '');
+    const jsonStart = stripped.indexOf('{');
+    const jsonEnd = stripped.lastIndexOf('}');
+    if (jsonStart === -1 || jsonEnd === -1) {
+      throw new Error(`Model did not return JSON. Response: ${stripped.slice(0, 200)}`);
+    }
+    const cleanJson = stripped.slice(jsonStart, jsonEnd + 1)
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/,(\s*[}\]])/g, '$1')
+    const resumeData = JSON.parse(cleanJson);
 
     // 1. Generate DOCX
     const doc = new docx.Document({
@@ -112,44 +130,58 @@ ${JSON.stringify(sortedModules)}`
     const pdfBuffer = await renderToBuffer(<ResumePDF title={resumeData.title} sections={resumeData.sections} />);
 
     // 3. Store config
-    // Let's assume free tier stores blobs, pro tier uploads. We'll check the user plan.
-    const { data: dbUser } = await supabase.from('users').select('plan').eq('id', user.id).single()
-    const isPro = dbUser?.plan === 'pro'
-
     const resumeId = crypto.randomUUID()
-    let docx_url = null
-    let pdf_url = null
-    let docx_blob = null
-    let pdf_blob = null
 
-    if (isPro) {
-      await supabase.storage.from('generated').upload(`${user.id}/${resumeId}/resume.docx`, docxBuffer, { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-      await supabase.storage.from('generated').upload(`${user.id}/${resumeId}/resume.pdf`, pdfBuffer, { contentType: 'application/pdf' });
-      docx_url = `${user.id}/${resumeId}/resume.docx`
-      pdf_url = `${user.id}/${resumeId}/resume.pdf`
-    } else {
-      // Store in DB directly as bytea. Buffer to hex or base64? 
-      // Supabase expects hex format for bytea, or base64. Postgres uses \x...
-      docx_blob = '\\x' + docxBuffer.toString('hex')
-      pdf_blob = '\\x' + pdfBuffer.toString('hex')
-    }
+    // Upload both files to temp bucket regardless of plan for now
+    // Pro differentiation (permanent storage) comes in Phase 2
+    const docxPath = `${user.id}/${resumeId}.docx`
+    const pdfPath  = `${user.id}/${resumeId}.pdf`
 
-    const { data: savedResume, error: saveError } = await supabase.from('generated_resumes').insert({
-      id: resumeId,
-      user_id: user.id,
-      job_description_id: jd_id,
-      title: resumeData.title,
-      module_ids_used: module_ids,
-      positioning_variant: positioning_variant,
-      docx_url,
-      pdf_url,
-      docx_blob,
-      pdf_blob
-    }).select().single()
+    const { error: docxUploadErr } = await supabase.storage
+      .from('temp')
+      .upload(docxPath, docxBuffer, {
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      })
+    if (docxUploadErr) throw docxUploadErr
 
+    const { error: pdfUploadErr } = await supabase.storage
+      .from('temp')
+      .upload(pdfPath, pdfBuffer, { contentType: 'application/pdf' })
+    if (pdfUploadErr) throw pdfUploadErr
+
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+
+    const { data: savedResume, error: saveError } = await supabase
+      .from('generated_resumes')
+      .insert({
+        id: resumeId,
+        user_id: user.id,
+        job_description_id: jd_id,
+        title: resumeData.title,
+        module_ids_used: module_ids,
+        positioning_variant: positioning_variant,
+        docx_url: docxPath,
+        pdf_url: pdfPath,
+        is_temp: true,
+        expires_at: expiresAt,
+      })
+      .select()
+      .single()
     if (saveError) throw saveError
 
-    return NextResponse.json({ resume_id: savedResume.id, docx_url: savedResume.docx_url, pdf_url: savedResume.pdf_url })
+    // Return signed URLs (valid 1 hour) so the client can download immediately
+    const { data: docxSigned } = await supabase.storage
+      .from('temp')
+      .createSignedUrl(docxPath, 3600)
+    const { data: pdfSigned } = await supabase.storage
+      .from('temp')
+      .createSignedUrl(pdfPath, 3600)
+
+    return NextResponse.json({
+      resume_id: savedResume.id,
+      docx_url: docxSigned?.signedUrl,
+      pdf_url:  pdfSigned?.signedUrl,
+    })
   } catch (error) {
     console.error(error)
     return NextResponse.json({ error: (error as Error).message }, { status: 500 })

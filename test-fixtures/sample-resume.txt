@@ -1,0 +1,20 @@
+John Doe
+123 Tech Lane, San Francisco, CA
+johndoe@example.com | (555) 123-4567
+
+EXPERIENCE
+VP of Community, TechCorp
+Jan 2020 - Present
+- Built and scaled a community of 50,000 developers, increasing engagement by 150%.
+- Designed community programs and ambassador networks to drive product adoption.
+- Collaborated with engineering and product teams to translate community feedback into actionable product roadmap items.
+
+Senior Community Manager, StartupInc
+Jun 2016 - Dec 2019
+- Managed forums and social media channels, handling thousands of user interactions daily.
+- Organized regional meetups and annual conferences for over 2,000 attendees.
+- Developed community guidelines and moderation strategies that reduced spam by 80%.
+
+EDUCATION
+B.S. in Communications
+University of California, Berkeley (2012 - 2016)
