@@ -126,6 +126,7 @@ export default function GeneratePage() {
   const [includeSkills, setIncludeSkills] = useState(true)
   const [skillInput, setSkillInput] = useState('')
   const [posVariant, setPosVariant] = useState<'A' | 'B' | 'C' | 'D'>('A')
+  const [jobLevel, setJobLevel] = useState('')
   const [includeCoverLetter, setIncludeCoverLetter] = useState(false)
   const [coverLetterTone, setCoverLetterTone] = useState<'professional' | 'warm' | 'direct'>('professional')
   const [coverLetterNotes, setCoverLetterNotes] = useState('')
@@ -152,6 +153,20 @@ export default function GeneratePage() {
         }))
       }
     })
+
+    // Auto-detect job level from extracted seniority
+    const seniorityMap: Record<string, string> = {
+      ic: 'Associate',
+      manager: 'Manager',
+      'senior-manager': 'Senior Manager',
+      director: 'Director',
+      vp: 'VP',
+      'c-suite': 'Executive',
+    }
+    if (jdData?.extracted_seniority) {
+      const mapped = seniorityMap[jdData.extracted_seniority]
+      if (mapped) setJobLevel(prev => prev || mapped)
+    }
 
     // Auto-populate skills from selected modules
     const selected = rankedModules.filter(m => selectedIds.includes(m.module_id))
@@ -306,6 +321,7 @@ export default function GeneratePage() {
           cover_letter: includeCoverLetter
             ? { include: true, tone: coverLetterTone, notes: coverLetterNotes || undefined }
             : { include: false, tone: coverLetterTone },
+          job_level: jobLevel || undefined,
         }),
       })
       const data = await res.json()
@@ -327,6 +343,7 @@ export default function GeneratePage() {
     setJdData(null)
     setRankedModules([])
     setSelectedIds([])
+    setJobLevel('')
     setGeneratedUrls(null)
     setResumeHtml(null)
     setCoverLetterText(null)
@@ -706,6 +723,38 @@ export default function GeneratePage() {
                     </div>
                   </label>
                 ))}
+              </div>
+            </div>
+
+            {/* Target level */}
+            <div className="config-section">
+              <div className="config-section-title" style={{ marginBottom: 12 }}>Target level</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {(['Associate', 'Manager', 'Senior Manager', 'Director', 'VP', 'Executive'] as const).map(level => (
+                  <button
+                    key={level}
+                    onClick={() => setJobLevel(jobLevel === level ? '' : level)}
+                    style={{
+                      padding: '7px 14px',
+                      fontSize: 13,
+                      background: jobLevel === level ? 'var(--teal-dim)' : 'var(--surface)',
+                      border: `1px solid ${jobLevel === level ? 'var(--teal-glow)' : 'var(--border2)'}`,
+                      borderRadius: 6,
+                      color: jobLevel === level ? 'var(--teal)' : 'var(--text2)',
+                      cursor: 'pointer',
+                      fontFamily: 'var(--font)',
+                      fontWeight: jobLevel === level ? 600 : 400,
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {level}
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 10 }}>
+                {jobLevel
+                  ? `Resume will be framed for a ${jobLevel}-level role`
+                  : 'Leave unset to let the AI infer from your modules'}
               </div>
             </div>
 

@@ -89,6 +89,7 @@ export async function POST(req: Request) {
       include_education_section,
       include_summary,
       cover_letter,
+      job_level,
     }: {
       module_ids: string[]
       jd_id: string
@@ -101,6 +102,7 @@ export async function POST(req: Request) {
       include_education_section: boolean
       include_summary: boolean
       cover_letter?: CoverLetterConfig
+      job_level?: string
     } = await req.json()
 
     const { data: jd, error: jdError } = await supabase
@@ -137,6 +139,18 @@ export async function POST(req: Request) {
       ? (skills as string[]).join(', ')
       : ''
 
+    const levelFraming: Record<string, string> = {
+      Associate: 'execution, task delivery, and team contribution',
+      Manager: 'team leadership, project delivery, and operational excellence',
+      'Senior Manager': 'cross-functional leadership, team scaling, and program ownership',
+      Director: 'strategy, organizational impact, and cross-functional leadership',
+      VP: 'executive strategy, business outcomes, and organizational transformation',
+      Executive: 'vision, transformation, business outcomes, and board-level impact',
+    }
+    const levelInstruction = job_level && levelFraming[job_level]
+      ? `Frame experience for a ${job_level}-level role. Emphasize ${levelFraming[job_level]}.`
+      : ''
+
     const prompt = `Assemble a tailored resume from the provided modules for the role: ${jd.extracted_role_type} at ${jd.extracted_company}.
 
 Rules:
@@ -145,6 +159,7 @@ Rules:
 - Conversational but professional tone
 - Lead with what's useful to the reader
 - Mirror these exact JD phrases naturally: ${(jd.extracted_phrases || []).join(', ')}
+${levelInstruction ? `- ${levelInstruction}` : ''}
 
 Summary section: ${summaryInstruction}
 
