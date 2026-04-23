@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, KeyboardEvent } from 'react'
+import { useState, useEffect, useRef, KeyboardEvent, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -126,9 +126,16 @@ export default function GeneratePage() {
   const [includeSkills, setIncludeSkills] = useState(true)
   const [skillInput, setSkillInput] = useState('')
   const [posVariant, setPosVariant] = useState<'A' | 'B' | 'C' | 'D'>('A')
+  const [includeCoverLetter, setIncludeCoverLetter] = useState(false)
+  const [coverLetterTone, setCoverLetterTone] = useState<'professional' | 'warm' | 'direct'>('professional')
+  const [coverLetterNotes, setCoverLetterNotes] = useState('')
   const [generatedUrls, setGeneratedUrls] = useState<{ docx_url: string; pdf_url: string } | null>(null)
+  const [resumeHtml, setResumeHtml] = useState<string | null>(null)
+  const [coverLetterText, setCoverLetterText] = useState<string | null>(null)
+  const [coverLetterUrl, setCoverLetterUrl] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
   const skillInputRef = useRef<HTMLInputElement>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
 
   // Pre-fill contact when reaching configuring step
   useEffect(() => {
@@ -144,6 +151,13 @@ export default function GeneratePage() {
       }
     })
   }, [step])
+
+  const onIframeLoad = useCallback(() => {
+    const iframe = iframeRef.current
+    if (!iframe?.contentDocument?.body) return
+    const h = iframe.contentDocument.body.scrollHeight
+    iframe.style.height = Math.min(h + 8, 600) + 'px'
+  }, [])
 
   // ── Step 1: analyze + match ─────────────────────────────────────────────────
 
@@ -265,11 +279,17 @@ export default function GeneratePage() {
           include_skills_section: includeSkills,
           include_education_section: includeEducation,
           include_summary: includeSummary,
+          cover_letter: includeCoverLetter
+            ? { include: true, tone: coverLetterTone, notes: coverLetterNotes || undefined }
+            : { include: false, tone: coverLetterTone },
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Generation failed')
       setGeneratedUrls({ docx_url: data.docx_url, pdf_url: data.pdf_url })
+      setResumeHtml(data.resume_html ?? null)
+      setCoverLetterText(data.cover_letter_text ?? null)
+      setCoverLetterUrl(data.cover_letter_url ?? null)
       setStep('done')
     } catch (e) {
       setErrorMessage((e as Error).message)
@@ -284,6 +304,9 @@ export default function GeneratePage() {
     setRankedModules([])
     setSelectedIds([])
     setGeneratedUrls(null)
+    setResumeHtml(null)
+    setCoverLetterText(null)
+    setCoverLetterUrl(null)
     setErrorMessage('')
   }
 
@@ -568,6 +591,41 @@ export default function GeneratePage() {
               )}
             </div>
 
+            {/* Cover letter */}
+            <div className="config-section">
+              <div className="config-section-header">
+                <div className="config-section-title">Cover letter</div>
+                <button className={`mod-toggle ${includeCoverLetter ? '' : 'off'}`} onClick={() => setIncludeCoverLetter(v => !v)} aria-label="Toggle cover letter" />
+              </div>
+              {includeCoverLetter && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>Tone</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                    {([
+                      { value: 'professional', label: 'Professional & concise' },
+                      { value: 'warm', label: 'Warm & conversational' },
+                      { value: 'direct', label: 'Direct & confident' },
+                    ] as const).map(t => (
+                      <label key={t.value} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                        <input type="radio" name="cl-tone" value={t.value} checked={coverLetterTone === t.value} onChange={() => setCoverLetterTone(t.value)} style={{ accentColor: 'var(--teal)' }} />
+                        {t.label}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="mod-edit-row">
+                    <label style={{ color: 'var(--text3)', fontSize: 12, marginBottom: 6, display: 'block' }}>Anything specific to mention? (optional)</label>
+                    <textarea
+                      className="mod-edit-textarea"
+                      rows={3}
+                      value={coverLetterNotes}
+                      onChange={e => setCoverLetterNotes(e.target.value)}
+                      placeholder="e.g. referred by Jane Smith, excited about their new AI product, open to relocation…"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Education */}
             <div className="config-section">
               <div className="config-section-header">
@@ -642,27 +700,55 @@ export default function GeneratePage() {
 
       {/* ── DONE ──────────────────────────────────────────────────────────── */}
       {step === 'done' && generatedUrls && (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, gap: 24 }}>
-          <div style={{ fontSize: 28 }}>✓</div>
-          <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>Resume ready</div>
-          <div style={{ fontSize: 14, color: 'var(--text3)' }}>Download links are valid for 1 hour</div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
+          <div style={{ maxWidth: 760, margin: '0 auto' }}>
 
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <a href={generatedUrls.docx_url} download className="btn-primary" style={{ textDecoration: 'none' }}>
-              Download DOCX
-            </a>
-            <a href={generatedUrls.pdf_url} download className="btn-secondary" style={{ textDecoration: 'none' }}>
-              Download PDF
-            </a>
-          </div>
+            {/* Resume preview */}
+            <div style={{ marginBottom: 32 }}>
+              <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 10 }}>Preview</div>
+              <div style={{ borderRadius: 4, boxShadow: '0 2px 16px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.06)', overflow: 'hidden', background: '#fff' }}>
+                {resumeHtml ? (
+                  <iframe
+                    ref={iframeRef}
+                    srcDoc={resumeHtml}
+                    style={{ width: '100%', height: 300, border: 'none', display: 'block' }}
+                    onLoad={onIframeLoad}
+                    title="Resume preview"
+                    sandbox="allow-same-origin"
+                  />
+                ) : (
+                  <div style={{ padding: 40, color: 'var(--text3)', fontSize: 13 }}>Preview unavailable</div>
+                )}
+              </div>
+            </div>
 
-          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-            <button className="btn-ghost" style={{ fontSize: 13 }} onClick={() => setStep('configuring')}>
-              Generate another variant
-            </button>
-            <button className="btn-ghost" style={{ fontSize: 13 }} onClick={reset}>
-              Start over
-            </button>
+            {/* Download buttons */}
+            <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+              <a href={generatedUrls.docx_url} download className="btn-primary" style={{ textDecoration: 'none' }}>Download DOCX</a>
+              <a href={generatedUrls.pdf_url} download className="btn-secondary" style={{ textDecoration: 'none' }}>Download PDF</a>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 32 }}>Download links are valid for 1 hour</div>
+
+            {/* Cover letter */}
+            {coverLetterText && (
+              <div style={{ marginBottom: 32 }}>
+                <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 10 }}>Cover Letter</div>
+                <div style={{ background: '#fff', borderRadius: 4, boxShadow: '0 2px 16px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.06)', padding: '32px 40px', maxHeight: 400, overflowY: 'auto' }}>
+                  <pre style={{ fontFamily: 'var(--mono)', fontSize: 13, lineHeight: 1.75, color: '#333', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{coverLetterText}</pre>
+                </div>
+                {coverLetterUrl && (
+                  <div style={{ marginTop: 10 }}>
+                    <a href={coverLetterUrl} download className="btn-ghost" style={{ fontSize: 13, textDecoration: 'none' }}>Download cover letter (.txt)</a>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn-ghost" style={{ fontSize: 13 }} onClick={() => setStep('configuring')}>Generate another variant</button>
+              <button className="btn-ghost" style={{ fontSize: 13 }} onClick={reset}>Start over</button>
+            </div>
           </div>
         </div>
       )}

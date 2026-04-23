@@ -8,6 +8,22 @@ import React from 'react'
 
 export const maxDuration = 60
 
+type Contact = { name: string; email: string; phone?: string; linkedin?: string; location?: string }
+
+function buildResumeHtml(contact: Contact, sections: Array<{ heading: string; content: string }>): string {
+  const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
+  const sectionsHtml = sections.map(sec => `
+    <div style="margin-bottom:22px">
+      <h2 style="font-family:Georgia,serif;font-size:13px;font-weight:bold;border-bottom:1px solid #ddd;padding-bottom:4px;margin:0 0 8px 0;color:#222;letter-spacing:0.01em">${sec.heading}</h2>
+      <p style="font-family:system-ui,sans-serif;font-size:13px;line-height:1.7;color:#333;margin:0">${sec.content.replace(/\n/g, '<br>')}</p>
+    </div>`).join('')
+  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:48px 56px 56px;box-sizing:border-box;font-family:system-ui,sans-serif">
+    <h1 style="font-family:Georgia,serif;font-size:26px;font-weight:bold;margin:0 0 5px 0;color:#111;letter-spacing:-0.02em">${contact.name}</h1>
+    <p style="font-size:11px;color:#777;margin:0 0 30px 0;letter-spacing:0.01em">${contactLine}</p>
+    ${sectionsHtml}
+  </div></body></html>`
+}
+
 const pdfStyles = StyleSheet.create({
   page: { flexDirection: 'column', backgroundColor: '#FFFFFF', padding: 40, fontFamily: 'Helvetica' },
   name: { fontSize: 20, fontWeight: 'bold', marginBottom: 4 },
@@ -16,8 +32,8 @@ const pdfStyles = StyleSheet.create({
   body: { fontSize: 10, lineHeight: 1.5, color: '#222', marginBottom: 8 },
 })
 
-type Contact = { name: string; email: string; phone?: string; linkedin?: string; location?: string }
 type EducationEntry = { school: string; degree: string; field: string; year: string }
+type CoverLetterConfig = { include: boolean; tone: 'professional' | 'warm' | 'direct'; notes?: string }
 
 const ResumePDF = ({ contact, sections }: { contact: Contact; sections: Array<{ heading: string; content: string }> }) => (
   <PdfDoc>
@@ -72,6 +88,19 @@ export async function POST(req: Request) {
       include_skills_section,
       include_education_section,
       include_summary,
+      cover_letter,
+    }: {
+      module_ids: string[]
+      jd_id: string
+      positioning_variant: string
+      contact: Contact
+      summary_override?: string
+      education?: EducationEntry[]
+      skills?: string[]
+      include_skills_section: boolean
+      include_education_section: boolean
+      include_summary: boolean
+      cover_letter?: CoverLetterConfig
     } = await req.json()
 
     const { data: jd, error: jdError } = await supabase
@@ -162,6 +191,9 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
       return true
     })
 
+    // Build HTML preview
+    const resumeHtml = buildResumeHtml(contact, sections)
+
     // Build DOCX
     const doc = new docx.Document({
       creator: contact.name,
@@ -238,12 +270,53 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
     const { data: docxSigned } = await supabase.storage.from('temp').createSignedUrl(docxPath, 3600)
     const { data: pdfSigned } = await supabase.storage.from('temp').createSignedUrl(pdfPath, 3600)
 
+    // Optional cover letter
+    let coverLetterText: string | null = null
+    let coverLetterUrl: string | null = null
+
+    if (cover_letter?.include) {
+      const toneDesc: Record<string, string> = {
+        professional: 'Professional and concise — clear, direct, no fluff',
+        warm: 'Warm and conversational — personable, human, enthusiastic',
+        direct: 'Direct and confident — bold, assured, no hedging',
+      }
+      const topModules = sortedModules.slice(0, 4) as Array<Record<string, unknown>>
+      const clPrompt = `Write a cover letter for this candidate applying to ${jd.extracted_role_type} at ${jd.extracted_company}.
+
+Tone: ${toneDesc[cover_letter.tone] ?? toneDesc.professional}
+Candidate experience (top modules):
+${topModules.map(m => `- ${m.title}: ${String(m.content).slice(0, 200)}`).join('\n')}
+JD themes: ${(jd.extracted_themes || []).join(', ')}
+${cover_letter.notes ? `Additional context: ${cover_letter.notes}` : ''}
+
+Rules:
+- 3 paragraphs max
+- Do NOT open with "I am writing to apply" — start with something specific and compelling
+- Mirror 1-2 phrases from the JD naturally
+- Close with a clear call to action
+- Plain text output only — no JSON, no markdown, no headers`
+
+      coverLetterText = await aiComplete([{ role: 'user', content: clPrompt }], 1024)
+
+      const coverPath = `${user.id}/${resumeId}-cover.txt`
+      await supabase.storage.from('temp').upload(
+        coverPath,
+        Buffer.from(coverLetterText, 'utf-8'),
+        { contentType: 'text/plain' }
+      )
+      const { data: coverSigned } = await supabase.storage.from('temp').createSignedUrl(coverPath, 3600)
+      coverLetterUrl = coverSigned?.signedUrl ?? null
+    }
+
     await supabase.from('usage_events').insert({ user_id: user.id, action: 'generate_resume' })
 
     return NextResponse.json({
       resume_id: savedResume.id,
       docx_url: docxSigned?.signedUrl,
       pdf_url: pdfSigned?.signedUrl,
+      resume_html: resumeHtml,
+      cover_letter_text: coverLetterText,
+      cover_letter_url: coverLetterUrl,
     })
   } catch (error) {
     console.error(error)
