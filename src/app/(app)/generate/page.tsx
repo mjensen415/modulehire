@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useRef, KeyboardEvent, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -147,17 +146,18 @@ export default function GeneratePage() {
   useEffect(() => {
     if (step !== 'configuring') return
 
-    // Contact from auth
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
+    // Pre-fill contact from saved profile
+    fetch('/api/me').then(r => r.json()).then(profile => {
+      if (!profile.error) {
         setContact(c => ({
-          ...c,
-          email: c.email || data.user!.email || '',
-          name: c.name || (data.user!.user_metadata?.full_name as string) || '',
+          name: c.name || profile.name || '',
+          email: c.email || profile.email || '',
+          phone: c.phone || profile.phone || '',
+          linkedin: c.linkedin || profile.linkedin_url || '',
+          location: c.location || profile.location || '',
         }))
       }
-    })
+    }).catch(() => {})
 
     // Auto-detect job level from extracted seniority
     const seniorityMap: Record<string, string> = {

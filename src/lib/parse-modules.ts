@@ -97,5 +97,49 @@ JSON array:`
 
   if (dbError) throw dbError
 
-  return insertedModules
+  // Extract contact info from the top of the resume (small, fast second call)
+  let contact: {
+    full_name: string | null
+    email: string | null
+    phone: string | null
+    linkedin_url: string | null
+    location: string | null
+  } = { full_name: null, email: null, phone: null, linkedin_url: null, location: null }
+
+  try {
+    const contactPrompt = `Extract contact information from this resume.
+Return JSON only:
+{
+  "full_name": "...",
+  "email": "...",
+  "phone": "...",
+  "linkedin_url": "...",
+  "location": "..."
+}
+Use null for any field not found.
+
+Resume:
+${rawText.slice(0, 2000)}
+
+JSON:`
+
+    const contactRaw = await aiComplete([{ role: 'user', content: contactPrompt }], 256)
+    const stripped = contactRaw.replace(/```json/g, '').replace(/```/g, '').trim()
+    const jsonStart = stripped.indexOf('{')
+    const jsonEnd = stripped.lastIndexOf('}')
+    if (jsonStart !== -1 && jsonEnd !== -1) {
+      const parsed = JSON.parse(jsonrepair(stripped.slice(jsonStart, jsonEnd + 1)))
+      contact = {
+        full_name: parsed.full_name ?? null,
+        email: parsed.email ?? null,
+        phone: parsed.phone ?? null,
+        linkedin_url: parsed.linkedin_url ?? null,
+        location: parsed.location ?? null,
+      }
+    }
+  } catch {
+    // Contact extraction is best-effort — don't fail the whole parse
+  }
+
+  return { modules: insertedModules, contact }
 }
