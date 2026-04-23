@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+
+export const maxDuration = 60 // seconds — required for Ollama parsing
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { parseModules } from '@/lib/parse-modules'
 

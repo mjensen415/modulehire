@@ -4,5 +4,9 @@
   "devCommand": "next dev",
   "installCommand": "npm install",
   "regions": ["sfo1"],
-  "crons": [{ "path": "/api/cron/purge", "schedule": "0 3 * * *" }]
+  "crons": [{ "path": "/api/cron/purge", "schedule": "0 3 * * *" }],
+  "functions": {
+    "src/app/api/upload-resume/route.ts": { "maxDuration": 60 },
+    "src/app/api/parse-resume/route.ts": { "maxDuration": 60 }
+  }
 }
