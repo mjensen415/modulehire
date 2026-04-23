@@ -6,7 +6,11 @@ create table public.users (
   id uuid references auth.users(id) on delete cascade primary key,
   email text unique not null,
   name text,
-  plan text not null default 'free' check (plan in ('free', 'pro')), -- 'free' | 'pro'
+  plan text not null default 'free' check (plan in ('free', 'standard', 'pro')), -- 'free' | 'standard' | 'pro'
+  is_admin boolean not null default false,
+  stripe_customer_id text unique,
+  stripe_subscription_id text unique,
+  plan_period_end timestamptz,
   deleted_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -110,21 +114,46 @@ alter table public.modules enable row level security;
 alter table public.job_descriptions enable row level security;
 alter table public.generated_resumes enable row level security;
 
--- Users: can only see and edit their own row
+-- Users: own row or admin
 create policy "users_own_row" on public.users
-  for all using (auth.uid() = id);
+  for all using (
+    auth.uid() = id
+    or (select is_admin from public.users where id = auth.uid())
+  );
 
--- All other tables: user owns their data
+-- All other tables: user owns their data or admin can access
 create policy "resumes_own" on public.resumes
   for all using (auth.uid() = user_id);
 
 create policy "modules_own" on public.modules
-  for all using (auth.uid() = user_id);
+  for all using (
+    auth.uid() = user_id
+    or (select is_admin from public.users where id = auth.uid())
+  );
 
 create policy "job_descriptions_own" on public.job_descriptions
-  for all using (auth.uid() = user_id);
+  for all using (
+    auth.uid() = user_id
+    or (select is_admin from public.users where id = auth.uid())
+  );
 
 create policy "generated_resumes_own" on public.generated_resumes
+  for all using (
+    auth.uid() = user_id
+    or (select is_admin from public.users where id = auth.uid())
+  );
+
+-- Usage events
+create table if not exists public.usage_events (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references public.users(id) on delete cascade not null,
+  action text not null check (action in ('generate_resume', 'match_job', 'upload_resume')),
+  created_at timestamptz not null default now()
+);
+create index idx_usage_events_user_month on public.usage_events(user_id, created_at);
+
+alter table public.usage_events enable row level security;
+create policy "usage_events_own" on public.usage_events
   for all using (auth.uid() = user_id);
 
 create or replace function public.set_updated_at()
