@@ -133,7 +133,7 @@ export default async function Library({ searchParams }: PageProps) {
         </div>
         <div className="topbar-actions">
           <Link href="/upload" className="btn-ghost">Upload resume</Link>
-          <Link href="/generate" className="btn-primary">
+          <Link href="/generate" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
             <IconPlus /> Generate resume
           </Link>
         </div>
