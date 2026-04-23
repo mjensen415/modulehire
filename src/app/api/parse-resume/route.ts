@@ -111,6 +111,8 @@ JSON array:`
 
     if (dbError) throw dbError
 
+    await supabase.from('usage_events').insert({ user_id: user.id, action: 'upload_resume' });
+
     return NextResponse.json({ modules: insertedModules, count: insertedModules.length })
   } catch (error) {
     console.error(error)

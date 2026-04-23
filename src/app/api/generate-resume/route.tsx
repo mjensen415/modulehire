@@ -177,6 +177,8 @@ ${JSON.stringify(sortedModules)}`
       .from('temp')
       .createSignedUrl(pdfPath, 3600)
 
+    await supabase.from('usage_events').insert({ user_id: user.id, action: 'generate_resume' });
+
     return NextResponse.json({
       resume_id: savedResume.id,
       docx_url: docxSigned?.signedUrl,

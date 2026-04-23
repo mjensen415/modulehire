@@ -104,6 +104,8 @@ JSON:`
       throw new Error(`JSON parse failed: ${(e as Error).message}. Raw: ${rawResponseText.slice(0, 400)}`)
     }
 
+    await supabase.from('usage_events').insert({ user_id: user.id, action: 'match_job' });
+
     return NextResponse.json(result)
   } catch (error) {
     console.error(error)
