@@ -71,29 +71,34 @@ export default function Upload() {
     const form = new FormData()
     form.append('file', file)
 
-    // Optimistically advance stages while waiting for server
-    const extractTimer = setTimeout(() => setStage('extracting'), 600)
-    const parseTimer = setTimeout(() => setStage('parsing'), 2000)
-
     try {
-      const res = await fetch('/api/upload-resume', { method: 'POST', body: form })
-      clearTimeout(extractTimer)
-      clearTimeout(parseTimer)
+      // Step 1 — upload + extract text
+      const uploadRes = await fetch('/api/upload-resume', { method: 'POST', body: form })
+      const uploadData = await uploadRes.json()
+      if (!uploadRes.ok) throw new Error(uploadData.error ?? 'Upload failed')
+
+      // Brief extracting stage so the UI shows all three steps
+      setStage('extracting')
+      await new Promise(r => setTimeout(r, 200))
+
+      // Step 2 — parse into modules
       setStage('parsing')
+      const parseRes = await fetch('/api/parse-resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resume_id: uploadData.resume_id, raw_text: uploadData.raw_text }),
+      })
+      const parseData = await parseRes.json()
+      if (!parseRes.ok) throw new Error(parseData.error ?? 'Parse failed')
 
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Upload failed')
-
-      setModuleCount(data.module_count)
+      setModuleCount(parseData.module_count)
       sessionStorage.setItem('pendingModules', JSON.stringify({
-        resume_id: data.resume_id,
-        modules: data.modules,
+        resume_id: uploadData.resume_id,
+        modules: parseData.modules,
       }))
       setStage('done')
       setTimeout(() => router.push('/module-review'), 1500)
     } catch (e) {
-      clearTimeout(extractTimer)
-      clearTimeout(parseTimer)
       setErrorMessage((e as Error).message)
       setStage('error')
     }
@@ -104,35 +109,39 @@ export default function Upload() {
     setStage('uploading')
     setErrorMessage('')
 
-    const extractTimer = setTimeout(() => setStage('extracting'), 400)
-    const parseTimer = setTimeout(() => setStage('parsing'), 1200)
-
     try {
-      // Need a resume_id — create a stub resume row first via a small inline call
-      // For paste, we call upload-resume with the text as a text/plain blob
+      // Step 1 — upload text as a stub file
       const blob = new Blob([pasteText], { type: 'text/plain' })
       const file = new File([blob], 'pasted-resume.txt', { type: 'text/plain' })
       const form = new FormData()
       form.append('file', file)
 
-      const res = await fetch('/api/upload-resume', { method: 'POST', body: form })
-      clearTimeout(extractTimer)
-      clearTimeout(parseTimer)
+      const uploadRes = await fetch('/api/upload-resume', { method: 'POST', body: form })
+      const uploadData = await uploadRes.json()
+      if (!uploadRes.ok) throw new Error(uploadData.error ?? 'Upload failed')
+
+      // Brief extracting stage so the UI shows all three steps
+      setStage('extracting')
+      await new Promise(r => setTimeout(r, 200))
+
+      // Step 2 — parse into modules
       setStage('parsing')
+      const parseRes = await fetch('/api/parse-resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resume_id: uploadData.resume_id, raw_text: uploadData.raw_text }),
+      })
+      const parseData = await parseRes.json()
+      if (!parseRes.ok) throw new Error(parseData.error ?? 'Parse failed')
 
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Parse failed')
-
-      setModuleCount(data.module_count)
+      setModuleCount(parseData.module_count)
       sessionStorage.setItem('pendingModules', JSON.stringify({
-        resume_id: data.resume_id,
-        modules: data.modules,
+        resume_id: uploadData.resume_id,
+        modules: parseData.modules,
       }))
       setStage('done')
       setTimeout(() => router.push('/module-review'), 1500)
     } catch (e) {
-      clearTimeout(extractTimer)
-      clearTimeout(parseTimer)
       setErrorMessage((e as Error).message)
       setStage('error')
     }

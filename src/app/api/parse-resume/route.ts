@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { parseModules } from '@/lib/parse-modules'
 
+export const maxDuration = 60
+
 export async function POST(req: Request) {
   try {
     let supabase = await createClient()
@@ -36,7 +38,7 @@ export async function POST(req: Request) {
 
     await supabase.from('usage_events').insert({ user_id: user.id, action: 'upload_resume' })
 
-    return NextResponse.json({ modules: insertedModules, count: insertedModules.length })
+    return NextResponse.json({ resume_id, modules: insertedModules, module_count: insertedModules.length })
   } catch (error) {
     console.error(error)
     return NextResponse.json({ error: (error as Error).message }, { status: 500 })

@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-
-export const maxDuration = 60 // seconds — required for Ollama parsing
 import { createClient as createAnonClient } from '@supabase/supabase-js'
-import { parseModules } from '@/lib/parse-modules'
+
+export const maxDuration = 60
 
 const MAX_SIZE = 10 * 1024 * 1024 // 10MB
 const ALLOWED_TYPES = new Set([
@@ -109,19 +108,10 @@ export async function POST(req: Request) {
 
     if (resumeError) throw resumeError
 
-    // Parse into modules
-    const insertedModules = await parseModules(supabase, user.id, resumeRow.id, rawText)
-
-    // Mark resume as parsed
-    await supabase
-      .from('resumes')
-      .update({ parsed_at: new Date().toISOString() })
-      .eq('id', resumeRow.id)
-
     return NextResponse.json({
       resume_id: resumeRow.id,
-      module_count: insertedModules.length,
-      modules: insertedModules,
+      raw_text: rawText,
+      filename: file.name,
     })
   } catch (error) {
     console.error(error)
