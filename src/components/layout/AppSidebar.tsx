@@ -54,7 +54,23 @@ function IconSettings() {
     </svg>
   );
 }
-export default function AppSidebar({ footer }: { footer?: React.ReactNode }) {
+function IconUpgrade() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <path d="M7.5 1.5l4.5 4.5H9V11H6V6H3l4.5-4.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+      <path d="M2 13h11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  );
+}
+function IconShield() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <path d="M7.5 1.5L2 4v4c0 3.2 2.3 5.8 5.5 6.5C10.7 13.8 13 11.2 13 8V4L7.5 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+      <path d="M5 7.5l2 2 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+export default function AppSidebar({ footer, plan, isAdmin }: { footer?: React.ReactNode; plan?: string; isAdmin?: boolean }) {
   const pathname = usePathname();
 
   const navItems = [
@@ -96,6 +112,18 @@ export default function AppSidebar({ footer }: { footer?: React.ReactNode }) {
           <span className="nav-item-icon"><IconSettings /></span>
           Settings
         </Link>
+        {(plan === 'free' || plan === 'standard') && (
+          <Link href="/pricing" className={`nav-item${pathname === '/pricing' ? ' active' : ''}`}>
+            <span className="nav-item-icon"><IconUpgrade /></span>
+            Upgrade
+          </Link>
+        )}
+        {isAdmin && (
+          <Link href="/admin" className={`nav-item${pathname.startsWith('/admin') ? ' active' : ''}`}>
+            <span className="nav-item-icon"><IconShield /></span>
+            Admin
+          </Link>
+        )}
       </div>
 
       {footer}

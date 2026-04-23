@@ -1988,3 +1988,100 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
   background: var(--surface);
   border-color: rgba(255,255,255,0.2);
 }
+
+/* ─── PRICING ─────────────────────────────────────────────────── */
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 8px;
+}
+@media (max-width: 800px) {
+  .pricing-grid { grid-template-columns: 1fr; }
+}
+.pricing-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pricing-card.current {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 1px var(--teal), 0 0 20px oklch(0.65 0.20 195 / 0.12);
+}
+.pricing-badge {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--teal);
+  color: #000;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+.pricing-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+.pricing-card-price {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  margin: 4px 0;
+}
+.pricing-card-desc {
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 8px;
+}
+.pricing-features {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex: 1;
+}
+.pricing-feature {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text2);
+}
+.pricing-feature-icon {
+  color: var(--teal);
+  flex-shrink: 0;
+}
+
+/* ─── PLAN WARNING BANNER ──────────────────────────────────────── */
+.plan-warning-banner {
+  background: oklch(0.75 0.18 80 / 0.12);
+  border: 1px solid oklch(0.75 0.18 80 / 0.35);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.plan-warning-banner a {
+  color: var(--teal);
+  font-weight: 600;
+  text-decoration: none;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.plan-warning-banner a:hover { text-decoration: underline; }
