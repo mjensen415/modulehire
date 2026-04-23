@@ -28,7 +28,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
     }
 
-    const adminClient = createAdminClient();
+    const adminClient = await createAdminClient();
     const { data, error } = await adminClient
       .from('users')
       .update(update)

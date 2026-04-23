@@ -5,6 +5,12 @@ import Stripe from 'stripe';
 
 export const dynamic = 'force-dynamic';
 
+function planFromPriceId(priceId: string | undefined): 'free' | 'standard' | 'pro' {
+  if (priceId === process.env.STRIPE_PRO_PRICE_ID) return 'pro';
+  if (priceId === process.env.STRIPE_STANDARD_PRICE_ID) return 'standard';
+  return 'free';
+}
+
 export async function POST(req: Request) {
   const body = await req.text();
   const sig = req.headers.get('stripe-signature');
@@ -18,7 +24,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `Webhook error: ${(err as Error).message}` }, { status: 400 });
   }
 
-  const supabase = createAdminClient();
+  const supabase = await createAdminClient();
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
@@ -26,13 +32,9 @@ export async function POST(req: Request) {
     if (!userId || !session.subscription || !session.customer) return NextResponse.json({ ok: true });
 
     const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
-    const periodEnd = new Date(subscription.current_period_end * 1000).toISOString();
-
-    // Determine plan from price ID
+    const periodEnd = new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString();
     const priceId = subscription.items.data[0]?.price.id;
-    const plan = priceId === process.env.STRIPE_PRO_PRICE_ID ? 'pro'
-      : priceId === process.env.STRIPE_STANDARD_PRICE_ID ? 'standard'
-      : 'free';
+    const plan = planFromPriceId(priceId);
 
     await supabase.from('users').update({
       plan,
@@ -45,10 +47,8 @@ export async function POST(req: Request) {
   if (event.type === 'customer.subscription.updated') {
     const subscription = event.data.object as Stripe.Subscription;
     const priceId = subscription.items.data[0]?.price.id;
-    const plan = priceId === process.env.STRIPE_PRO_PRICE_ID ? 'pro'
-      : priceId === process.env.STRIPE_STANDARD_PRICE_ID ? 'standard'
-      : 'free';
-    const periodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+    const plan = planFromPriceId(priceId);
+    const periodEnd = new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString();
 
     await supabase.from('users').update({ plan, plan_period_end: periodEnd })
       .eq('stripe_subscription_id', subscription.id);

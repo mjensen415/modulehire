@@ -19,7 +19,7 @@ export async function DELETE(
 
     const { id } = await params;
     const now = new Date().toISOString();
-    const adminClient = createAdminClient();
+    const adminClient = await createAdminClient();
 
     await Promise.all([
       adminClient.from('modules').update({ deleted_at: now }).eq('user_id', id).is('deleted_at', null),

@@ -37,7 +37,7 @@ export default async function AdminPage({
     .single();
   if (!profile?.is_admin) redirect('/dashboard');
 
-  const adminClient = createAdminClient();
+  const adminClient = await createAdminClient();
   const params = await searchParams;
   const page = Math.max(1, parseInt(params.page ?? '1', 10));
   const pageSize = 25;
@@ -118,7 +118,7 @@ export default async function AdminPage({
     <>
       <div className="app-topbar">
         <div>
-          <span className="topbar-title"><IconShield style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} /> Admin</span>
+          <span className="topbar-title"><span style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }}><IconShield /></span> Admin</span>
           <span className="topbar-sub">— Site management</span>
         </div>
       </div>
