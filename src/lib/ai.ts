@@ -41,7 +41,7 @@ export async function aiComplete(messages: Message[], maxTokens = 4096): Promise
   // Default: Claude API
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const res = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5-20251001',
     max_tokens: maxTokens,
     messages: messages.filter(m => m.role !== 'system').map(m => ({
       role: m.role as 'user' | 'assistant',
