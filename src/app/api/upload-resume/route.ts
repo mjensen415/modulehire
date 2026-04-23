@@ -1,0 +1,121 @@
+import { NextResponse } from 'next/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient as createAnonClient } from '@supabase/supabase-js'
+import { parseModules } from '@/lib/parse-modules'
+
+const MAX_SIZE = 10 * 1024 * 1024 // 10MB
+const ALLOWED_TYPES = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+])
+
+async function extractText(file: File): Promise<string> {
+  const buffer = Buffer.from(await file.arrayBuffer())
+
+  if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+    // Dynamic import avoids module-level init issues with pdf-parse test files
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>
+    const result = await pdfParse(buffer)
+    return result.text
+  }
+
+  // DOCX
+  const mammoth = await import('mammoth')
+  const result = await mammoth.extractRawText({ buffer })
+  return result.value
+}
+
+export async function POST(req: Request) {
+  try {
+    let supabase = await createClient()
+    let { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      const authHeader = req.headers.get('authorization')
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.slice(7)
+        const authedClient = createAnonClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          { global: { headers: { Authorization: `Bearer ${token}` } } }
+        )
+        const { data } = await authedClient.auth.getUser()
+        user = data.user
+        if (user) supabase = authedClient as ReturnType<typeof createAnonClient>
+      }
+    }
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const formData = await req.formData()
+    const file = formData.get('file') as File | null
+    if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+
+    // Validate type — accept by MIME or extension
+    const isDocx = file.name.endsWith('.docx')
+    const isPdf = file.name.endsWith('.pdf') || file.type === 'application/pdf'
+    if (!ALLOWED_TYPES.has(file.type) && !isDocx && !isPdf) {
+      return NextResponse.json({ error: 'Only PDF and DOCX files are supported' }, { status: 400 })
+    }
+    if (file.size > MAX_SIZE) {
+      return NextResponse.json({ error: 'File exceeds 10MB limit' }, { status: 400 })
+    }
+
+    // Extract raw text
+    const rawText = await extractText(file)
+    if (!rawText.trim()) {
+      return NextResponse.json({ error: 'Could not extract text from file' }, { status: 400 })
+    }
+
+    // Upload original file to storage using admin client (bypasses RLS for storage)
+    const adminClient = await createAdminClient()
+    const timestamp = Date.now()
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const storagePath = `${user.id}/${timestamp}-${safeName}`
+
+    const { error: storageError } = await adminClient.storage
+      .from('resumes')
+      .upload(storagePath, Buffer.from(await file.arrayBuffer()), {
+        contentType: file.type || 'application/octet-stream',
+        upsert: false,
+      })
+
+    const fileUrl = storageError ? null : storagePath
+
+    // Insert resume row
+    const { data: resumeRow, error: resumeError } = await supabase
+      .from('resumes')
+      .insert({
+        user_id: user.id,
+        filename: file.name,
+        file_url: fileUrl,
+        raw_text: rawText,
+        parsed_at: null,
+      })
+      .select()
+      .single()
+
+    if (resumeError) throw resumeError
+
+    // Parse into modules
+    const insertedModules = await parseModules(supabase, user.id, resumeRow.id, rawText)
+
+    // Mark resume as parsed
+    await supabase
+      .from('resumes')
+      .update({ parsed_at: new Date().toISOString() })
+      .eq('id', resumeRow.id)
+
+    return NextResponse.json({
+      resume_id: resumeRow.id,
+      module_count: insertedModules.length,
+      modules: insertedModules,
+    })
+  } catch (error) {
+    console.error(error)
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
+  }
+}
