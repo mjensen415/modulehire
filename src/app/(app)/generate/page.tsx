@@ -27,6 +27,7 @@ type RankedModule = {
   type: string
   content: string
   themes: string[]
+  role_types: string[]
   date_start: string | null
   date_end: string | null
 }
@@ -127,6 +128,7 @@ export default function GeneratePage() {
   const [skillInput, setSkillInput] = useState('')
   const [posVariant, setPosVariant] = useState<'A' | 'B' | 'C' | 'D'>('A')
   const [jobLevel, setJobLevel] = useState('')
+  const [resumeFormat, setResumeFormat] = useState<'classic' | 'modern' | 'compact'>('classic')
   const [includeCoverLetter, setIncludeCoverLetter] = useState(false)
   const [coverLetterTone, setCoverLetterTone] = useState<'professional' | 'warm' | 'direct'>('professional')
   const [coverLetterNotes, setCoverLetterNotes] = useState('')
@@ -293,7 +295,7 @@ export default function GeneratePage() {
       setRankedModules(mods => [...mods, {
         module_id: m.id, match_score: 0, include_reason: 'Manually added',
         id: m.id, title: m.title, source_company: m.source_company, source_role_title: null,
-        weight: m.weight, type: m.type, content: m.content, themes: m.themes,
+        weight: m.weight, type: m.type, content: m.content, themes: m.themes, role_types: [],
         date_start: null, date_end: null,
       }])
     }
@@ -348,6 +350,7 @@ export default function GeneratePage() {
             ? { include: true, tone: coverLetterTone, notes: coverLetterNotes || undefined }
             : { include: false, tone: coverLetterTone },
           job_level: jobLevel || undefined,
+          format: resumeFormat,
         }),
       })
       const data = await res.json()
@@ -372,6 +375,7 @@ export default function GeneratePage() {
     setRankedModules([])
     setSelectedIds([])
     setJobLevel('')
+    setResumeFormat('classic')
     setGeneratedUrls(null)
     setResumeHtml(null)
     setCoverLetterText(null)
@@ -639,6 +643,80 @@ export default function GeneratePage() {
                 {errorMessage}
               </div>
             )}
+
+            {/* Format */}
+            <div className="config-section">
+              <div className="config-section-title" style={{ marginBottom: 12 }}>Format</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                {([
+                  {
+                    key: 'classic' as const,
+                    name: 'Classic',
+                    desc: 'Serif headings, paragraph form, ATS-safe',
+                    preview: (
+                      <div style={{ fontSize: 9, lineHeight: 1.4, color: '#555', fontFamily: 'Georgia, serif', marginTop: 8 }}>
+                        <div style={{ fontWeight: 700, borderBottom: '1px solid #ccc', paddingBottom: 2, marginBottom: 3, letterSpacing: '0.04em' }}>EXPERIENCE</div>
+                        <div>Paragraph content flows here in a clean serif style…</div>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'modern' as const,
+                    name: 'Modern',
+                    desc: 'Teal accent bars, sans-serif, tighter spacing',
+                    preview: (
+                      <div style={{ fontSize: 9, lineHeight: 1.4, color: '#555', fontFamily: 'system-ui, sans-serif', marginTop: 8 }}>
+                        <div style={{ display: 'flex', gap: 5 }}>
+                          <div style={{ width: 2, background: '#00B4B4', flexShrink: 0, borderRadius: 1 }} />
+                          <div>
+                            <div style={{ fontWeight: 700, color: '#00B4B4', marginBottom: 2 }}>Experience</div>
+                            <div>Sans-serif body with accent bar…</div>
+                          </div>
+                        </div>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'compact' as const,
+                    name: 'Compact',
+                    desc: '1-page target, concise AI output, tight margins',
+                    preview: (
+                      <div style={{ fontSize: 9, lineHeight: 1.35, color: '#555', fontFamily: 'system-ui, sans-serif', marginTop: 8 }}>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <div style={{ width: 2, background: '#00B4B4', flexShrink: 0, borderRadius: 1 }} />
+                          <div>
+                            <div style={{ fontWeight: 700, color: '#00B4B4', marginBottom: 1, fontSize: 8 }}>Experience</div>
+                            <div style={{ fontSize: 8 }}>Dense, concise — fits more in less space…</div>
+                          </div>
+                        </div>
+                      </div>
+                    ),
+                  },
+                ]).map(f => (
+                  <label
+                    key={f.key}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      padding: '12px 14px',
+                      background: resumeFormat === f.key ? 'var(--teal-dim)' : 'var(--surface)',
+                      border: `1px solid ${resumeFormat === f.key ? 'var(--teal-glow)' : 'var(--border2)'}`,
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onClick={() => setResumeFormat(f.key)}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input type="radio" name="format" value={f.key} checked={resumeFormat === f.key} onChange={() => setResumeFormat(f.key)} style={{ accentColor: 'var(--teal)', flexShrink: 0 }} />
+                      <div style={{ fontWeight: 600, fontSize: 13, color: resumeFormat === f.key ? 'var(--teal)' : 'var(--text)' }}>{f.name}</div>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4, lineHeight: 1.4 }}>{f.desc}</div>
+                    {f.preview}
+                  </label>
+                ))}
+              </div>
+            </div>
 
             {/* Contact */}
             <div className="config-section">

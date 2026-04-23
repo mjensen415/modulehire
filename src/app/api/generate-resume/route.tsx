@@ -9,20 +9,153 @@ import React from 'react'
 export const maxDuration = 60
 
 type Contact = { name: string; email: string; phone?: string; linkedin?: string; location?: string }
+type ResumeFormat = 'classic' | 'modern' | 'compact'
+type Section = { heading: string; content: string }
 
-function buildResumeHtml(contact: Contact, sections: Array<{ heading: string; content: string }>): string {
+// ─── HTML PREVIEW ─────────────────────────────────────────────────────────────
+
+function buildResumeHtml(contact: Contact, sections: Section[], format: ResumeFormat): string {
   const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
+
+  if (format === 'classic') {
+    const sectionsHtml = sections.map(sec => `
+      <div style="margin-bottom:22px">
+        <h2 style="font-family:Georgia,serif;font-size:12.5px;font-weight:bold;font-variant:small-caps;letter-spacing:0.05em;border-bottom:1px solid #ddd;padding-bottom:4px;margin:0 0 8px 0;color:#222">${sec.heading}</h2>
+        <p style="font-family:Georgia,serif;font-size:12.5px;line-height:1.65;color:#333;margin:0">${sec.content.replace(/\n/g, '<br>')}</p>
+      </div>`).join('')
+    return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:48px 56px 56px;box-sizing:border-box">
+      <h1 style="font-family:Georgia,serif;font-size:26px;font-weight:bold;margin:0 0 5px 0;color:#111;letter-spacing:-0.02em">${contact.name}</h1>
+      <p style="font-family:Georgia,serif;font-size:10.5px;color:#777;margin:0 0 28px 0;letter-spacing:0.02em">${contactLine}</p>
+      ${sectionsHtml}
+    </div></body></html>`
+  }
+
+  if (format === 'modern') {
+    const sectionsHtml = sections.map(sec => `
+      <div style="margin-bottom:18px;border-left:3px solid #00B4B4;padding-left:12px">
+        <h2 style="font-family:system-ui,sans-serif;font-size:12px;font-weight:700;margin:0 0 6px 0;color:#00B4B4;letter-spacing:0.01em">${sec.heading}</h2>
+        <p style="font-family:system-ui,sans-serif;font-size:12px;line-height:1.6;color:#333;margin:0">${sec.content.replace(/\n/g, '<br>')}</p>
+      </div>`).join('')
+    return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:40px 48px 48px;box-sizing:border-box">
+      <h1 style="font-family:system-ui,sans-serif;font-size:24px;font-weight:800;margin:0 0 4px 0;color:#111;letter-spacing:-0.02em">${contact.name}</h1>
+      <p style="font-family:system-ui,sans-serif;font-size:10.5px;color:#777;margin:0 0 24px 0">${contactLine}</p>
+      ${sectionsHtml}
+    </div></body></html>`
+  }
+
+  // compact
   const sectionsHtml = sections.map(sec => `
-    <div style="margin-bottom:22px">
-      <h2 style="font-family:Georgia,serif;font-size:13px;font-weight:bold;border-bottom:1px solid #ddd;padding-bottom:4px;margin:0 0 8px 0;color:#222;letter-spacing:0.01em">${sec.heading}</h2>
-      <p style="font-family:system-ui,sans-serif;font-size:13px;line-height:1.7;color:#333;margin:0">${sec.content.replace(/\n/g, '<br>')}</p>
+    <div style="margin-bottom:14px;border-left:2px solid #00B4B4;padding-left:10px">
+      <h2 style="font-family:system-ui,sans-serif;font-size:11px;font-weight:700;margin:0 0 4px 0;color:#00B4B4;letter-spacing:0.01em">${sec.heading}</h2>
+      <p style="font-family:system-ui,sans-serif;font-size:11px;line-height:1.5;color:#333;margin:0">${sec.content.replace(/\n/g, '<br>')}</p>
     </div>`).join('')
-  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:48px 56px 56px;box-sizing:border-box;font-family:system-ui,sans-serif">
-    <h1 style="font-family:Georgia,serif;font-size:26px;font-weight:bold;margin:0 0 5px 0;color:#111;letter-spacing:-0.02em">${contact.name}</h1>
-    <p style="font-size:11px;color:#777;margin:0 0 30px 0;letter-spacing:0.01em">${contactLine}</p>
+  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:32px 40px 40px;box-sizing:border-box">
+    <h1 style="font-family:system-ui,sans-serif;font-size:20px;font-weight:800;margin:0 0 3px 0;color:#111;letter-spacing:-0.02em">${contact.name}</h1>
+    <p style="font-family:system-ui,sans-serif;font-size:10px;color:#777;margin:0 0 18px 0">${contactLine}</p>
     ${sectionsHtml}
   </div></body></html>`
 }
+
+// ─── DOCX BUILDER ─────────────────────────────────────────────────────────────
+
+function buildDocx(contact: Contact, sections: Section[], format: ResumeFormat, contactLine: string): docx.Document {
+  const twip = (inches: number) => Math.round(inches * 1440)
+
+  if (format === 'classic') {
+    return new docx.Document({
+      creator: contact.name,
+      sections: [{
+        properties: {
+          page: { margin: { top: twip(1), right: twip(1), bottom: twip(1), left: twip(1) } },
+        },
+        children: [
+          new docx.Paragraph({
+            children: [new docx.TextRun({ text: contact.name, bold: true, size: 36, font: 'Times New Roman' })],
+            spacing: { after: 80 },
+          }),
+          new docx.Paragraph({
+            children: [new docx.TextRun({ text: contactLine, size: 18, color: '777777', font: 'Times New Roman' })],
+            spacing: { after: 280 },
+          }),
+          ...sections.flatMap(sec => [
+            new docx.Paragraph({
+              children: [new docx.TextRun({ text: sec.heading.toUpperCase(), bold: true, size: 22, font: 'Times New Roman', smallCaps: true })],
+              spacing: { before: 280, after: 80, line: 276 },
+              border: { bottom: { color: 'cccccc', size: 4, style: docx.BorderStyle.SINGLE, space: 4 } },
+            }),
+            new docx.Paragraph({
+              children: [new docx.TextRun({ text: sec.content, size: 22, font: 'Times New Roman' })],
+              spacing: { after: 120, line: 276 },
+            }),
+          ]),
+        ],
+      }],
+    })
+  }
+
+  if (format === 'modern') {
+    return new docx.Document({
+      creator: contact.name,
+      sections: [{
+        properties: {
+          page: { margin: { top: twip(0.75), right: twip(0.85), bottom: twip(0.75), left: twip(0.85) } },
+        },
+        children: [
+          new docx.Paragraph({
+            children: [new docx.TextRun({ text: contact.name, bold: true, size: 34, font: 'Calibri', color: '111111' })],
+            spacing: { after: 60 },
+          }),
+          new docx.Paragraph({
+            children: [new docx.TextRun({ text: contactLine, size: 18, color: '777777', font: 'Calibri' })],
+            spacing: { after: 240 },
+          }),
+          ...sections.flatMap(sec => [
+            new docx.Paragraph({
+              children: [new docx.TextRun({ text: sec.heading, bold: true, size: 24, font: 'Calibri', color: '00B4B4' })],
+              spacing: { before: 200, after: 60, line: 264 },
+            }),
+            new docx.Paragraph({
+              children: [new docx.TextRun({ text: sec.content, size: 21, font: 'Calibri' })],
+              spacing: { after: 100, line: 264 },
+            }),
+          ]),
+        ],
+      }],
+    })
+  }
+
+  // compact
+  return new docx.Document({
+    creator: contact.name,
+    sections: [{
+      properties: {
+        page: { margin: { top: twip(0.75), right: twip(0.75), bottom: twip(0.75), left: twip(0.75) } },
+      },
+      children: [
+        new docx.Paragraph({
+          children: [new docx.TextRun({ text: contact.name, bold: true, size: 30, font: 'Calibri', color: '111111' })],
+          spacing: { after: 40 },
+        }),
+        new docx.Paragraph({
+          children: [new docx.TextRun({ text: contactLine, size: 16, color: '777777', font: 'Calibri' })],
+          spacing: { after: 200 },
+        }),
+        ...sections.flatMap(sec => [
+          new docx.Paragraph({
+            children: [new docx.TextRun({ text: sec.heading, bold: true, size: 22, font: 'Calibri', color: '00B4B4' })],
+            spacing: { before: 160, after: 40, line: 252 },
+          }),
+          new docx.Paragraph({
+            children: [new docx.TextRun({ text: sec.content, size: 20, font: 'Calibri' })],
+            spacing: { after: 80, line: 252 },
+          }),
+        ]),
+      ],
+    }],
+  })
+}
+
+// ─── PDF ──────────────────────────────────────────────────────────────────────
 
 const pdfStyles = StyleSheet.create({
   page: { flexDirection: 'column', backgroundColor: '#FFFFFF', padding: 40, fontFamily: 'Helvetica' },
@@ -35,7 +168,7 @@ const pdfStyles = StyleSheet.create({
 type EducationEntry = { school: string; degree: string; field: string; year: string }
 type CoverLetterConfig = { include: boolean; tone: 'professional' | 'warm' | 'direct'; notes?: string }
 
-const ResumePDF = ({ contact, sections }: { contact: Contact; sections: Array<{ heading: string; content: string }> }) => (
+const ResumePDF = ({ contact, sections }: { contact: Contact; sections: Section[] }) => (
   <PdfDoc>
     <Page size="A4" style={pdfStyles.page}>
       <Text style={pdfStyles.name}>{contact.name}</Text>
@@ -51,6 +184,8 @@ const ResumePDF = ({ contact, sections }: { contact: Contact; sections: Array<{ 
     </Page>
   </PdfDoc>
 )
+
+// ─── HANDLER ──────────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
   try {
@@ -90,6 +225,7 @@ export async function POST(req: Request) {
       include_summary,
       cover_letter,
       job_level,
+      format = 'classic',
     }: {
       module_ids: string[]
       jd_id: string
@@ -103,6 +239,7 @@ export async function POST(req: Request) {
       include_summary: boolean
       cover_letter?: CoverLetterConfig
       job_level?: string
+      format?: ResumeFormat
     } = await req.json()
 
     const { data: jd, error: jdError } = await supabase
@@ -151,6 +288,10 @@ export async function POST(req: Request) {
       ? `Frame experience for a ${job_level}-level role. Emphasize ${levelFraming[job_level]}.`
       : ''
 
+    const compactInstruction = format === 'compact'
+      ? '\nIMPORTANT: Be extremely concise. Maximum 2 sentences per experience section. The resume must fit on one page.'
+      : ''
+
     const prompt = `Assemble a tailored resume from the provided modules for the role: ${jd.extracted_role_type} at ${jd.extracted_company}.
 
 Rules:
@@ -177,7 +318,7 @@ Respond with JSON only:
 }
 
 Include only the sections that are asked for. Do not add extra sections.
-
+${compactInstruction}
 Modules:
 ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.title, content: m.content, source_company: m.source_company, source_role_title: m.source_role_title, date_start: m.date_start, date_end: m.date_end })))}`
 
@@ -193,7 +334,7 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
       .replace(/\/\/[^\n]*/g, '')
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/,(\s*[}\]])/g, '$1')
-    const resumeData: { sections: Array<{ heading: string; content: string }> } = JSON.parse(cleanJson)
+    const resumeData: { sections: Section[] } = JSON.parse(cleanJson)
 
     const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
     const roleTitle = jd.extracted_role_type ?? 'Resume'
@@ -208,42 +349,10 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
       return true
     })
 
-    // Build HTML preview
-    const resumeHtml = buildResumeHtml(contact, sections)
-
-    // Build DOCX
-    const doc = new docx.Document({
-      creator: contact.name,
-      sections: [
-        {
-          children: [
-            new docx.Paragraph({
-              children: [new docx.TextRun({ text: contact.name, bold: true, size: 36 })],
-              spacing: { after: 80 },
-            }),
-            new docx.Paragraph({
-              children: [new docx.TextRun({ text: contactLine, size: 18, color: '666666' })],
-              spacing: { after: 240 },
-            }),
-            ...sections.flatMap(sec => [
-              new docx.Paragraph({
-                text: sec.heading,
-                heading: docx.HeadingLevel.HEADING_2,
-                spacing: { before: 240, after: 80 },
-                border: { bottom: { color: 'cccccc', size: 4, style: docx.BorderStyle.SINGLE, space: 4 } },
-              }),
-              new docx.Paragraph({
-                children: [new docx.TextRun({ text: sec.content, size: 20 })],
-                spacing: { after: 120 },
-              }),
-            ]),
-          ],
-        },
-      ],
-    })
+    const resumeHtml = buildResumeHtml(contact, sections, format)
+    const doc = buildDocx(contact, sections, format, contactLine)
     const docxBuffer = await docx.Packer.toBuffer(doc)
 
-    // Build PDF
     const pdfBuffer = await renderToBuffer(
       <ResumePDF contact={contact} sections={sections} />
     )
@@ -287,7 +396,6 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
     const { data: docxSigned } = await supabase.storage.from('temp').createSignedUrl(docxPath, 3600)
     const { data: pdfSigned } = await supabase.storage.from('temp').createSignedUrl(pdfPath, 3600)
 
-    // Optional cover letter
     let coverLetterText: string | null = null
     let coverLetterUrl: string | null = null
 
