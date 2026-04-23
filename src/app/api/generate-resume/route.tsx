@@ -181,7 +181,9 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
     const resumeData: { sections: Array<{ heading: string; content: string }> } = JSON.parse(cleanJson)
 
     const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
-    const resumeTitle = `${contact.name} — ${jd.extracted_role_type ?? 'Resume'}`
+    const roleTitle = jd.extracted_role_type ?? 'Resume'
+    const resumeTitle = `${roleTitle} - ${contact.name}`
+    const docxFilename = `${resumeTitle}.docx`
 
     // Filter sections based on flags
     const sections = resumeData.sections.filter(s => {
@@ -314,6 +316,7 @@ Rules:
       resume_id: savedResume.id,
       docx_url: docxSigned?.signedUrl,
       pdf_url: pdfSigned?.signedUrl,
+      docx_filename: docxFilename,
       resume_html: resumeHtml,
       cover_letter_text: coverLetterText,
       cover_letter_url: coverLetterUrl,

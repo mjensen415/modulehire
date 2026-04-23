@@ -129,7 +129,7 @@ export default function GeneratePage() {
   const [includeCoverLetter, setIncludeCoverLetter] = useState(false)
   const [coverLetterTone, setCoverLetterTone] = useState<'professional' | 'warm' | 'direct'>('professional')
   const [coverLetterNotes, setCoverLetterNotes] = useState('')
-  const [generatedUrls, setGeneratedUrls] = useState<{ docx_url: string; pdf_url: string } | null>(null)
+  const [generatedUrls, setGeneratedUrls] = useState<{ docx_url: string; pdf_url: string; docx_filename: string } | null>(null)
   const [resumeHtml, setResumeHtml] = useState<string | null>(null)
   const [coverLetterText, setCoverLetterText] = useState<string | null>(null)
   const [coverLetterUrl, setCoverLetterUrl] = useState<string | null>(null)
@@ -286,7 +286,7 @@ export default function GeneratePage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Generation failed')
-      setGeneratedUrls({ docx_url: data.docx_url, pdf_url: data.pdf_url })
+      setGeneratedUrls({ docx_url: data.docx_url, pdf_url: data.pdf_url, docx_filename: data.docx_filename ?? 'Resume.docx' })
       setResumeHtml(data.resume_html ?? null)
       setCoverLetterText(data.cover_letter_text ?? null)
       setCoverLetterUrl(data.cover_letter_url ?? null)
@@ -724,7 +724,7 @@ export default function GeneratePage() {
 
             {/* Download buttons */}
             <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-              <a href={generatedUrls.docx_url} download className="btn-primary" style={{ textDecoration: 'none' }}>Download DOCX</a>
+              <a href={generatedUrls.docx_url} download={generatedUrls.docx_filename} className="btn-primary" style={{ textDecoration: 'none' }}>Download DOCX</a>
               <a href={generatedUrls.pdf_url} download className="btn-secondary" style={{ textDecoration: 'none' }}>Download PDF</a>
             </div>
             <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 32 }}>Download links are valid for 1 hour</div>
