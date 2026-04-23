@@ -135,6 +135,9 @@ export default function GeneratePage() {
   const [coverLetterText, setCoverLetterText] = useState<string | null>(null)
   const [coverLetterUrl, setCoverLetterUrl] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
+  const [inputTab, setInputTab] = useState<'paste' | 'url'>('paste')
+  const [jdUrl, setJdUrl] = useState('')
+  const [fetchingUrl, setFetchingUrl] = useState(false)
   const skillInputRef = useRef<HTMLInputElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
@@ -197,6 +200,29 @@ export default function GeneratePage() {
     const h = iframe.contentDocument.body.scrollHeight
     iframe.style.height = Math.min(h + 8, 600) + 'px'
   }, [])
+
+  // ── Step 1: fetch URL ───────────────────────────────────────────────────────
+
+  async function handleFetchUrl() {
+    if (!jdUrl.trim()) return
+    setFetchingUrl(true)
+    setErrorMessage('')
+    try {
+      const res = await fetch('/api/fetch-jd-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: jdUrl.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not fetch URL')
+      setJdText(data.text)
+      setInputTab('paste')
+    } catch (e) {
+      setErrorMessage((e as Error).message)
+    } finally {
+      setFetchingUrl(false)
+    }
+  }
 
   // ── Step 1: analyze + match ─────────────────────────────────────────────────
 
@@ -340,6 +366,8 @@ export default function GeneratePage() {
   function reset() {
     setStep('input')
     setJdText('')
+    setJdUrl('')
+    setInputTab('paste')
     setJdData(null)
     setRankedModules([])
     setSelectedIds([])
@@ -387,17 +415,73 @@ export default function GeneratePage() {
       {(step === 'input' || step === 'analyzing') && (
         <div className="dash-content" style={{ maxWidth: 680, margin: '0 auto', width: '100%', padding: '40px 24px' }}>
           <div className="page-title">Generate a tailored resume</div>
-          <p className="page-sub" style={{ marginBottom: 24 }}>Paste a job description — we&apos;ll match it to your module library and build a resume.</p>
+          <p className="page-sub" style={{ marginBottom: 24 }}>Paste a job description or paste a URL — we&apos;ll match it to your module library and build a resume.</p>
 
-          <textarea
-            className="jd-textarea"
-            placeholder="Paste the full job description here…"
-            value={jdText}
-            onChange={e => setJdText(e.target.value)}
-            disabled={step === 'analyzing'}
-            rows={12}
-          />
-          <div className="char-count">{jdText.length.toLocaleString()} characters</div>
+          {/* Tab switcher */}
+          <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid var(--border2)' }}>
+            {(['paste', 'url'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => { setInputTab(tab); setErrorMessage('') }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: `2px solid ${inputTab === tab ? 'var(--teal)' : 'transparent'}`,
+                  padding: '8px 16px',
+                  fontSize: 13,
+                  fontFamily: 'var(--font)',
+                  color: inputTab === tab ? 'var(--teal)' : 'var(--text3)',
+                  cursor: 'pointer',
+                  fontWeight: inputTab === tab ? 600 : 400,
+                  marginBottom: -1,
+                  transition: 'all 0.15s',
+                }}
+              >
+                {tab === 'paste' ? 'Paste text' : 'From URL'}
+              </button>
+            ))}
+          </div>
+
+          {inputTab === 'paste' && (
+            <>
+              <textarea
+                className="jd-textarea"
+                placeholder="Paste the full job description here…"
+                value={jdText}
+                onChange={e => setJdText(e.target.value)}
+                disabled={step === 'analyzing'}
+                rows={12}
+              />
+              <div className="char-count">{jdText.length.toLocaleString()} characters</div>
+            </>
+          )}
+
+          {inputTab === 'url' && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="url"
+                  className="mod-edit-input"
+                  style={{ flex: 1 }}
+                  placeholder="https://jobs.example.com/posting/12345"
+                  value={jdUrl}
+                  onChange={e => setJdUrl(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleFetchUrl() }}
+                  disabled={fetchingUrl}
+                />
+                <button
+                  className="btn-primary"
+                  onClick={handleFetchUrl}
+                  disabled={!jdUrl.trim() || fetchingUrl}
+                >
+                  {fetchingUrl ? <><Spinner /> Fetching…</> : 'Fetch'}
+                </button>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8 }}>
+                Note: LinkedIn and some job boards block automated access — paste the text directly instead.
+              </div>
+            </div>
+          )}
 
           {errorMessage && (
             <div style={{ background: 'var(--rose-dim, oklch(0.4 0.18 10 / 0.15))', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)', marginBottom: 16 }}>
@@ -405,16 +489,18 @@ export default function GeneratePage() {
             </div>
           )}
 
-          <div className="generate-cta-row">
-            <button
-              className="btn-primary"
-              onClick={handleMatch}
-              disabled={!hasContent || step === 'analyzing'}
-              style={!hasContent ? { opacity: 0.4 } : undefined}
-            >
-              {step === 'analyzing' ? <><Spinner /> Analyzing…</> : 'Match to my library →'}
-            </button>
-          </div>
+          {inputTab === 'paste' && (
+            <div className="generate-cta-row">
+              <button
+                className="btn-primary"
+                onClick={handleMatch}
+                disabled={!hasContent || step === 'analyzing'}
+                style={!hasContent ? { opacity: 0.4 } : undefined}
+              >
+                {step === 'analyzing' ? <><Spinner /> Analyzing…</> : 'Match to my library →'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
