@@ -203,13 +203,13 @@ export default async function Dashboard() {
         {nearModuleLimit && !atModuleLimit && (
           <div className="plan-warning-banner">
             ⚠️ You&apos;re using {currentModuleCount}/{limits.modules} modules on the {plan} plan.
-            <Link href="/pricing">Upgrade →</Link>
+            <Link href="/billing">Upgrade →</Link>
           </div>
         )}
         {nearResumeLimit && !atResumeLimit && (
           <div className="plan-warning-banner">
             ⚠️ You&apos;ve used {resumesThisMonth}/{limits.resumes_per_month} resume generations this month.
-            <Link href="/pricing">Upgrade →</Link>
+            <Link href="/billing">Upgrade →</Link>
           </div>
         )}
 

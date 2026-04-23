@@ -118,7 +118,7 @@ export default async function PricingPage() {
                 {isCurrent ? (
                   hasStripe ? (
                     <form action="/api/stripe/portal" method="POST">
-                      <input type="hidden" name="returnUrl" value={`/pricing`} />
+                      <input type="hidden" name="returnUrl" value={`/billing`} />
                       <button type="submit" className="btn-ghost" style={{ width: '100%' }}>
                         Manage billing
                       </button>
@@ -131,7 +131,7 @@ export default async function PricingPage() {
                 ) : isDowngrade ? null : (
                   <form action="/api/stripe/checkout" method="POST">
                     <input type="hidden" name="plan" value={plan.key} />
-                    <input type="hidden" name="returnUrl" value={`/pricing`} />
+                    <input type="hidden" name="returnUrl" value={`/billing`} />
                     <button type="submit" className="btn-primary" style={{ width: '100%' }}>
                       {plan.cta}
                     </button>
