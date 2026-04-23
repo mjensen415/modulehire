@@ -1,6 +1,5 @@
 -- 1. Add 'standard' to plan enum
-alter table public.users
-  drop constraint users_plan_check;
+alter table public.users drop constraint if exists users_plan_check;
 alter table public.users
   add constraint users_plan_check check (plan in ('free', 'standard', 'pro'));
 
@@ -21,10 +20,11 @@ create table if not exists public.usage_events (
   action text not null check (action in ('generate_resume', 'match_job', 'upload_resume')),
   created_at timestamptz not null default now()
 );
-create index idx_usage_events_user_month on public.usage_events(user_id, created_at);
+create index if not exists idx_usage_events_user_month on public.usage_events(user_id, created_at);
 
 -- 5. RLS on usage_events
 alter table public.usage_events enable row level security;
+drop policy if exists "usage_events_own" on public.usage_events;
 create policy "usage_events_own" on public.usage_events
   for all using (auth.uid() = user_id);
 
