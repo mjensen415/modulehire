@@ -3,12 +3,13 @@ import { aiComplete } from '@/lib/ai'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 
+export const maxDuration = 60
+
 export async function POST(req: Request) {
   try {
     let supabase = await createClient()
     let { data: { user } } = await supabase.auth.getUser()
 
-    // Fallback: accept a real user JWT in the Authorization header (for scripts/API callers)
     if (!user) {
       const authHeader = req.headers.get('authorization')
       if (authHeader?.startsWith('Bearer ')) {
@@ -20,6 +21,7 @@ export async function POST(req: Request) {
         )
         const { data } = await authedClient.auth.getUser()
         user = data.user
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (user) supabase = authedClient as any
       }
     }
@@ -29,21 +31,18 @@ export async function POST(req: Request) {
     }
 
     const { jd_id } = await req.json()
-    const targetUserId = user.id
 
     const { data: jd, error: jdError } = await supabase
       .from('job_descriptions')
       .select('*')
       .eq('id', jd_id)
       .single()
-    
     if (jdError) throw jdError
 
     const { data: modules, error: modError } = await supabase
       .from('modules')
-      .select('id, title, themes, weight')
-      .eq('user_id', targetUserId)
-
+      .select('id, title, themes, weight, type, content, source_company, source_role_title, date_start, date_end')
+      .eq('user_id', user.id)
     if (modError) throw modError
 
     const moduleList = modules.map(m =>
@@ -81,32 +80,49 @@ The recommended_stack should contain the 4-8 highest-scoring module ids in order
 
 JSON:`
 
-    const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 2048);
+    const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 2048)
 
-    const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '');
-    const jsonStart = stripped.indexOf('{');
-    const jsonEnd = stripped.lastIndexOf('}');
+    const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
+    const jsonStart = stripped.indexOf('{')
+    const jsonEnd = stripped.lastIndexOf('}')
     if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error(`Model did not return JSON. Response: ${stripped.slice(0, 200)}`);
+      throw new Error(`Model did not return JSON. Response: ${stripped.slice(0, 200)}`)
     }
-    const rawJson = stripped.slice(jsonStart, jsonEnd + 1);
-    // Sanitize common small-model JSON quirks: comments, trailing commas
+    const rawJson = stripped.slice(jsonStart, jsonEnd + 1)
     const cleanJson = rawJson
-      .replace(/\/\/[^\n]*/g, '')           // strip // comments
-      .replace(/\/\*[\s\S]*?\*\//g, '')     // strip /* */ comments
-      .replace(/,(\s*[}\]])/g, '$1')        // strip trailing commas
-    let result
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/,(\s*[}\]])/g, '$1')
+
+    let result: { ranked_modules: Array<{ module_id: string; match_score: number; include_reason: string }>; recommended_stack: string[] }
     try {
       result = JSON.parse(cleanJson)
     } catch (e) {
-      // Log raw output so we can see exactly what the model returned
       console.error('match-modules JSON parse failed. Raw model output:\n', rawResponseText)
       throw new Error(`JSON parse failed: ${(e as Error).message}. Raw: ${rawResponseText.slice(0, 400)}`)
     }
 
-    await supabase.from('usage_events').insert({ user_id: user.id, action: 'match_job' });
+    // Enrich ranked_modules with full module data
+    const moduleMap = new Map(modules.map(m => [m.id, m]))
+    const enrichedModules = result.ranked_modules
+      .map(rm => {
+        const m = moduleMap.get(rm.module_id)
+        if (!m) return null
+        return { ...rm, ...m, module_id: rm.module_id }
+      })
+      .filter(Boolean)
 
-    return NextResponse.json(result)
+    // Also return all modules so the UI can show unmatched ones
+    const rankedIds = new Set(result.ranked_modules.map(r => r.module_id))
+    const unmatchedModules = modules.filter(m => !rankedIds.has(m.id))
+
+    await supabase.from('usage_events').insert({ user_id: user.id, action: 'match_job' })
+
+    return NextResponse.json({
+      ranked_modules: enrichedModules,
+      recommended_stack: result.recommended_stack,
+      unmatched_modules: unmatchedModules,
+    })
   } catch (error) {
     console.error(error)
     return NextResponse.json({ error: (error as Error).message }, { status: 500 })
