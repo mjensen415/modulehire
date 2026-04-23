@@ -20,6 +20,10 @@ async function extractText(file: File): Promise<string> {
     return result.text
   }
 
+  if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+    return buffer.toString('utf-8')
+  }
+
   // DOCX
   const mammoth = await import('mammoth')
   const result = await mammoth.extractRawText({ buffer })
@@ -54,10 +58,11 @@ export async function POST(req: Request) {
     const file = formData.get('file') as File | null
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
 
-    // Validate type — accept by MIME or extension
+    // Validate type — accept by MIME or extension (text/plain for paste flow)
     const isDocx = file.name.endsWith('.docx')
     const isPdf = file.name.endsWith('.pdf') || file.type === 'application/pdf'
-    if (!ALLOWED_TYPES.has(file.type) && !isDocx && !isPdf) {
+    const isText = file.type === 'text/plain' || file.name.endsWith('.txt')
+    if (!ALLOWED_TYPES.has(file.type) && !isDocx && !isPdf && !isText) {
       return NextResponse.json({ error: 'Only PDF and DOCX files are supported' }, { status: 400 })
     }
     if (file.size > MAX_SIZE) {
