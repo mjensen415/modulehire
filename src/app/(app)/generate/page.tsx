@@ -137,9 +137,11 @@ export default function GeneratePage() {
   const skillInputRef = useRef<HTMLInputElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
-  // Pre-fill contact when reaching configuring step
+  // Pre-fill contact + skills when reaching configuring step
   useEffect(() => {
     if (step !== 'configuring') return
+
+    // Contact from auth
     const supabase = createClient()
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
@@ -150,6 +152,28 @@ export default function GeneratePage() {
         }))
       }
     })
+
+    // Auto-populate skills from selected modules
+    const selected = rankedModules.filter(m => selectedIds.includes(m.module_id))
+    const autoSkills: string[] = []
+    for (const m of selected) {
+      const isSkillType = m.type === 'skill'
+      const hasTechTheme = (m.themes ?? []).includes('technical-content')
+      const hasDevRolType = (m.role_types ?? []).some((r: string) => r.includes('developer-relations'))
+      if (isSkillType || hasTechTheme || hasDevRolType) {
+        if (!autoSkills.includes(m.title)) autoSkills.push(m.title)
+      }
+    }
+    if (autoSkills.length > 0) {
+      setSkills(prev => {
+        const merged = [...prev]
+        for (const s of autoSkills) {
+          if (!merged.includes(s)) merged.push(s)
+        }
+        return merged
+      })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
 
   const onIframeLoad = useCallback(() => {
