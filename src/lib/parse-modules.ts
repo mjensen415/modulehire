@@ -1,4 +1,5 @@
 import { aiComplete } from './ai'
+import { jsonrepair } from 'jsonrepair'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 // Full taxonomy reference (not sent to model — validation handles invalid values):
@@ -56,20 +57,24 @@ ${rawText}
 
 JSON array:`
 
-  const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 4096)
+  // 8192 tokens — Haiku 4.5 max output; a dense 3-page resume can exceed 4096
+  const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 8192)
 
-  const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
+  const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '').trim()
   const jsonStart = stripped.indexOf('[')
   const jsonEnd = stripped.lastIndexOf(']')
-  if (jsonStart === -1 || jsonEnd === -1) {
-    throw new Error(`Model did not return a JSON array. Response: ${stripped.slice(0, 200)}`)
+  if (jsonStart === -1) {
+    throw new Error(`Model did not return a JSON array. Response: ${stripped.slice(0, 300)}`)
   }
-  const cleanJson = stripped.slice(jsonStart, jsonEnd + 1)
-    .replace(/\/\/[^\n]*/g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/,(\s*[}\]])/g, '$1')
 
-  const modulesData: Record<string, unknown>[] = JSON.parse(cleanJson)
+  // Extract the array — use lastIndexOf(']') if present, else try to repair the truncated JSON
+  const rawJson = jsonEnd !== -1
+    ? stripped.slice(jsonStart, jsonEnd + 1)
+    : stripped.slice(jsonStart)
+
+  // jsonrepair handles: trailing commas, missing quotes, truncated output, unescaped chars
+  const repairedJson = jsonrepair(rawJson)
+  const modulesData: Record<string, unknown>[] = JSON.parse(repairedJson)
 
   const modulesToInsert = modulesData.map(m => ({
     user_id: userId,
