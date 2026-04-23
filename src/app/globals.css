@@ -2085,3 +2085,48 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
   white-space: nowrap;
 }
 .plan-warning-banner a:hover { text-decoration: underline; }
+
+/* ─── ADMIN TABLE ──────────────────────────────────────────────── */
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.admin-table th {
+  text-align: left;
+  padding: 10px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text3);
+  border-bottom: 1px solid var(--border);
+}
+.admin-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.admin-table tr:last-child td { border-bottom: none; }
+.admin-table tr:hover td { background: var(--surface2); }
+.plan-chip {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 20px;
+}
+.plan-chip.plan-free     { background: var(--bg3); color: var(--text2); }
+.plan-chip.plan-standard { background: oklch(0.65 0.20 250 / 0.15); color: var(--indigo); }
+.plan-chip.plan-pro      { background: oklch(0.65 0.20 195 / 0.15); color: var(--teal); }
+.admin-select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 3px 6px;
+  cursor: pointer;
+}
