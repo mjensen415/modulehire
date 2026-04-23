@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { getUserPlanContext, PLAN_LIMITS } from '@/lib/plans';
 
 // ─── ICONS ───
 function IconBlocks() {
@@ -120,6 +121,8 @@ export default async function Dashboard() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  const planCtx = await getUserPlanContext(supabase);
+
   const [
     { data: modules, count: moduleCount },
     { data: resumes, count: resumeCount },
@@ -162,6 +165,20 @@ export default async function Dashboard() {
   const typedJds = (jds ?? []) as Array<{ id: string; title?: string; company?: string; created_at: string }>;
   const hasContent = typedModules.length > 0 || typedResumes.length > 0;
 
+  // Plan gate state
+  const plan = planCtx?.plan ?? 'free';
+  const limits = PLAN_LIMITS[plan];
+  const currentModuleCount = planCtx?.module_count ?? (moduleCount ?? 0);
+  const resumesThisMonth = planCtx?.resumes_this_month ?? 0;
+  const matchesThisMonth = planCtx?.matches_this_month ?? 0;
+  const isAdmin = planCtx?.is_admin ?? false;
+
+  const nearModuleLimit = !isAdmin && limits.modules !== -1 && currentModuleCount >= limits.modules - 2;
+  const atModuleLimit = !isAdmin && limits.modules !== -1 && currentModuleCount >= limits.modules;
+  const nearResumeLimit = !isAdmin && limits.resumes_per_month !== -1 && resumesThisMonth >= limits.resumes_per_month - 1;
+  const atResumeLimit = !isAdmin && limits.resumes_per_month !== -1 && resumesThisMonth >= limits.resumes_per_month;
+  const atMatchLimit = !isAdmin && limits.matches_per_month !== -1 && matchesThisMonth >= limits.matches_per_month;
+
   return (
     <>
       {/* TOPBAR */}
@@ -182,6 +199,19 @@ export default async function Dashboard() {
 
       {/* CONTENT */}
       <div className="dash-content">
+        {/* PLAN WARNING BANNERS */}
+        {nearModuleLimit && !atModuleLimit && (
+          <div className="plan-warning-banner">
+            ⚠️ You&apos;re using {currentModuleCount}/{limits.modules} modules on the {plan} plan.
+            <Link href="/pricing">Upgrade →</Link>
+          </div>
+        )}
+        {nearResumeLimit && !atResumeLimit && (
+          <div className="plan-warning-banner">
+            ⚠️ You&apos;ve used {resumesThisMonth}/{limits.resumes_per_month} resume generations this month.
+            <Link href="/pricing">Upgrade →</Link>
+          </div>
+        )}
 
         {/* STATS */}
         <div className="dash-stats">
@@ -264,17 +294,22 @@ export default async function Dashboard() {
               </div>
               <div className="quick-actions">
                 {[
-                  { icon: '🔍', color: 'var(--teal-dim)', title: 'Find matches', desc: 'Paste a job description', href: '/generate' },
-                  { icon: '⚡', color: 'var(--amber-dim)', title: 'Generate resume', desc: 'Pick modules + role', href: '/generate' },
-                  { icon: '✏️', color: 'var(--indigo-dim)', title: 'Edit a module', desc: 'Refine your skills', href: '/library' },
-                  { icon: '📤', color: 'var(--green-dim)', title: 'Upload resume', desc: 'Add or replace source', href: '/upload' },
+                  { icon: '🔍', color: 'var(--teal-dim)', title: 'Find matches', desc: 'Paste a job description', href: '/generate', blocked: atMatchLimit },
+                  { icon: '⚡', color: 'var(--amber-dim)', title: 'Generate resume', desc: 'Pick modules + role', href: '/generate', blocked: atResumeLimit },
+                  { icon: '✏️', color: 'var(--indigo-dim)', title: 'Edit a module', desc: 'Refine your skills', href: '/library', blocked: false },
+                  { icon: '📤', color: 'var(--green-dim)', title: 'Upload resume', desc: 'Add or replace source', href: '/upload', blocked: atModuleLimit },
                 ].map(a => (
-                  <Link href={a.href} className="quick-action" key={a.title}>
+                  <Link
+                    href={a.blocked ? '/pricing' : a.href}
+                    className="quick-action"
+                    key={a.title}
+                    style={a.blocked ? { opacity: 0.5 } : undefined}
+                  >
                     <div className="quick-action-icon" style={{ background: a.color }}>
                       <span style={{ fontSize: 14 }}>{a.icon}</span>
                     </div>
-                    <div className="quick-action-title">{a.title}</div>
-                    <div className="quick-action-desc">{a.desc}</div>
+                    <div className="quick-action-title">{a.blocked ? 'Upgrade' : a.title}</div>
+                    <div className="quick-action-desc">{a.blocked ? 'Limit reached — upgrade plan' : a.desc}</div>
                   </Link>
                 ))}
               </div>
