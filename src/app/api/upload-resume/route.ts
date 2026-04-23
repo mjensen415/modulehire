@@ -16,9 +16,7 @@ async function extractText(file: File): Promise<string> {
   if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
     // Dynamic import avoids module-level init issues with pdf-parse test files
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    // Use lib path directly — pdf-parse's main index loads test files on init
-    // which crashes in Vercel serverless. The lib path skips that.
-    const pdfParse = require('pdf-parse/lib/pdf-parse.js') as (buf: Buffer) => Promise<{ text: string }>
+    const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>
     const result = await pdfParse(buffer)
     return result.text
   }
