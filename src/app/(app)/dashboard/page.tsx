@@ -126,7 +126,7 @@ export default async function Dashboard() {
   const [
     { data: modules, count: moduleCount },
     { data: resumes, count: resumeCount },
-    { data: jds },
+    { data: jds, count: jdCount },
   ] = await Promise.all([
     supabase
       .from('modules')
@@ -141,7 +141,7 @@ export default async function Dashboard() {
       .limit(4),
     supabase
       .from('job_descriptions')
-      .select('id, title, company, created_at')
+      .select('id, extracted_company, extracted_role_type, created_at', { count: 'exact' })
       .order('created_at', { ascending: false })
       .limit(4),
   ]);
@@ -155,14 +155,14 @@ export default async function Dashboard() {
 
   const stats = [
     { label: 'Modules', value: String(moduleCount ?? 0), change: 'in your library', up: false, color: 'var(--teal)' },
-    { label: 'Job descriptions', value: String(jds?.length ?? 0), change: 'analyzed', up: false, color: 'var(--amber)' },
+    { label: 'Job descriptions', value: String(jdCount ?? 0), change: 'analyzed', up: false, color: 'var(--amber)' },
     { label: 'Resumes generated', value: String(resumeCount ?? 0), change: 'all time', up: false, color: 'var(--indigo)' },
     { label: 'Match score avg', value: '—', change: 'run a match to see', up: false, color: 'var(--green)' },
   ];
 
   const typedModules: ModuleRecord[] = (modules ?? []) as ModuleRecord[];
   const typedResumes = resumes ?? [];
-  const typedJds = (jds ?? []) as Array<{ id: string; title?: string; company?: string; created_at: string }>;
+  const typedJds = (jds ?? []) as Array<{ id: string; extracted_role_type?: string; extracted_company?: string; created_at: string }>;
   const hasContent = typedModules.length > 0 || typedResumes.length > 0;
 
   // Plan gate state
@@ -327,11 +327,11 @@ export default async function Dashboard() {
             {typedJds.map(jd => (
               <div className="job-item" key={jd.id}>
                 <div className="job-co-logo">
-                  {(jd.company ?? 'JD').slice(0, 3).toUpperCase()}
+                  {(jd.extracted_company ?? 'JD').slice(0, 3).toUpperCase()}
                 </div>
                 <div className="job-info">
-                  <div className="job-title">{jd.title || 'Untitled role'}</div>
-                  <div className="job-company">{jd.company || 'Unknown company'}</div>
+                  <div className="job-title">{jd.extracted_role_type || 'Untitled role'}</div>
+                  <div className="job-company">{jd.extracted_company || 'Unknown company'}</div>
                 </div>
                 <div className="job-right">
                   <Link href="/generate" className="generate-btn">Generate ↗</Link>
