@@ -11,21 +11,15 @@ const ALLOWED_TYPES = new Set([
 ])
 
 async function extractText(file: File): Promise<string> {
-  const buffer = Buffer.from(await file.arrayBuffer())
-
   if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
-    // DOMMatrix polyfill — required by pdfjs-dist in Vercel serverless
-    if (typeof (globalThis as Record<string, unknown>).DOMMatrix === 'undefined') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(globalThis as any).DOMMatrix = class DOMMatrix {
-        constructor() { return new Proxy({}, { get: () => 0 }) }
-      }
-    }
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>
-    const result = await pdfParse(buffer)
-    return result.text
+    const { getDocumentProxy, extractText: unpdfExtract } = await import('unpdf')
+    const buffer = Buffer.from(await file.arrayBuffer())
+    const pdf = await getDocumentProxy(new Uint8Array(buffer))
+    const { text } = await unpdfExtract(pdf, { mergePages: true })
+    return text
   }
+
+  const buffer = Buffer.from(await file.arrayBuffer())
 
   if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
     return buffer.toString('utf-8')

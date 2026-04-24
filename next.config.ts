@@ -4,7 +4,7 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  serverExternalPackages: ['pdf-parse', 'mammoth', 'jsonrepair'],
+  serverExternalPackages: ['mammoth', 'jsonrepair'],
 } as NextConfig & { eslint?: { ignoreDuringBuilds: boolean }; serverExternalPackages?: string[] };
 
 export default nextConfig;
