@@ -9,8 +9,18 @@ import React from 'react'
 export const maxDuration = 60
 
 type Contact = { name: string; email: string; phone?: string; linkedin?: string; location?: string }
-type ResumeFormat = 'classic' | 'modern' | 'compact'
+type ResumeFormat = 'classic' | 'modern' | 'compact' | 'combination'
 type Section = { heading: string; content: string }
+
+// ─── COMBINATION TEMPLATE TYPES ───────────────────────────────────────────────
+type CombinationData = {
+  job_title: string
+  summary: string
+  skill_sections: { category: string; bullets: string[] }[]
+  work_experience: { title: string; company: string; dates: string; bullets: string[] }[]
+  education: { degree: string; school: string; year: string }[]
+  skills_list: string[]
+}
 
 // ─── HTML PREVIEW ─────────────────────────────────────────────────────────────
 
@@ -155,6 +165,172 @@ function buildDocx(contact: Contact, sections: Section[], format: ResumeFormat, 
   })
 }
 
+// ─── COMBINATION DOCX BUILDER ────────────────────────────────────────────────
+
+function buildDocxCombination(contact: Contact, data: CombinationData): docx.Document {
+  const twip = (inches: number) => Math.round(inches * 1440)
+  const CONTENT_WIDTH = 9360
+  const HEADER_FILL  = 'C49098'
+  const SECTION_FILL = 'EDD5D7'
+  const CONTACT_FILL = 'F2F2F2'
+  const noBorder = { style: docx.BorderStyle.NONE, size: 0, color: 'FFFFFF' } as const
+  const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideH: noBorder, insideV: noBorder }
+
+  const headerTable = () => new docx.Table({
+    width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
+    columnWidths: [CONTENT_WIDTH],
+    borders: noBorders,
+    rows: [new docx.TableRow({ children: [
+      new docx.TableCell({
+        width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
+        shading: { fill: HEADER_FILL, type: docx.ShadingType.CLEAR },
+        margins: { top: 320, bottom: 280, left: 560, right: 560 },
+        borders: noBorders,
+        children: [
+          new docx.Paragraph({
+            alignment: docx.AlignmentType.CENTER,
+            spacing: { before: 0, after: 100 },
+            children: [new docx.TextRun({ text: contact.name, size: 52, bold: true, color: 'FFFFFF', font: 'Calibri' })],
+          }),
+          new docx.Paragraph({
+            alignment: docx.AlignmentType.CENTER,
+            spacing: { before: 0, after: data.summary ? 200 : 0 },
+            children: [new docx.TextRun({ text: data.job_title, size: 22, color: 'F0D8DA', font: 'Calibri' })],
+          }),
+          ...(data.summary ? [new docx.Paragraph({
+            alignment: docx.AlignmentType.CENTER,
+            spacing: { before: 0, after: 0 },
+            children: [new docx.TextRun({ text: data.summary, size: 19, color: 'F5E6E8', font: 'Calibri', italics: true })],
+          })] : []),
+        ],
+      })
+    ]})]
+  })
+
+  const contactBar = () => new docx.Table({
+    width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
+    columnWidths: [CONTENT_WIDTH],
+    borders: noBorders,
+    rows: [new docx.TableRow({ children: [
+      new docx.TableCell({
+        width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
+        shading: { fill: CONTACT_FILL, type: docx.ShadingType.CLEAR },
+        margins: { top: 120, bottom: 120, left: 360, right: 360 },
+        borders: noBorders,
+        children: [new docx.Paragraph({
+          alignment: docx.AlignmentType.CENTER,
+          children: [new docx.TextRun({
+            text: [contact.phone, contact.location, contact.linkedin, contact.email].filter(Boolean).join('  |  '),
+            size: 18, color: '555555', font: 'Calibri',
+          })],
+        })]
+      })
+    ]})]
+  })
+
+  const sectionHeader = (label: string) => new docx.Table({
+    width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
+    columnWidths: [CONTENT_WIDTH],
+    borders: noBorders,
+    rows: [new docx.TableRow({ children: [
+      new docx.TableCell({
+        width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
+        shading: { fill: SECTION_FILL, type: docx.ShadingType.CLEAR },
+        margins: { top: 100, bottom: 100, left: 160, right: 160 },
+        borders: noBorders,
+        children: [new docx.Paragraph({
+          children: [new docx.TextRun({ text: label, bold: true, size: 22, font: 'Calibri', color: '3D2B2D' })],
+        })]
+      })
+    ]})]
+  })
+
+  const bullet = (text: string) => new docx.Paragraph({
+    numbering: { reference: 'combo-bullets', level: 0 },
+    spacing: { before: 40, after: 40, line: 276 },
+    children: [new docx.TextRun({ text, size: 20, font: 'Calibri', color: '222222' })],
+  })
+
+  const spacer = (space = 120) => new docx.Paragraph({ spacing: { before: 0, after: space } })
+
+  return new docx.Document({
+    numbering: {
+      config: [{
+        reference: 'combo-bullets',
+        levels: [{ level: 0, format: docx.LevelFormat.BULLET, text: '\u2022', alignment: docx.AlignmentType.LEFT,
+          style: { paragraph: { indent: { left: 360, hanging: 220 } } } }]
+      }]
+    },
+    sections: [{
+      properties: {
+        page: {
+          size: { width: 12240, height: 15840 },
+          margin: { top: twip(0.65), right: twip(0.65), bottom: twip(0.65), left: twip(0.65) },
+        }
+      },
+      children: [
+        headerTable(),
+        spacer(80),
+        contactBar(),
+        spacer(200),
+
+        sectionHeader('RELEVANT SKILLS'),
+        spacer(80),
+        ...data.skill_sections.flatMap(sec => [
+          new docx.Paragraph({
+            spacing: { before: 120, after: 60 },
+            children: [new docx.TextRun({ text: sec.category, bold: true, size: 21, font: 'Calibri', color: '3D2B2D' })],
+          }),
+          ...sec.bullets.map(b => bullet(b)),
+          spacer(80),
+        ]),
+
+        sectionHeader('WORK EXPERIENCE'),
+        spacer(80),
+        ...data.work_experience.flatMap(job => [
+          new docx.Paragraph({
+            spacing: { before: 120, after: 40 },
+            tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+            children: [
+              new docx.TextRun({ text: job.title, bold: true, size: 21, font: 'Calibri', color: '222222' }),
+              new docx.TextRun({ text: '\t' + job.dates, size: 19, font: 'Calibri', color: '777777', italics: true }),
+            ],
+          }),
+          new docx.Paragraph({
+            spacing: { before: 0, after: 60 },
+            children: [new docx.TextRun({ text: job.company, size: 19, font: 'Calibri', color: '666666' })],
+          }),
+          ...job.bullets.map(b => bullet(b)),
+          spacer(100),
+        ]),
+
+        ...(data.education.length > 0 ? [
+          sectionHeader('EDUCATION'),
+          spacer(80),
+          ...data.education.map(e => new docx.Paragraph({
+            spacing: { before: 100, after: 60 },
+            tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+            children: [
+              new docx.TextRun({ text: `${e.degree} · ${e.school}`, bold: true, size: 20, font: 'Calibri', color: '222222' }),
+              new docx.TextRun({ text: '\t' + e.year, size: 19, font: 'Calibri', color: '777777', italics: true }),
+            ],
+          })),
+          spacer(160),
+        ] : []),
+
+        ...(data.skills_list.length > 0 ? [
+          sectionHeader('SKILLS'),
+          spacer(80),
+          new docx.Paragraph({
+            spacing: { before: 100, after: 60 },
+            children: [new docx.TextRun({ text: data.skills_list.join('  ·  '), size: 20, font: 'Calibri', color: '444444' })],
+          }),
+        ] : []),
+      ]
+    }]
+  })
+}
+
 // ─── PDF ──────────────────────────────────────────────────────────────────────
 
 const pdfStyles = StyleSheet.create({
@@ -292,7 +468,95 @@ export async function POST(req: Request) {
       ? '\nIMPORTANT: Be extremely concise. Maximum 2 sentences per experience section. The resume must fit on one page.'
       : ''
 
-    const prompt = `Assemble a tailored resume from the provided modules for the role: ${jd.extracted_role_type} at ${jd.extracted_company}.
+    const roleTitle = jd.extracted_role_type ?? 'Resume'
+    const resumeTitle = `${roleTitle} - ${contact.name}`
+    const docxFilename = `${resumeTitle}.docx`
+
+    // ── Combination template: separate structured prompt ──────────────────────
+    let resumeHtml: string
+    let docxBuffer: Buffer
+    let pdfSections: Section[] = []
+
+    if (format === 'combination') {
+      const comboPrompt = `Assemble a tailored resume in structured JSON for: ${jd.extracted_role_type} at ${jd.extracted_company}.
+
+Rules:
+- Write punchy, metric-driven bullet points (start each with a strong verb)
+- Mirror these JD phrases naturally: ${(jd.extracted_phrases || []).join(', ')}
+${levelInstruction ? `- ${levelInstruction}` : ''}
+- Summary: ${summaryInstruction}
+
+Respond with JSON ONLY matching this exact structure:
+{
+  "job_title": "inferred target job title",
+  "summary": "3–4 sentence professional summary",
+  "skill_sections": [
+    { "category": "Skill Domain Name", "bullets": ["Achievement or responsibility...", "..."] }
+  ],
+  "work_experience": [
+    { "title": "Job Title", "company": "Company · City, State", "dates": "Mon YYYY – Mon YYYY", "bullets": ["...", "..."] }
+  ],
+  "education": [
+    { "degree": "Degree and Major", "school": "University Name", "year": "YYYY" }
+  ],
+  "skills_list": ["skill1", "skill2"]
+}
+
+- skill_sections: one entry per module (use module title as category, convert content to 2–4 bullets)
+- work_experience: group modules by source_company; 2–3 bullets per role
+- education: ${include_education_section && educationText ? educationText : 'leave as empty array []'}
+- skills_list: ${include_skills_section && skillsText ? skillsText : 'leave as empty array []'}
+${!include_summary ? '- summary: set to empty string ""' : ''}
+
+Modules:
+${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({
+  title: m.title, content: m.content,
+  source_company: m.source_company, source_role_title: m.source_role_title,
+  date_start: m.date_start, date_end: m.date_end,
+})))}
+`
+
+      const rawCombo = await aiComplete([{ role: 'user', content: comboPrompt }], 4096)
+      const strippedCombo = rawCombo.replace(/```json/g, '').replace(/```/g, '')
+      const cs = strippedCombo.indexOf('{'), ce = strippedCombo.lastIndexOf('}')
+      if (cs === -1 || ce === -1) throw new Error(`Combination template: model did not return JSON. Got: ${strippedCombo.slice(0, 200)}`)
+      const comboData: CombinationData = JSON.parse(strippedCombo.slice(cs, ce + 1).replace(/,(\s*[}\]])/g, '$1'))
+
+      const comboDoc = buildDocxCombination(contact, comboData)
+      docxBuffer = await docx.Packer.toBuffer(comboDoc) as Buffer
+
+      // HTML preview for combination: simple representation
+      const skillsHtml = comboData.skill_sections.map(sec => `
+        <div style="margin-bottom:14px">
+          <div style="font-weight:700;font-size:12px;color:#7A4A4E;margin-bottom:4px">${sec.category}</div>
+          <ul style="margin:0;padding-left:18px">${sec.bullets.map(b => `<li style="font-size:11.5px;color:#333;line-height:1.6;margin-bottom:2px">${b}</li>`).join('')}</ul>
+        </div>`).join('')
+      const expHtml = comboData.work_experience.map(job => `
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between"><span style="font-weight:700;font-size:12px">${job.title}</span><span style="font-size:11px;color:#888;font-style:italic">${job.dates}</span></div>
+          <div style="font-size:11px;color:#666;margin-bottom:4px">${job.company}</div>
+          <ul style="margin:0;padding-left:18px">${job.bullets.map(b => `<li style="font-size:11.5px;color:#333;line-height:1.6;margin-bottom:2px">${b}</li>`).join('')}</ul>
+        </div>`).join('')
+      resumeHtml = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff;font-family:Calibri,Candara,sans-serif">
+        <div style="background:#C49098;padding:28px 48px 24px;text-align:center">
+          <div style="font-size:26px;font-weight:700;color:#fff;margin-bottom:4px">${contact.name}</div>
+          <div style="font-size:13px;color:#F0D8DA;margin-bottom:${comboData.summary ? '12px' : '0'}">${comboData.job_title}</div>
+          ${comboData.summary ? `<div style="font-size:11.5px;color:#F5E6E8;font-style:italic;max-width:560px;margin:0 auto;line-height:1.55">${comboData.summary}</div>` : ''}
+        </div>
+        <div style="background:#F2F2F2;padding:8px 48px;text-align:center;font-size:11px;color:#555">
+          ${[contact.phone, contact.location, contact.linkedin, contact.email].filter(Boolean).join(' | ')}
+        </div>
+        <div style="max-width:680px;margin:0 auto;padding:20px 32px 32px">
+          <div style="background:#EDD5D7;padding:6px 12px;font-weight:700;font-size:12px;color:#3D2B2D;margin-bottom:12px">RELEVANT SKILLS</div>
+          ${skillsHtml}
+          <div style="background:#EDD5D7;padding:6px 12px;font-weight:700;font-size:12px;color:#3D2B2D;margin:16px 0 12px">WORK EXPERIENCE</div>
+          ${expHtml}
+        </div>
+      </body></html>`
+
+    } else {
+      // ── Original prompt for classic / modern / compact ────────────────────
+      const prompt = `Assemble a tailored resume from the provided modules for the role: ${jd.extracted_role_type} at ${jd.extracted_company}.
 
 Rules:
 - Paragraph form only — no bullet points anywhere in the body
@@ -322,39 +586,30 @@ ${compactInstruction}
 Modules:
 ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.title, content: m.content, source_company: m.source_company, source_role_title: m.source_role_title, date_start: m.date_start, date_end: m.date_end })))}`
 
-    const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 4096)
+      const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 4096)
+      const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
+      const jsonStart = stripped.indexOf('{'), jsonEnd = stripped.lastIndexOf('}')
+      if (jsonStart === -1 || jsonEnd === -1) throw new Error(`Model did not return JSON. Response: ${stripped.slice(0, 200)}`)
+      const cleanJson = stripped.slice(jsonStart, jsonEnd + 1)
+        .replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/,(\s*[}\]])/g, '$1')
+      const resumeData: { sections: Section[] } = JSON.parse(cleanJson)
 
-    const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
-    const jsonStart = stripped.indexOf('{')
-    const jsonEnd = stripped.lastIndexOf('}')
-    if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error(`Model did not return JSON. Response: ${stripped.slice(0, 200)}`)
+      const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
+      const sections = resumeData.sections.filter(s => {
+        if (!include_summary && s.heading.toLowerCase().includes('summary')) return false
+        if (!include_skills_section && s.heading.toLowerCase().includes('skill')) return false
+        if (!include_education_section && s.heading.toLowerCase().includes('education')) return false
+        return true
+      })
+
+      resumeHtml = buildResumeHtml(contact, sections, format)
+      pdfSections = sections
+      const classicDoc = buildDocx(contact, sections, format, contactLine)
+      docxBuffer = await docx.Packer.toBuffer(classicDoc) as Buffer
     }
-    const cleanJson = stripped.slice(jsonStart, jsonEnd + 1)
-      .replace(/\/\/[^\n]*/g, '')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/,(\s*[}\]])/g, '$1')
-    const resumeData: { sections: Section[] } = JSON.parse(cleanJson)
-
-    const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
-    const roleTitle = jd.extracted_role_type ?? 'Resume'
-    const resumeTitle = `${roleTitle} - ${contact.name}`
-    const docxFilename = `${resumeTitle}.docx`
-
-    // Filter sections based on flags
-    const sections = resumeData.sections.filter(s => {
-      if (!include_summary && s.heading.toLowerCase().includes('summary')) return false
-      if (!include_skills_section && s.heading.toLowerCase().includes('skill')) return false
-      if (!include_education_section && s.heading.toLowerCase().includes('education')) return false
-      return true
-    })
-
-    const resumeHtml = buildResumeHtml(contact, sections, format)
-    const doc = buildDocx(contact, sections, format, contactLine)
-    const docxBuffer = await docx.Packer.toBuffer(doc)
 
     const pdfBuffer = await renderToBuffer(
-      <ResumePDF contact={contact} sections={sections} />
+      <ResumePDF contact={contact} sections={pdfSections} />
     )
 
     const resumeId = crypto.randomUUID()

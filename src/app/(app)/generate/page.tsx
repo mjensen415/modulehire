@@ -127,7 +127,7 @@ export default function GeneratePage() {
   const [skillInput, setSkillInput] = useState('')
   const [posVariant, setPosVariant] = useState<'A' | 'B' | 'C' | 'D'>('A')
   const [jobLevel, setJobLevel] = useState('')
-  const [resumeFormat, setResumeFormat] = useState<'classic' | 'modern' | 'compact'>('classic')
+  const [resumeFormat, setResumeFormat] = useState<'classic' | 'modern' | 'compact' | 'combination'>('classic')
   const [includeCoverLetter, setIncludeCoverLetter] = useState(false)
   const [coverLetterTone, setCoverLetterTone] = useState<'professional' | 'warm' | 'direct'>('professional')
   const [coverLetterNotes, setCoverLetterNotes] = useState('')
@@ -647,7 +647,7 @@ export default function GeneratePage() {
             {/* Format */}
             <div className="config-section">
               <div className="config-section-title" style={{ marginBottom: 12 }}>Format</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
                 {([
                   {
                     key: 'classic' as const,
@@ -689,6 +689,18 @@ export default function GeneratePage() {
                             <div style={{ fontSize: 8 }}>Dense, concise — fits more in less space…</div>
                           </div>
                         </div>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'combination' as const,
+                    name: 'Combination',
+                    desc: 'Skills-first layout — modules as categories, then work history',
+                    preview: (
+                      <div style={{ fontSize: 9, lineHeight: 1.4, fontFamily: 'Calibri, sans-serif', marginTop: 8 }}>
+                        <div style={{ background: '#C49098', padding: '3px 6px', color: '#fff', fontWeight: 700, fontSize: 8, marginBottom: 3 }}>Jane Doe</div>
+                        <div style={{ background: '#EDD5D7', padding: '2px 5px', fontSize: 8, color: '#3D2B2D', fontWeight: 700, marginBottom: 2 }}>RELEVANT SKILLS</div>
+                        <div style={{ fontSize: 8, color: '#555', paddingLeft: 4 }}>Community Strategy · DevRel · Leadership…</div>
                       </div>
                     ),
                   },
