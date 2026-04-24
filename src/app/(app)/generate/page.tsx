@@ -322,6 +322,21 @@ export default function GeneratePage() {
     }
   }
 
+  // ── Download helper (cross-origin blob trick for correct filename) ───────────
+
+  async function downloadFile(url: string, filename: string) {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(blobUrl)
+  }
+
   // ── Step 4: generate ────────────────────────────────────────────────────────
 
   async function handleGenerate() {
@@ -973,8 +988,18 @@ export default function GeneratePage() {
 
             {/* Download buttons */}
             <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-              <a href={generatedUrls.docx_url} download={generatedUrls.docx_filename} className="btn-primary" style={{ textDecoration: 'none' }}>Download DOCX</a>
-              <a href={generatedUrls.pdf_url} download className="btn-secondary" style={{ textDecoration: 'none' }}>Download PDF</a>
+              <button
+                className="btn-primary"
+                onClick={() => downloadFile(generatedUrls.docx_url, generatedUrls.docx_filename)}
+              >
+                Download DOCX
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={() => downloadFile(generatedUrls.pdf_url, generatedUrls.docx_filename.replace('.docx', '.pdf'))}
+              >
+                Download PDF
+              </button>
             </div>
             <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 32 }}>Download links are valid for 1 hour</div>
 
