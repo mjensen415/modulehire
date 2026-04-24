@@ -8,8 +8,8 @@ export async function GET(req: Request) {
   }
 
   const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://fallback.supabase.co',
+    process.env.SUPABASE_SERVICE_ROLE_KEY || 'fallback'
   )
 
   const { data: expired, error } = await supabase.rpc('purge_expired_temp_files')
