@@ -14,7 +14,13 @@ async function extractText(file: File): Promise<string> {
   const buffer = Buffer.from(await file.arrayBuffer())
 
   if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
-    // Dynamic import avoids module-level init issues with pdf-parse test files
+    // DOMMatrix polyfill — required by pdfjs-dist in Vercel serverless
+    if (typeof (globalThis as Record<string, unknown>).DOMMatrix === 'undefined') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(globalThis as any).DOMMatrix = class DOMMatrix {
+        constructor() { return new Proxy({}, { get: () => 0 }) }
+      }
+    }
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>
     const result = await pdfParse(buffer)

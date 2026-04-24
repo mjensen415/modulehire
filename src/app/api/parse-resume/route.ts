@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { parseModules } from '@/lib/parse-modules'
 
@@ -38,7 +38,8 @@ export async function POST(req: Request) {
 
     // Store contact info on user profile — only fill null fields, never overwrite
     if (contact) {
-      const { data: existing } = await supabase
+      const adminSb = await createAdminClient()
+      const { data: existing } = await adminSb
         .from('users')
         .select('name, phone, linkedin_url, location')
         .eq('id', user.id)
@@ -51,7 +52,8 @@ export async function POST(req: Request) {
       if (!existing?.location && contact.location) profileUpdate.location = contact.location
 
       if (Object.keys(profileUpdate).length > 0) {
-        await supabase.from('users').update(profileUpdate).eq('id', user.id)
+        const { error: updateErr } = await adminSb.from('users').update(profileUpdate).eq('id', user.id)
+        if (updateErr) console.error('Profile update failed:', updateErr)
       }
     }
 

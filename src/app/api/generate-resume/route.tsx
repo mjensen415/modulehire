@@ -11,6 +11,12 @@ export const maxDuration = 60
 type Contact = { name: string; email: string; phone?: string; linkedin?: string; location?: string }
 type ResumeFormat = 'classic' | 'modern' | 'compact' | 'combination'
 type Section = { heading: string; content: string }
+type StructuredData = {
+  summary?: string
+  experience?: { title: string; company: string; dates: string; bullets: string[] }[]
+  skills?: string
+  education?: string
+}
 
 // ─── COMBINATION TEMPLATE TYPES ───────────────────────────────────────────────
 type CombinationData = {
@@ -24,145 +30,236 @@ type CombinationData = {
 
 // ─── HTML PREVIEW ─────────────────────────────────────────────────────────────
 
-function buildResumeHtml(contact: Contact, sections: Section[], format: ResumeFormat): string {
+function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeFormat): string {
   const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
 
-  if (format === 'classic') {
-    const sectionsHtml = sections.map(sec => `
-      <div style="margin-bottom:22px">
-        <h2 style="font-family:Georgia,serif;font-size:12.5px;font-weight:bold;font-variant:small-caps;letter-spacing:0.05em;border-bottom:1px solid #ddd;padding-bottom:4px;margin:0 0 8px 0;color:#222">${sec.heading}</h2>
-        <p style="font-family:Georgia,serif;font-size:12.5px;line-height:1.65;color:#333;margin:0">${sec.content.replace(/\n/g, '<br>')}</p>
+  const renderJobs = (jobs: NonNullable<StructuredData['experience']>, fonts: { body: string; size: string }) =>
+    jobs.map(job => `
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-family:${fonts.body};font-size:${fonts.size};font-weight:700;color:#222">${job.title} · ${job.company}</span>
+          <span style="font-family:${fonts.body};font-size:${fonts.size};color:#888;font-style:italic;white-space:nowrap;margin-left:8px">${job.dates}</span>
+        </div>
+        <ul style="margin:4px 0 0 0;padding-left:18px">${job.bullets.map(b => `<li style="font-family:${fonts.body};font-size:${fonts.size};line-height:1.6;color:#333;margin-bottom:1px">${b}</li>`).join('')}</ul>
       </div>`).join('')
+
+  if (format === 'classic') {
+    const f = 'Georgia,serif', sz = '12.5px'
+    const h2 = `font-family:${f};font-size:${sz};font-weight:bold;font-variant:small-caps;letter-spacing:0.05em;border-bottom:1px solid #ddd;padding-bottom:4px;margin:0 0 8px 0;color:#222`
+    const p = `font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0`
+    const sections = [
+      data.summary ? `<div style="margin-bottom:22px"><h2 style="${h2}">Summary</h2><p style="${p}">${data.summary}</p></div>` : '',
+      data.experience?.length ? `<div style="margin-bottom:22px"><h2 style="${h2}">Experience</h2>${renderJobs(data.experience, { body: f, size: sz })}</div>` : '',
+      data.skills ? `<div style="margin-bottom:22px"><h2 style="${h2}">Skills</h2><p style="${p}">${data.skills}</p></div>` : '',
+      data.education ? `<div style="margin-bottom:22px"><h2 style="${h2}">Education</h2><p style="${p}">${data.education}</p></div>` : '',
+    ].filter(Boolean).join('')
     return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:48px 56px 56px;box-sizing:border-box">
-      <h1 style="font-family:Georgia,serif;font-size:26px;font-weight:bold;margin:0 0 5px 0;color:#111;letter-spacing:-0.02em">${contact.name}</h1>
-      <p style="font-family:Georgia,serif;font-size:10.5px;color:#777;margin:0 0 28px 0;letter-spacing:0.02em">${contactLine}</p>
-      ${sectionsHtml}
+      <h1 style="font-family:${f};font-size:26px;font-weight:bold;margin:0 0 5px 0;color:#111;letter-spacing:-0.02em">${contact.name}</h1>
+      <p style="font-family:${f};font-size:10.5px;color:#777;margin:0 0 28px 0;letter-spacing:0.02em">${contactLine}</p>
+      ${sections}
     </div></body></html>`
   }
 
   if (format === 'modern') {
-    const sectionsHtml = sections.map(sec => `
-      <div style="margin-bottom:18px;border-left:3px solid #00B4B4;padding-left:12px">
-        <h2 style="font-family:system-ui,sans-serif;font-size:12px;font-weight:700;margin:0 0 6px 0;color:#00B4B4;letter-spacing:0.01em">${sec.heading}</h2>
-        <p style="font-family:system-ui,sans-serif;font-size:12px;line-height:1.6;color:#333;margin:0">${sec.content.replace(/\n/g, '<br>')}</p>
-      </div>`).join('')
+    const f = 'system-ui,sans-serif', sz = '12px'
+    const h2 = `font-family:${f};font-size:${sz};font-weight:700;margin:0 0 6px 0;color:#00B4B4;letter-spacing:0.01em`
+    const p = `font-family:${f};font-size:${sz};line-height:1.6;color:#333;margin:0`
+    const wrap = (inner: string) => `<div style="margin-bottom:18px;border-left:3px solid #00B4B4;padding-left:12px">${inner}</div>`
+    const sections = [
+      data.summary ? wrap(`<h2 style="${h2}">Summary</h2><p style="${p}">${data.summary}</p>`) : '',
+      data.experience?.length ? wrap(`<h2 style="${h2}">Experience</h2>${renderJobs(data.experience, { body: f, size: sz })}`) : '',
+      data.skills ? wrap(`<h2 style="${h2}">Skills</h2><p style="${p}">${data.skills}</p>`) : '',
+      data.education ? wrap(`<h2 style="${h2}">Education</h2><p style="${p}">${data.education}</p>`) : '',
+    ].filter(Boolean).join('')
     return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:40px 48px 48px;box-sizing:border-box">
-      <h1 style="font-family:system-ui,sans-serif;font-size:24px;font-weight:800;margin:0 0 4px 0;color:#111;letter-spacing:-0.02em">${contact.name}</h1>
-      <p style="font-family:system-ui,sans-serif;font-size:10.5px;color:#777;margin:0 0 24px 0">${contactLine}</p>
-      ${sectionsHtml}
+      <h1 style="font-family:${f};font-size:24px;font-weight:800;margin:0 0 4px 0;color:#111;letter-spacing:-0.02em">${contact.name}</h1>
+      <p style="font-family:${f};font-size:10.5px;color:#777;margin:0 0 24px 0">${contactLine}</p>
+      ${sections}
     </div></body></html>`
   }
 
   // compact
-  const sectionsHtml = sections.map(sec => `
-    <div style="margin-bottom:14px;border-left:2px solid #00B4B4;padding-left:10px">
-      <h2 style="font-family:system-ui,sans-serif;font-size:11px;font-weight:700;margin:0 0 4px 0;color:#00B4B4;letter-spacing:0.01em">${sec.heading}</h2>
-      <p style="font-family:system-ui,sans-serif;font-size:11px;line-height:1.5;color:#333;margin:0">${sec.content.replace(/\n/g, '<br>')}</p>
-    </div>`).join('')
+  const f = 'system-ui,sans-serif', sz = '11px'
+  const h2 = `font-family:${f};font-size:${sz};font-weight:700;margin:0 0 4px 0;color:#00B4B4;letter-spacing:0.01em`
+  const p = `font-family:${f};font-size:${sz};line-height:1.5;color:#333;margin:0`
+  const wrap = (inner: string) => `<div style="margin-bottom:14px;border-left:2px solid #00B4B4;padding-left:10px">${inner}</div>`
+  const sections = [
+    data.summary ? wrap(`<h2 style="${h2}">Summary</h2><p style="${p}">${data.summary}</p>`) : '',
+    data.experience?.length ? wrap(`<h2 style="${h2}">Experience</h2>${renderJobs(data.experience, { body: f, size: sz })}`) : '',
+    data.skills ? wrap(`<h2 style="${h2}">Skills</h2><p style="${p}">${data.skills}</p>`) : '',
+    data.education ? wrap(`<h2 style="${h2}">Education</h2><p style="${p}">${data.education}</p>`) : '',
+  ].filter(Boolean).join('')
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:32px 40px 40px;box-sizing:border-box">
-    <h1 style="font-family:system-ui,sans-serif;font-size:20px;font-weight:800;margin:0 0 3px 0;color:#111;letter-spacing:-0.02em">${contact.name}</h1>
-    <p style="font-family:system-ui,sans-serif;font-size:10px;color:#777;margin:0 0 18px 0">${contactLine}</p>
-    ${sectionsHtml}
+    <h1 style="font-family:${f};font-size:20px;font-weight:800;margin:0 0 3px 0;color:#111;letter-spacing:-0.02em">${contact.name}</h1>
+    <p style="font-family:${f};font-size:10px;color:#777;margin:0 0 18px 0">${contactLine}</p>
+    ${sections}
   </div></body></html>`
 }
 
 // ─── DOCX BUILDER ─────────────────────────────────────────────────────────────
 
-function buildDocx(contact: Contact, sections: Section[], format: ResumeFormat, contactLine: string): docx.Document {
+function buildDocx(contact: Contact, data: StructuredData, format: ResumeFormat, contactLine: string): docx.Document {
   const twip = (inches: number) => Math.round(inches * 1440)
+  const bulletConfig = [{
+    reference: 'bullets',
+    levels: [{ level: 0, format: docx.LevelFormat.BULLET, text: '•', alignment: docx.AlignmentType.LEFT,
+      style: { paragraph: { indent: { left: 360, hanging: 220 } } } }]
+  }]
 
   if (format === 'classic') {
+    const font = 'Times New Roman'
+    const sectionHead = (text: string) => new docx.Paragraph({
+      children: [new docx.TextRun({ text: text.toUpperCase(), bold: true, size: 22, font, smallCaps: true })],
+      spacing: { before: 280, after: 80, line: 276 },
+      border: { bottom: { color: 'cccccc', size: 4, style: docx.BorderStyle.SINGLE, space: 4 } },
+    })
+    const bul = (text: string) => new docx.Paragraph({
+      numbering: { reference: 'bullets', level: 0 },
+      spacing: { before: 40, after: 40, line: 276 },
+      children: [new docx.TextRun({ text, size: 22, font })],
+    })
+    const children = [
+      new docx.Paragraph({ children: [new docx.TextRun({ text: contact.name, bold: true, size: 36, font })], spacing: { after: 80 } }),
+      new docx.Paragraph({ children: [new docx.TextRun({ text: contactLine, size: 18, color: '777777', font })], spacing: { after: 280 } }),
+      ...(data.summary ? [
+        sectionHead('Summary'),
+        new docx.Paragraph({ children: [new docx.TextRun({ text: data.summary, size: 22, font })], spacing: { after: 120, line: 276 } }),
+      ] : []),
+      ...(data.experience?.length ? [
+        sectionHead('Experience'),
+        ...data.experience.flatMap(job => [
+          new docx.Paragraph({
+            spacing: { before: 140, after: 40, line: 276 },
+            tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+            children: [
+              new docx.TextRun({ text: `${job.title} · ${job.company}`, bold: true, size: 22, font }),
+              new docx.TextRun({ text: '\t' + job.dates, size: 20, font, color: '777777', italics: true }),
+            ],
+          }),
+          ...job.bullets.map(b => bul(b)),
+        ]),
+      ] : []),
+      ...(data.skills ? [
+        sectionHead('Skills'),
+        new docx.Paragraph({ children: [new docx.TextRun({ text: data.skills, size: 22, font })], spacing: { after: 120, line: 276 } }),
+      ] : []),
+      ...(data.education ? [
+        sectionHead('Education'),
+        new docx.Paragraph({ children: [new docx.TextRun({ text: data.education, size: 22, font })], spacing: { after: 120, line: 276 } }),
+      ] : []),
+    ]
     return new docx.Document({
       creator: contact.name,
-      sections: [{
-        properties: {
-          page: { margin: { top: twip(1), right: twip(1), bottom: twip(1), left: twip(1) } },
-        },
-        children: [
-          new docx.Paragraph({
-            children: [new docx.TextRun({ text: contact.name, bold: true, size: 36, font: 'Times New Roman' })],
-            spacing: { after: 80 },
-          }),
-          new docx.Paragraph({
-            children: [new docx.TextRun({ text: contactLine, size: 18, color: '777777', font: 'Times New Roman' })],
-            spacing: { after: 280 },
-          }),
-          ...sections.flatMap(sec => [
-            new docx.Paragraph({
-              children: [new docx.TextRun({ text: sec.heading.toUpperCase(), bold: true, size: 22, font: 'Times New Roman', smallCaps: true })],
-              spacing: { before: 280, after: 80, line: 276 },
-              border: { bottom: { color: 'cccccc', size: 4, style: docx.BorderStyle.SINGLE, space: 4 } },
-            }),
-            new docx.Paragraph({
-              children: [new docx.TextRun({ text: sec.content, size: 22, font: 'Times New Roman' })],
-              spacing: { after: 120, line: 276 },
-            }),
-          ]),
-        ],
-      }],
+      numbering: { config: bulletConfig },
+      sections: [{ properties: { page: { margin: { top: twip(1), right: twip(1), bottom: twip(1), left: twip(1) } } }, children }],
     })
   }
 
   if (format === 'modern') {
+    const font = 'Calibri'
+    const sectionHead = (text: string) => new docx.Paragraph({
+      children: [new docx.TextRun({ text, bold: true, size: 24, font, color: '00B4B4' })],
+      spacing: { before: 200, after: 60, line: 264 },
+    })
+    const bul = (text: string) => new docx.Paragraph({
+      numbering: { reference: 'bullets', level: 0 },
+      spacing: { before: 40, after: 40, line: 264 },
+      children: [new docx.TextRun({ text, size: 21, font })],
+    })
+    const children = [
+      new docx.Paragraph({ children: [new docx.TextRun({ text: contact.name, bold: true, size: 34, font, color: '111111' })], spacing: { after: 60 } }),
+      new docx.Paragraph({ children: [new docx.TextRun({ text: contactLine, size: 18, color: '777777', font })], spacing: { after: 240 } }),
+      ...(data.summary ? [
+        sectionHead('Summary'),
+        new docx.Paragraph({ children: [new docx.TextRun({ text: data.summary, size: 21, font })], spacing: { after: 100, line: 264 } }),
+      ] : []),
+      ...(data.experience?.length ? [
+        sectionHead('Experience'),
+        ...data.experience.flatMap(job => [
+          new docx.Paragraph({
+            spacing: { before: 120, after: 40, line: 264 },
+            tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+            children: [
+              new docx.TextRun({ text: `${job.title} · ${job.company}`, bold: true, size: 21, font }),
+              new docx.TextRun({ text: '\t' + job.dates, size: 19, font, color: '777777', italics: true }),
+            ],
+          }),
+          ...job.bullets.map(b => bul(b)),
+        ]),
+      ] : []),
+      ...(data.skills ? [
+        sectionHead('Skills'),
+        new docx.Paragraph({ children: [new docx.TextRun({ text: data.skills, size: 21, font })], spacing: { after: 100, line: 264 } }),
+      ] : []),
+      ...(data.education ? [
+        sectionHead('Education'),
+        new docx.Paragraph({ children: [new docx.TextRun({ text: data.education, size: 21, font })], spacing: { after: 100, line: 264 } }),
+      ] : []),
+    ]
     return new docx.Document({
       creator: contact.name,
-      sections: [{
-        properties: {
-          page: { margin: { top: twip(0.75), right: twip(0.85), bottom: twip(0.75), left: twip(0.85) } },
-        },
-        children: [
-          new docx.Paragraph({
-            children: [new docx.TextRun({ text: contact.name, bold: true, size: 34, font: 'Calibri', color: '111111' })],
-            spacing: { after: 60 },
-          }),
-          new docx.Paragraph({
-            children: [new docx.TextRun({ text: contactLine, size: 18, color: '777777', font: 'Calibri' })],
-            spacing: { after: 240 },
-          }),
-          ...sections.flatMap(sec => [
-            new docx.Paragraph({
-              children: [new docx.TextRun({ text: sec.heading, bold: true, size: 24, font: 'Calibri', color: '00B4B4' })],
-              spacing: { before: 200, after: 60, line: 264 },
-            }),
-            new docx.Paragraph({
-              children: [new docx.TextRun({ text: sec.content, size: 21, font: 'Calibri' })],
-              spacing: { after: 100, line: 264 },
-            }),
-          ]),
-        ],
-      }],
+      numbering: { config: bulletConfig },
+      sections: [{ properties: { page: { margin: { top: twip(0.75), right: twip(0.85), bottom: twip(0.75), left: twip(0.85) } } }, children }],
     })
   }
 
   // compact
+  const font = 'Calibri'
+  const sectionHead = (text: string) => new docx.Paragraph({
+    children: [new docx.TextRun({ text, bold: true, size: 22, font, color: '00B4B4' })],
+    spacing: { before: 160, after: 40, line: 252 },
+  })
+  const bul = (text: string) => new docx.Paragraph({
+    numbering: { reference: 'bullets', level: 0 },
+    spacing: { before: 30, after: 30, line: 252 },
+    children: [new docx.TextRun({ text, size: 20, font })],
+  })
+  const children = [
+    new docx.Paragraph({ children: [new docx.TextRun({ text: contact.name, bold: true, size: 30, font, color: '111111' })], spacing: { after: 40 } }),
+    new docx.Paragraph({ children: [new docx.TextRun({ text: contactLine, size: 16, color: '777777', font })], spacing: { after: 200 } }),
+    ...(data.summary ? [
+      sectionHead('Summary'),
+      new docx.Paragraph({ children: [new docx.TextRun({ text: data.summary, size: 20, font })], spacing: { after: 80, line: 252 } }),
+    ] : []),
+    ...(data.experience?.length ? [
+      sectionHead('Experience'),
+      ...data.experience.flatMap(job => [
+        new docx.Paragraph({
+          spacing: { before: 100, after: 30, line: 252 },
+          tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+          children: [
+            new docx.TextRun({ text: `${job.title} · ${job.company}`, bold: true, size: 20, font }),
+            new docx.TextRun({ text: '\t' + job.dates, size: 18, font, color: '777777', italics: true }),
+          ],
+        }),
+        ...job.bullets.map(b => bul(b)),
+      ]),
+    ] : []),
+    ...(data.skills ? [
+      sectionHead('Skills'),
+      new docx.Paragraph({ children: [new docx.TextRun({ text: data.skills, size: 20, font })], spacing: { after: 80, line: 252 } }),
+    ] : []),
+    ...(data.education ? [
+      sectionHead('Education'),
+      new docx.Paragraph({ children: [new docx.TextRun({ text: data.education, size: 20, font })], spacing: { after: 80, line: 252 } }),
+    ] : []),
+  ]
   return new docx.Document({
     creator: contact.name,
-    sections: [{
-      properties: {
-        page: { margin: { top: twip(0.75), right: twip(0.75), bottom: twip(0.75), left: twip(0.75) } },
-      },
-      children: [
-        new docx.Paragraph({
-          children: [new docx.TextRun({ text: contact.name, bold: true, size: 30, font: 'Calibri', color: '111111' })],
-          spacing: { after: 40 },
-        }),
-        new docx.Paragraph({
-          children: [new docx.TextRun({ text: contactLine, size: 16, color: '777777', font: 'Calibri' })],
-          spacing: { after: 200 },
-        }),
-        ...sections.flatMap(sec => [
-          new docx.Paragraph({
-            children: [new docx.TextRun({ text: sec.heading, bold: true, size: 22, font: 'Calibri', color: '00B4B4' })],
-            spacing: { before: 160, after: 40, line: 252 },
-          }),
-          new docx.Paragraph({
-            children: [new docx.TextRun({ text: sec.content, size: 20, font: 'Calibri' })],
-            spacing: { after: 80, line: 252 },
-          }),
-        ]),
-      ],
-    }],
+    numbering: { config: bulletConfig },
+    sections: [{ properties: { page: { margin: { top: twip(0.75), right: twip(0.75), bottom: twip(0.75), left: twip(0.75) } } }, children }],
   })
+}
+
+function structuredToSections(data: StructuredData): Section[] {
+  const sections: Section[] = []
+  if (data.summary) sections.push({ heading: 'Summary', content: data.summary })
+  for (const job of data.experience ?? []) {
+    sections.push({ heading: `${job.title} · ${job.company}`, content: [job.dates, ...job.bullets].join('\n') })
+  }
+  if (data.skills) sections.push({ heading: 'Skills', content: data.skills })
+  if (data.education) sections.push({ heading: 'Education', content: data.education })
+  return sections
 }
 
 // ─── COMBINATION DOCX BUILDER ────────────────────────────────────────────────
@@ -555,33 +652,29 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({
       </body></html>`
 
     } else {
-      // ── Original prompt for classic / modern / compact ────────────────────
+      // ── Structured prompt for classic / modern / compact ──────────────────
       const prompt = `Assemble a tailored resume from the provided modules for the role: ${jd.extracted_role_type} at ${jd.extracted_company}.
 
 Rules:
-- Paragraph form only — no bullet points anywhere in the body
+- Write punchy, metric-driven bullet points (start each with a strong verb)
 - No em dashes — use commas or restructure
-- Conversational but professional tone
-- Lead with what's useful to the reader
 - Mirror these exact JD phrases naturally: ${(jd.extracted_phrases || []).join(', ')}
 ${levelInstruction ? `- ${levelInstruction}` : ''}
 
-Summary section: ${summaryInstruction}
-
-Experience sections: Group by source_company. For each company write a flowing paragraph covering the candidate's impact.
-
-${include_skills_section && skillsText ? `Skills section: List these skills naturally: ${skillsText}` : ''}
-${include_education_section && educationText ? `Education section: Include this education:\n${educationText}` : ''}
+Summary: ${summaryInstruction}
+Experience: Group modules by source_company. For each company, produce 2–3 bullet points per role.
+${include_skills_section && skillsText ? `Skills: "${skillsText}"` : ''}
+${include_education_section && educationText ? `Education: "${educationText}"` : ''}
 
 Respond with JSON only:
 {
-  "sections": [
-    { "heading": "Summary", "content": "..." },
-    { "heading": "<Company Name> — <Role Title>", "content": "..." }
-  ]
+  "summary": "3-4 sentence professional summary",
+  "experience": [
+    { "title": "Job Title", "company": "Company Name", "dates": "Mon YYYY – Mon YYYY", "bullets": ["...", "..."] }
+  ],
+  "skills": "comma-separated skills or empty string",
+  "education": "formatted education string or empty string"
 }
-
-Include only the sections that are asked for. Do not add extra sections.
 ${compactInstruction}
 Modules:
 ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.title, content: m.content, source_company: m.source_company, source_role_title: m.source_role_title, date_start: m.date_start, date_end: m.date_end })))}`
@@ -592,19 +685,19 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
       if (jsonStart === -1 || jsonEnd === -1) throw new Error(`Model did not return JSON. Response: ${stripped.slice(0, 200)}`)
       const cleanJson = stripped.slice(jsonStart, jsonEnd + 1)
         .replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/,(\s*[}\]])/g, '$1')
-      const resumeData: { sections: Section[] } = JSON.parse(cleanJson)
+      const resumeData: StructuredData = JSON.parse(cleanJson)
+
+      const structuredData: StructuredData = {
+        summary: include_summary ? resumeData.summary : undefined,
+        experience: resumeData.experience,
+        skills: include_skills_section ? resumeData.skills : undefined,
+        education: include_education_section ? resumeData.education : undefined,
+      }
 
       const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
-      const sections = resumeData.sections.filter(s => {
-        if (!include_summary && s.heading.toLowerCase().includes('summary')) return false
-        if (!include_skills_section && s.heading.toLowerCase().includes('skill')) return false
-        if (!include_education_section && s.heading.toLowerCase().includes('education')) return false
-        return true
-      })
-
-      resumeHtml = buildResumeHtml(contact, sections, format)
-      pdfSections = sections
-      const classicDoc = buildDocx(contact, sections, format, contactLine)
+      resumeHtml = buildResumeHtml(contact, structuredData, format)
+      pdfSections = structuredToSections(structuredData)
+      const classicDoc = buildDocx(contact, structuredData, format, contactLine)
       docxBuffer = await docx.Packer.toBuffer(classicDoc) as Buffer
     }
 
