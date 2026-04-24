@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import Link from 'next/link';
+import { PlanSelect, AdminToggleButton, PurgeButton } from './UserActions';
 
 function IconShield() {
   return (
@@ -176,39 +177,9 @@ export default async function AdminPage({
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <form action={`/api/admin/users/${u.id}`} method="PATCH" style={{ display: 'contents' }}>
-                          <select
-                            name="plan"
-                            defaultValue={u.plan}
-                            className="admin-select"
-                            onChange={e => {
-                              const form = e.target.closest('form') as HTMLFormElement;
-                              if (form) form.requestSubmit();
-                            }}
-                          >
-                            <option value="free">free</option>
-                            <option value="standard">standard</option>
-                            <option value="pro">pro</option>
-                          </select>
-                        </form>
-                        <form action={`/api/admin/users/${u.id}`} method="PATCH">
-                          <input type="hidden" name="is_admin" value={u.is_admin ? 'false' : 'true'} />
-                          <button type="submit" className="btn-ghost" style={{ fontSize: 11, padding: '3px 8px' }}>
-                            {u.is_admin ? 'Remove admin' : 'Make admin'}
-                          </button>
-                        </form>
-                        <form action={`/api/admin/users/${u.id}/purge`} method="DELETE">
-                          <button
-                            type="submit"
-                            className="btn-ghost"
-                            style={{ fontSize: 11, padding: '3px 8px', color: 'var(--rose)' }}
-                            onClick={e => {
-                              if (!confirm(`Purge all data for ${u.email}?`)) e.preventDefault();
-                            }}
-                          >
-                            Purge
-                          </button>
-                        </form>
+                        <PlanSelect userId={u.id} currentPlan={u.plan} />
+                        <AdminToggleButton userId={u.id} isAdmin={u.is_admin} />
+                        <PurgeButton userId={u.id} email={u.email} />
                       </div>
                     </td>
                   </tr>
