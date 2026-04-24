@@ -36,24 +36,33 @@ export async function POST(req: Request) {
 
     const { modules: insertedModules, contact } = await parseModules(supabase, user.id, resume_id, raw_text)
 
-    // Store contact info on user profile — only fill null fields, never overwrite
+    // On every upload: check each key field and fill any that are empty
     if (contact) {
       const adminSb = await createAdminClient()
-      const { data: existing } = await adminSb
+      const { data: existing, error: fetchErr } = await adminSb
         .from('users')
-        .select('name, phone, linkedin_url, location')
+        .select('name, email, phone, linkedin_url, location')
         .eq('id', user.id)
         .single()
 
-      const profileUpdate: Record<string, string> = {}
-      if (!existing?.name && contact.full_name) profileUpdate.name = contact.full_name
-      if (!existing?.phone && contact.phone) profileUpdate.phone = contact.phone
-      if (!existing?.linkedin_url && contact.linkedin_url) profileUpdate.linkedin_url = contact.linkedin_url
-      if (!existing?.location && contact.location) profileUpdate.location = contact.location
+      if (fetchErr) {
+        console.error('Profile fetch failed:', fetchErr)
+      } else {
+        const profileUpdate: Record<string, string> = {}
+        if (!existing?.name && contact.full_name) profileUpdate.name = contact.full_name
+        if (!existing?.email && contact.email) profileUpdate.email = contact.email
+        if (!existing?.phone && contact.phone) profileUpdate.phone = contact.phone
+        if (!existing?.linkedin_url && contact.linkedin_url) profileUpdate.linkedin_url = contact.linkedin_url
+        if (!existing?.location && contact.location) profileUpdate.location = contact.location
 
-      if (Object.keys(profileUpdate).length > 0) {
-        const { error: updateErr } = await adminSb.from('users').update(profileUpdate).eq('id', user.id)
-        if (updateErr) console.error('Profile update failed:', updateErr)
+        if (Object.keys(profileUpdate).length > 0) {
+          const { error: updateErr } = await adminSb
+            .from('users')
+            .update(profileUpdate)
+            .eq('id', user.id)
+          if (updateErr) console.error('Profile update failed:', updateErr)
+          else console.log('Profile auto-filled fields:', Object.keys(profileUpdate))
+        }
       }
     }
 
