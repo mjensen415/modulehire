@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { aiComplete } from '@/lib/ai'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
+import { jsonrepair } from 'jsonrepair'
 
 export const maxDuration = 60
 
@@ -66,7 +67,7 @@ ${moduleList}
 SCORING RULES:
 - match_score is 0-100 based on how well the module matches the job description themes
 - anchor weight modules always score 100
-- include_reason is one short sentence
+- include_reason is a max 8-word phrase (not a full sentence) — be extremely concise
 
 Fill in this exact JSON and output nothing else:
 {
@@ -80,7 +81,7 @@ The recommended_stack should contain the 4-8 highest-scoring module ids in order
 
 JSON:`
 
-    const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 2048)
+    const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 4096)
 
     const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
     const jsonStart = stripped.indexOf('{')
@@ -97,9 +98,13 @@ JSON:`
     let result: { ranked_modules: Array<{ module_id: string; match_score: number; include_reason: string }>; recommended_stack: string[] }
     try {
       result = JSON.parse(cleanJson)
-    } catch (e) {
-      console.error('match-modules JSON parse failed. Raw model output:\n', rawResponseText)
-      throw new Error(`JSON parse failed: ${(e as Error).message}. Raw: ${rawResponseText.slice(0, 400)}`)
+    } catch {
+      try {
+        result = JSON.parse(jsonrepair(cleanJson))
+      } catch (e) {
+        console.error('match-modules JSON parse failed. Raw model output:\n', rawResponseText)
+        throw new Error(`JSON parse failed: ${(e as Error).message}. Raw: ${rawResponseText.slice(0, 400)}`)
+      }
     }
 
     // Enrich ranked_modules with full module data
