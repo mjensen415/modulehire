@@ -70,6 +70,14 @@ function IconShield() {
     </svg>
   );
 }
+function IconPerson() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <circle cx="7.5" cy="4.5" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M2 13c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  );
+}
 export default function AppSidebar({ footer, plan, isAdmin }: { footer?: React.ReactNode; plan?: string; isAdmin?: boolean }) {
   const pathname = usePathname();
 
@@ -79,6 +87,7 @@ export default function AppSidebar({ footer, plan, isAdmin }: { footer?: React.R
     { href: '/generate', label: 'Generate', icon: <IconStar />, exact: false },
     { href: '/matches', label: 'Job Matches', icon: <IconTarget />, exact: false },
     { href: '/applications', label: 'Applications', icon: <IconFiles />, exact: false },
+    { href: '/my-info', label: 'My Info', icon: <IconPerson />, exact: true },
   ];
 
   function active(href: string, exact: boolean) {

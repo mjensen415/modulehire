@@ -653,30 +653,35 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({
 
     } else {
       // ── Structured prompt for classic / modern / compact ──────────────────
-      const prompt = `Assemble a tailored resume from the provided modules for the role: ${jd.extracted_role_type} at ${jd.extracted_company}.
+      const prompt = `You are a resume writer. Convert the provided modules into a polished resume for: ${jd.extracted_role_type} at ${jd.extracted_company}.
 
-Rules:
-- Write punchy, metric-driven bullet points (start each with a strong verb)
-- No em dashes — use commas or restructure
-- Mirror these exact JD phrases naturally: ${(jd.extracted_phrases || []).join(', ')}
+CRITICAL BULLET RULES — follow exactly:
+- Every experience entry MUST have a "bullets" array of 2–4 short bullet strings
+- Each bullet MUST be under 20 words
+- Each bullet MUST start with a past-tense action verb (Built, Led, Grew, Launched, Managed, Drove, Scaled, etc.)
+- Extract specific metrics and outcomes from the module content — do NOT copy the paragraph verbatim
+- Do NOT put paragraph text as a single bullet — always decompose into multiple short bullets
+- Mirror these JD phrases naturally: ${(jd.extracted_phrases || []).join(', ')}
 ${levelInstruction ? `- ${levelInstruction}` : ''}
 
 Summary: ${summaryInstruction}
-Experience: Group modules by source_company. For each company, produce 2–3 bullet points per role.
-${include_skills_section && skillsText ? `Skills: "${skillsText}"` : ''}
-${include_education_section && educationText ? `Education: "${educationText}"` : ''}
 
-Respond with JSON only:
+For the experience array: group modules by source_company, one entry per role. Convert each module's content into 2–4 bullets as described above. Format dates as "Mon YYYY – Mon YYYY" using date_start/date_end fields (format YYYY-MM). If date_end is null use "Present".
+${include_skills_section && skillsText ? `Skills: list these as a comma-separated string: ${skillsText}` : ''}
+${include_education_section && educationText ? `Education: use this verbatim: ${educationText}` : ''}
+${compactInstruction}
+
+Respond with ONLY this JSON structure — no markdown, no explanation:
 {
   "summary": "3-4 sentence professional summary",
   "experience": [
-    { "title": "Job Title", "company": "Company Name", "dates": "Mon YYYY – Mon YYYY", "bullets": ["...", "..."] }
+    { "title": "Job Title", "company": "Company Name", "dates": "Jan 2020 – Present", "bullets": ["Led team of 8 across 3 regions, delivering 40% growth.", "Built ambassador program reaching 1,200 members in 6 months."] }
   ],
-  "skills": "comma-separated skills or empty string",
-  "education": "formatted education string or empty string"
+  "skills": "skill1, skill2, skill3",
+  "education": "B.S. Communications, UC Berkeley (2017)"
 }
-${compactInstruction}
-Modules:
+
+Modules to convert:
 ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.title, content: m.content, source_company: m.source_company, source_role_title: m.source_role_title, date_start: m.date_start, date_end: m.date_end })))}`
 
       const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 4096)
