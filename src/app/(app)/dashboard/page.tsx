@@ -127,6 +127,7 @@ export default async function Dashboard() {
     { data: modules, count: moduleCount },
     { data: resumes, count: resumeCount },
     { data: jds, count: jdCount },
+    { data: recentJdFull },
   ] = await Promise.all([
     supabase
       .from('modules')
@@ -144,6 +145,12 @@ export default async function Dashboard() {
       .select('id, extracted_company, extracted_role_type, created_at', { count: 'exact' })
       .order('created_at', { ascending: false })
       .limit(4),
+    supabase
+      .from('job_descriptions')
+      .select('id, extracted_company, extracted_role_type, extracted_phrases, extracted_themes')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single(),
   ]);
 
   const displayName = user?.user_metadata?.full_name?.split(' ')[0]
@@ -164,6 +171,20 @@ export default async function Dashboard() {
   const typedResumes = resumes ?? [];
   const typedJds = (jds ?? []) as Array<{ id: string; extracted_role_type?: string; extracted_company?: string; created_at: string }>;
   const hasContent = typedModules.length > 0 || typedResumes.length > 0;
+
+  // Keyword suggestions from most recent JD
+  const latestJd = recentJdFull as {
+    id: string;
+    extracted_company: string | null;
+    extracted_role_type: string | null;
+    extracted_phrases: string[] | null;
+    extracted_themes: string[] | null;
+  } | null;
+  const suggestionKeywords: string[] = latestJd
+    ? [...(latestJd.extracted_phrases ?? []), ...(latestJd.extracted_themes ?? [])]
+        .filter((k, i, arr) => k && k.length > 2 && arr.indexOf(k) === i)
+        .slice(0, 20)
+    : [];
 
   // Plan gate state
   const plan = planCtx?.plan ?? 'free';
@@ -341,44 +362,156 @@ export default async function Dashboard() {
           </div>
         )}
 
-        {/* RECENT RESUMES */}
-        {typedResumes.length > 0 && (
-          <div className="section-card">
-            <div className="section-head">
-              <div className="section-head-title"><IconFiles /> Recent Generations</div>
-              <Link href="/library" className="section-head-action">View all →</Link>
-            </div>
-            {(typedResumes as Array<{ id: string; title?: string; positioning_variant?: string; created_at: string }>).map((r, i) => (
-              <div className="app-row" key={r.id}>
-                <div className={`app-dot ${i === 0 ? 'sent' : i === 1 ? 'viewed' : 'draft'}`} />
-                <div className="app-row-title">{r.title || 'Untitled resume'}</div>
-                <div className="app-row-co">{r.positioning_variant ?? ''}</div>
-                <div className="app-row-date">
-                  {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+        {/* RECENT RESUMES + KEYWORD SUGGESTIONS */}
+        {(typedResumes.length > 0 || suggestionKeywords.length > 0) && (
+          <div style={{ display: 'grid', gridTemplateColumns: typedResumes.length > 0 && suggestionKeywords.length > 0 ? '1fr 320px' : '1fr', gap: 16, alignItems: 'start' }}>
+
+            {/* Recent generations */}
+            {typedResumes.length > 0 && (
+              <div className="section-card">
+                <div className="section-head">
+                  <div className="section-head-title"><IconFiles /> Recent Generations</div>
+                  <Link href="/resumes" className="section-head-action">View all →</Link>
                 </div>
-                <div className={`app-badge ${i === 0 ? 'sent' : i === 1 ? 'viewed' : 'draft'}`}>
-                  {i === 0 ? 'Latest' : i === 1 ? 'Prev' : 'Older'}
-                </div>
+                {(typedResumes as Array<{ id: string; title?: string; positioning_variant?: string; created_at: string }>).map((r, i) => (
+                  <div className="app-row" key={r.id}>
+                    <div className={`app-dot ${i === 0 ? 'sent' : i === 1 ? 'viewed' : 'draft'}`} />
+                    <div className="app-row-title">{r.title || 'Untitled resume'}</div>
+                    <div className="app-row-co">{r.positioning_variant ?? ''}</div>
+                    <div className="app-row-date">
+                      {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </div>
+                    <div className={`app-badge ${i === 0 ? 'sent' : i === 1 ? 'viewed' : 'draft'}`}>
+                      {i === 0 ? 'Latest' : i === 1 ? 'Prev' : 'Older'}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+
+            {/* Keyword suggestions panel */}
+            {suggestionKeywords.length > 0 && (
+              <div className="section-card" style={{ padding: '20px 20px 16px' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+                  Keyword tips
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4, lineHeight: 1.4 }}>
+                  Want to improve your chances of getting this role?
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, lineHeight: 1.5 }}>
+                  Consider adding these keywords from your most recent job match
+                  {latestJd?.extracted_company ? ` with ${latestJd.extracted_company}` : ''}:
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                  {suggestionKeywords.slice(0, 10).map(kw => (
+                    <div key={kw} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '7px 0',
+                      borderBottom: '1px solid var(--border2)',
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <circle cx="9" cy="9" r="8" stroke="var(--border2)" strokeWidth="1.5" fill="var(--bg3)"/>
+                      </svg>
+                      <span style={{ fontSize: 13, color: 'var(--text2)', fontWeight: 500 }}>{kw}</span>
+                    </div>
+                  ))}
+                </div>
+                {suggestionKeywords.length > 10 && (
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 10 }}>
+                    +{suggestionKeywords.length - 10} more · <Link href="/generate" style={{ color: 'var(--teal)', textDecoration: 'none' }}>Generate a resume to see full analysis →</Link>
+                  </div>
+                )}
+                {suggestionKeywords.length <= 10 && (
+                  <div style={{ marginTop: 12 }}>
+                    <Link href="/generate" style={{ fontSize: 12, color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>
+                      Generate a resume to see full keyword match →
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
-        {/* EMPTY STATE */}
+        {/* EMPTY STATE — guided onboarding */}
         {!hasContent && (
           <div className="section-card">
-            <div style={{ padding: '48px 32px', textAlign: 'center' }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>🧩</div>
-              <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 8 }}>
-                Your workspace is empty
+            <div style={{ padding: '40px 32px' }}>
+              <div style={{ textAlign: 'center', marginBottom: 36 }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>🧩</div>
+                <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 8 }}>
+                  Welcome to ModuleHire
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text2)', maxWidth: 400, margin: '0 auto' }}>
+                  Three steps to your first tailored resume. Takes about 5 minutes.
+                </div>
               </div>
-              <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 24, maxWidth: 340, margin: '0 auto 24px' }}>
-                Upload your resume and ModuleHire will decompose it into modular skill blocks,
-                ready to assemble into tailored resumes for any role.
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, maxWidth: 680, margin: '0 auto 32px' }}>
+                {[
+                  {
+                    step: '1',
+                    icon: '📤',
+                    title: 'Upload your resume',
+                    desc: 'We\'ll parse it into skill blocks called modules.',
+                    href: '/upload',
+                    cta: 'Upload resume',
+                    color: 'var(--teal)',
+                    done: false,
+                  },
+                  {
+                    step: '2',
+                    icon: '🔍',
+                    title: 'Paste a job description',
+                    desc: 'We match your modules to the role and rank them.',
+                    href: '/generate',
+                    cta: 'Find matches',
+                    color: 'var(--amber)',
+                    done: false,
+                  },
+                  {
+                    step: '3',
+                    icon: '⚡',
+                    title: 'Generate your resume',
+                    desc: 'Tailored, keyword-matched, ready to download.',
+                    href: '/generate',
+                    cta: 'Generate',
+                    color: 'var(--indigo)',
+                    done: false,
+                  },
+                ].map(s => (
+                  <div key={s.step} style={{
+                    background: 'var(--bg3)',
+                    border: '1px solid var(--border2)',
+                    borderRadius: 12,
+                    padding: '20px 18px',
+                    textAlign: 'center',
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: '50%',
+                      background: s.color + '22', border: `1.5px solid ${s.color}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 18, margin: '0 auto 12px',
+                    }}>
+                      {s.icon}
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: s.color, letterSpacing: '0.06em', marginBottom: 6, fontFamily: 'var(--mono)' }}>
+                      STEP {s.step}
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>{s.title}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5, marginBottom: 14 }}>{s.desc}</div>
+                    <Link href={s.href} className="btn-ghost" style={{ fontSize: 12, textDecoration: 'none', display: 'inline-block' }}>
+                      {s.cta} →
+                    </Link>
+                  </div>
+                ))}
               </div>
-              <Link href="/upload" className="btn-primary" style={{ display: 'inline-flex' }}>
-                <IconUpload /> Upload your first resume
-              </Link>
+
+              <div style={{ textAlign: 'center' }}>
+                <Link href="/upload" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
+                  <IconUpload /> Upload your first resume
+                </Link>
+              </div>
             </div>
           </div>
         )}

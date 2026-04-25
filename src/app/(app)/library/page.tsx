@@ -133,8 +133,11 @@ export default async function Library({ searchParams }: PageProps) {
         </div>
         <div className="topbar-actions">
           <Link href="/upload" className="btn-ghost">Upload resume</Link>
+          <Link href="/library/new" className="btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
+            <IconPlus /> New module
+          </Link>
           <Link href="/generate" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
-            <IconPlus /> Generate resume
+            Generate resume
           </Link>
         </div>
       </div>

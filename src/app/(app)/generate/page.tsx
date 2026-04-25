@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, KeyboardEvent, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -11,6 +12,7 @@ type JDData = {
   extracted_company: string | null
   extracted_role_type: string | null
   extracted_themes: string[]
+  extracted_phrases: string[]
   extracted_seniority: string | null
 }
 
@@ -127,7 +129,7 @@ export default function GeneratePage() {
   const [skillInput, setSkillInput] = useState('')
   const [posVariant, setPosVariant] = useState<'A' | 'B' | 'C' | 'D'>('A')
   const [jobLevel, setJobLevel] = useState('')
-  const [resumeFormat, setResumeFormat] = useState<'classic' | 'modern' | 'compact' | 'combination'>('classic')
+  const [resumeFormat, setResumeFormat] = useState<'classic' | 'corporate' | 'chronological' | 'combination'>('classic')
   const [includeCoverLetter, setIncludeCoverLetter] = useState(false)
   const [coverLetterTone, setCoverLetterTone] = useState<'professional' | 'warm' | 'direct'>('professional')
   const [coverLetterNotes, setCoverLetterNotes] = useState('')
@@ -139,8 +141,48 @@ export default function GeneratePage() {
   const [inputTab, setInputTab] = useState<'paste' | 'url'>('paste')
   const [jdUrl, setJdUrl] = useState('')
   const [fetchingUrl, setFetchingUrl] = useState(false)
+  const [keywords, setKeywords] = useState<{ phrase: string; found: boolean }[]>([])
+  const [showAllKeywords, setShowAllKeywords] = useState(false)
+  const [matchedKeywords, setMatchedKeywords] = useState<string[]>([])
+  const [missingKeywords, setMissingKeywords] = useState<string[]>([])
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false)
   const skillInputRef = useRef<HTMLInputElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const searchParams = useSearchParams()
+
+  // Pre-load JD if ?jd_id= param is present (e.g. from "Regenerate" on My Resumes)
+  useEffect(() => {
+    const jdId = searchParams.get('jd_id')
+    if (!jdId || step !== 'input') return
+    setStep('analyzing')
+    setErrorMessage('')
+    fetch(`/api/job-descriptions/${jdId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error)
+        setJdData(data.jd)
+        setJdText(data.jd_text ?? '')
+        // Now match modules
+        return fetch('/api/match-modules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jd_id: data.jd.jd_id }),
+        })
+      })
+      .then(r => r!.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error)
+        setRankedModules(data.ranked ?? [])
+        setUnmatchedModules(data.unmatched ?? [])
+        setSelectedIds((data.ranked ?? []).filter((m: RankedModule) => m.match_score >= 60).map((m: RankedModule) => m.module_id))
+        setStep('selecting')
+      })
+      .catch(e => {
+        setErrorMessage((e as Error).message)
+        setStep('input')
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Pre-fill contact + skills when reaching configuring step
   useEffect(() => {
@@ -196,12 +238,31 @@ export default function GeneratePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
 
+  // Keyword matching: compute after resume is generated
+  useEffect(() => {
+    if (!resumeHtml || !jdData?.extracted_phrases?.length) return
+    const plainText = resumeHtml.replace(/<[^>]*>/g, ' ').toLowerCase()
+    const results = jdData.extracted_phrases.map(phrase => ({
+      phrase,
+      found: plainText.includes(phrase.toLowerCase()),
+    }))
+    setKeywords(results)
+  }, [resumeHtml, jdData])
+
   const onIframeLoad = useCallback(() => {
     const iframe = iframeRef.current
     if (!iframe?.contentDocument?.body) return
     const h = iframe.contentDocument.body.scrollHeight
     iframe.style.height = Math.min(h + 8, 600) + 'px'
   }, [])
+
+  // Close download dropdown on outside click
+  useEffect(() => {
+    if (!showDownloadMenu) return
+    function handler() { setShowDownloadMenu(false) }
+    window.addEventListener('click', handler)
+    return () => window.removeEventListener('click', handler)
+  }, [showDownloadMenu])
 
   // ── Step 1: fetch URL ───────────────────────────────────────────────────────
 
@@ -374,6 +435,8 @@ export default function GeneratePage() {
       setResumeHtml(data.resume_html ?? null)
       setCoverLetterText(data.cover_letter_text ?? null)
       setCoverLetterUrl(data.cover_letter_url ?? null)
+      setMatchedKeywords(data.matched_keywords ?? [])
+      setMissingKeywords(data.missing_keywords ?? [])
       setStep('done')
     } catch (e) {
       setErrorMessage((e as Error).message)
@@ -391,6 +454,9 @@ export default function GeneratePage() {
     setSelectedIds([])
     setJobLevel('')
     setResumeFormat('classic')
+    setMatchedKeywords([])
+    setMissingKeywords([])
+    setShowDownloadMenu(false)
     setGeneratedUrls(null)
     setResumeHtml(null)
     setCoverLetterText(null)
@@ -424,8 +490,63 @@ export default function GeneratePage() {
               </button>
             </>
           )}
-          {step === 'done' && (
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={reset}>Start over</button>
+          {step === 'done' && generatedUrls && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                className="btn-ghost"
+                style={{ fontSize: 12 }}
+                title="Auto-adjust: re-rank modules for better keyword coverage"
+                onClick={() => setStep('selecting')}
+              >
+                ↺ Auto-adjust
+              </button>
+              <button
+                className="btn-ghost"
+                style={{ fontSize: 12 }}
+                title="Copy shareable link"
+                onClick={() => {
+                  navigator.clipboard.writeText(generatedUrls.docx_url).catch(() => {})
+                  alert('Link copied to clipboard')
+                }}
+              >
+                ↗ Share
+              </button>
+              <div style={{ position: 'relative' }}>
+                <button
+                  className="btn-primary"
+                  style={{ fontSize: 12 }}
+                  onClick={e => { e.stopPropagation(); setShowDownloadMenu(v => !v) }}
+                >
+                  ↓ Download ▾
+                </button>
+                {showDownloadMenu && (
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: 4,
+                    background: 'var(--surface)', border: '1px solid var(--border2)',
+                    borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', zIndex: 50,
+                    minWidth: 160, overflow: 'hidden',
+                  }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); downloadFile(generatedUrls.docx_url, generatedUrls.docx_filename); setShowDownloadMenu(false) }}
+                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text)', fontFamily: 'var(--font)' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg3)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                    >
+                      📄 Word (.docx)
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); downloadFile(generatedUrls.pdf_url, generatedUrls.docx_filename.replace('.docx', '.pdf')); setShowDownloadMenu(false) }}
+                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text)', fontFamily: 'var(--font)' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg3)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                    >
+                      📑 PDF
+                    </button>
+                  </div>
+                )}
+              </div>
+              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={reset}>Start over</button>
+            </div>
           )}
         </div>
       </div>
@@ -667,53 +788,52 @@ export default function GeneratePage() {
                   {
                     key: 'classic' as const,
                     name: 'Classic',
-                    desc: 'Serif headings, paragraph form, ATS-safe',
+                    desc: 'Centered header, small-caps sections, Times New Roman — traditional ATS-safe',
                     preview: (
-                      <div style={{ fontSize: 9, lineHeight: 1.4, color: '#555', fontFamily: 'Georgia, serif', marginTop: 8 }}>
-                        <div style={{ fontWeight: 700, borderBottom: '1px solid #ccc', paddingBottom: 2, marginBottom: 3, letterSpacing: '0.04em' }}>EXPERIENCE</div>
-                        <div>Paragraph content flows here in a clean serif style…</div>
+                      <div style={{ fontSize: 9, lineHeight: 1.4, fontFamily: "'Times New Roman', serif", marginTop: 8 }}>
+                        <div style={{ textAlign: 'center', marginBottom: 4 }}>
+                          <div style={{ fontWeight: 700, fontSize: 10, letterSpacing: '0.05em', color: '#111' }}>JANE DOE</div>
+                          <div style={{ fontSize: 8, color: '#777' }}>email · phone · location</div>
+                        </div>
+                        <div style={{ fontWeight: 700, borderBottom: '1.5px solid #111', paddingBottom: 1, marginBottom: 2, fontSize: 8, letterSpacing: '0.06em', fontVariant: 'small-caps' }}>EXPERIENCE</div>
+                        <div style={{ fontSize: 8, color: '#333' }}>Led team of 12 across 3 regions…</div>
                       </div>
                     ),
                   },
                   {
-                    key: 'modern' as const,
-                    name: 'Modern',
-                    desc: 'Teal accent bars, sans-serif, tighter spacing',
+                    key: 'corporate' as const,
+                    name: 'Corporate',
+                    desc: 'Black header bar, grey contact strip, bold section blocks — executive look',
                     preview: (
-                      <div style={{ fontSize: 9, lineHeight: 1.4, color: '#555', fontFamily: 'system-ui, sans-serif', marginTop: 8 }}>
-                        <div style={{ display: 'flex', gap: 5 }}>
-                          <div style={{ width: 2, background: '#00B4B4', flexShrink: 0, borderRadius: 1 }} />
-                          <div>
-                            <div style={{ fontWeight: 700, color: '#00B4B4', marginBottom: 2 }}>Experience</div>
-                            <div>Sans-serif body with accent bar…</div>
-                          </div>
-                        </div>
+                      <div style={{ fontSize: 9, fontFamily: 'Calibri, sans-serif', marginTop: 8 }}>
+                        <div style={{ background: '#000', padding: '4px 6px', color: '#fff', fontWeight: 700, fontSize: 10, textAlign: 'center', letterSpacing: '0.05em', marginBottom: 2 }}>JANE DOE</div>
+                        <div style={{ background: '#F6F6F6', padding: '2px 6px', fontSize: 8, color: '#555', textAlign: 'center', marginBottom: 4 }}>email | phone | city</div>
+                        <div style={{ background: '#222', padding: '2px 5px', fontSize: 8, color: '#fff', fontWeight: 700, letterSpacing: '0.05em', marginBottom: 2 }}>PROFESSIONAL EXPERIENCE</div>
+                        <div style={{ fontSize: 8, color: '#444' }}>Jan 2022 | Stripe, San Francisco</div>
                       </div>
                     ),
                   },
                   {
-                    key: 'compact' as const,
-                    name: 'Compact',
-                    desc: '1-page target, concise AI output, tight margins',
+                    key: 'chronological' as const,
+                    name: 'Chronological',
+                    desc: 'Rose name accent, grey section headers with rules — clean timeline format',
                     preview: (
-                      <div style={{ fontSize: 9, lineHeight: 1.35, color: '#555', fontFamily: 'system-ui, sans-serif', marginTop: 8 }}>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <div style={{ width: 2, background: '#00B4B4', flexShrink: 0, borderRadius: 1 }} />
-                          <div>
-                            <div style={{ fontWeight: 700, color: '#00B4B4', marginBottom: 1, fontSize: 8 }}>Experience</div>
-                            <div style={{ fontSize: 8 }}>Dense, concise — fits more in less space…</div>
-                          </div>
-                        </div>
+                      <div style={{ fontSize: 9, fontFamily: 'Calibri, sans-serif', marginTop: 8 }}>
+                        <div style={{ fontWeight: 700, fontSize: 11, color: '#954F72', marginBottom: 1 }}>Jane Doe</div>
+                        <div style={{ fontSize: 8, color: '#777', marginBottom: 5 }}>email · phone · city</div>
+                        <div style={{ fontWeight: 700, fontSize: 8, color: '#605E5C', letterSpacing: '0.06em', borderBottom: '1.5px solid #605E5C', paddingBottom: 1, marginBottom: 2 }}>EXPERIENCE</div>
+                        <div style={{ fontSize: 8, color: '#333', fontWeight: 700 }}>Stripe</div>
+                        <div style={{ fontSize: 8, color: '#605E5C', fontStyle: 'italic' }}>Staff Platform Engineer</div>
                       </div>
                     ),
                   },
                   {
                     key: 'combination' as const,
                     name: 'Combination',
-                    desc: 'Skills-first layout — modules as categories, then work history',
+                    desc: 'Mauve header, skills-first layout — modules as categories, then work history',
                     preview: (
                       <div style={{ fontSize: 9, lineHeight: 1.4, fontFamily: 'Calibri, sans-serif', marginTop: 8 }}>
-                        <div style={{ background: '#C49098', padding: '3px 6px', color: '#fff', fontWeight: 700, fontSize: 8, marginBottom: 3 }}>Jane Doe</div>
+                        <div style={{ background: '#C49098', padding: '4px 6px', color: '#fff', fontWeight: 700, fontSize: 10, textAlign: 'center', marginBottom: 2 }}>Jane Doe</div>
                         <div style={{ background: '#EDD5D7', padding: '2px 5px', fontSize: 8, color: '#3D2B2D', fontWeight: 700, marginBottom: 2 }}>RELEVANT SKILLS</div>
                         <div style={{ fontSize: 8, color: '#555', paddingLeft: 4 }}>Community Strategy · DevRel · Leadership…</div>
                       </div>
@@ -963,69 +1083,169 @@ export default function GeneratePage() {
       )}
 
       {/* ── DONE ──────────────────────────────────────────────────────────── */}
-      {step === 'done' && generatedUrls && (
-        <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
-          <div style={{ maxWidth: 760, margin: '0 auto' }}>
+      {step === 'done' && generatedUrls && (() => {
+        const matchedKw = keywords.filter(k => k.found)
+        const missingKw = keywords.filter(k => !k.found)
+        const score = keywords.length > 0 ? Math.round((matchedKw.length / keywords.length) * 100) : 0
+        const scoreLabel = score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : 'Fair'
+        const scoreColor = score >= 80 ? 'var(--teal)' : score >= 60 ? '#f5a623' : '#e05c5c'
+        const VISIBLE_KW = 5
 
-            {/* Resume preview */}
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 10 }}>Preview</div>
-              <div style={{ borderRadius: 4, boxShadow: '0 2px 16px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.06)', overflow: 'hidden', background: '#fff' }}>
-                {resumeHtml ? (
-                  <iframe
-                    ref={iframeRef}
-                    srcDoc={resumeHtml}
-                    style={{ width: '100%', height: 300, border: 'none', display: 'block' }}
-                    onLoad={onIframeLoad}
-                    title="Resume preview"
-                    sandbox="allow-same-origin"
-                  />
-                ) : (
-                  <div style={{ padding: 40, color: 'var(--text3)', fontSize: 13 }}>Preview unavailable</div>
-                )}
-              </div>
-            </div>
+        // SVG arc gauge
+        const r = 54, cx = 70, cy = 72, strokeW = 10
+        const circumference = Math.PI * r  // half circle
+        const progress = (score / 100) * circumference
+        const gaugeArc = (color: string, dashArray: string) => (
+          <path
+            d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+            fill="none" stroke={color} strokeWidth={strokeW}
+            strokeLinecap="round" strokeDasharray={dashArray}
+          />
+        )
 
-            {/* Download buttons */}
-            <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-              <button
-                className="btn-primary"
-                onClick={() => downloadFile(generatedUrls.docx_url, generatedUrls.docx_filename)}
-              >
-                Download DOCX
-              </button>
-              <button
-                className="btn-secondary"
-                onClick={() => downloadFile(generatedUrls.pdf_url, generatedUrls.docx_filename.replace('.docx', '.pdf'))}
-              >
-                Download PDF
-              </button>
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 32 }}>Download links are valid for 1 hour</div>
+        return (
+          <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
+            <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', maxWidth: 1100, margin: '0 auto' }}>
 
-            {/* Cover letter */}
-            {coverLetterText && (
-              <div style={{ marginBottom: 32 }}>
-                <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 10 }}>Cover Letter</div>
-                <div style={{ background: '#fff', borderRadius: 4, boxShadow: '0 2px 16px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.06)', padding: '32px 40px', maxHeight: 400, overflowY: 'auto' }}>
-                  <pre style={{ fontFamily: 'var(--mono)', fontSize: 13, lineHeight: 1.75, color: '#333', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{coverLetterText}</pre>
+              {/* ── LEFT: preview + downloads ── */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+
+                {/* Preview */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 8 }}>Preview</div>
+                  <div style={{ borderRadius: 6, boxShadow: '0 2px 20px rgba(0,0,0,0.22), 0 0 0 1px rgba(255,255,255,0.06)', overflow: 'hidden', background: '#fff' }}>
+                    {resumeHtml ? (
+                      <iframe
+                        ref={iframeRef}
+                        srcDoc={resumeHtml}
+                        style={{ width: '100%', height: 320, border: 'none', display: 'block' }}
+                        onLoad={onIframeLoad}
+                        title="Resume preview"
+                        sandbox="allow-same-origin"
+                      />
+                    ) : (
+                      <div style={{ padding: 40, color: 'var(--text3)', fontSize: 13 }}>Preview unavailable</div>
+                    )}
+                  </div>
                 </div>
-                {coverLetterUrl && (
-                  <div style={{ marginTop: 10 }}>
-                    <a href={coverLetterUrl} download className="btn-ghost" style={{ fontSize: 13, textDecoration: 'none' }}>Download cover letter (.txt)</a>
+
+                {/* Downloads hint */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>Use the <strong style={{ color: 'var(--text2)' }}>↓ Download ▾</strong> button above to save as Word or PDF · Links expire in 1 hour</div>
+                </div>
+
+                {/* Cover letter */}
+                {coverLetterText && (
+                  <div style={{ marginBottom: 24 }}>
+                    <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 8 }}>Cover Letter</div>
+                    <div style={{ background: '#fff', borderRadius: 6, boxShadow: '0 2px 16px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.06)', padding: '28px 36px', maxHeight: 360, overflowY: 'auto' }}>
+                      <pre style={{ fontFamily: 'var(--mono)', fontSize: 12.5, lineHeight: 1.75, color: '#333', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{coverLetterText}</pre>
+                    </div>
+                    {coverLetterUrl && (
+                      <div style={{ marginTop: 8 }}>
+                        <a href={coverLetterUrl} download className="btn-ghost" style={{ fontSize: 12, textDecoration: 'none' }}>Download cover letter (.txt)</a>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn-ghost" style={{ fontSize: 13 }} onClick={() => setStep('configuring')}>Generate another variant</button>
-              <button className="btn-ghost" style={{ fontSize: 13 }} onClick={reset}>Start over</button>
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button className="btn-ghost" style={{ fontSize: 13 }} onClick={() => setStep('configuring')}>Generate another variant</button>
+                  <button className="btn-ghost" style={{ fontSize: 13 }} onClick={reset}>Start over</button>
+                </div>
+              </div>
+
+              {/* ── RIGHT: score + keywords ── */}
+              <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                {/* Score gauge card */}
+                {keywords.length > 0 && (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10, padding: '20px 20px 16px', textAlign: 'center' }}>
+                    <svg width="140" height="80" viewBox="0 0 140 80" style={{ display: 'block', margin: '0 auto 4px' }}>
+                      {/* Track */}
+                      {gaugeArc('var(--bg3)', `${circumference} ${circumference}`)}
+                      {/* Fill */}
+                      {gaugeArc(scoreColor, `${progress} ${circumference}`)}
+                      <text x={cx} y={cy - 6} textAnchor="middle" fontSize="26" fontWeight="700" fill={scoreColor} fontFamily="var(--font)">{score}</text>
+                      <text x={cx} y={cy + 12} textAnchor="middle" fontSize="11" fill="var(--text3)" fontFamily="var(--font)">{scoreLabel}</text>
+                    </svg>
+                    <div style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>Keyword match score</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>{matchedKw.length} of {keywords.length} JD keywords found</div>
+                  </div>
+                )}
+
+                {/* Matched keywords */}
+                {matchedKw.length > 0 && (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10, padding: '16px 18px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>Ranking well for</div>
+                    {matchedKw.slice(0, showAllKeywords ? undefined : VISIBLE_KW).map(k => (
+                      <div key={k.phrase} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border2)' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{k.phrase}</span>
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                          <circle cx="9" cy="9" r="8" fill="var(--teal)" opacity="0.15"/>
+                          <circle cx="9" cy="9" r="8" stroke="var(--teal)" strokeWidth="1.5"/>
+                          <path d="M5.5 9l2.5 2.5 4.5-4.5" stroke="var(--teal)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                    ))}
+                    {matchedKw.length > VISIBLE_KW && (
+                      <button onClick={() => setShowAllKeywords(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--teal)', padding: '8px 0 0', fontFamily: 'var(--font)' }}>
+                        {showAllKeywords ? 'Show less' : `See all (${matchedKw.length})`}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Missing keywords */}
+                {missingKw.length > 0 && (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10, padding: '16px 18px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>Consider adding</div>
+                    <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10, lineHeight: 1.5 }}>These JD keywords weren&apos;t found in your resume:</div>
+                    {missingKw.slice(0, showAllKeywords ? undefined : VISIBLE_KW).map(k => (
+                      <div key={k.phrase} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border2)' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)' }}>{k.phrase}</span>
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                          <circle cx="9" cy="9" r="8" stroke="var(--border2)" strokeWidth="1.5" fill="var(--bg3)"/>
+                        </svg>
+                      </div>
+                    ))}
+                    {missingKw.length > VISIBLE_KW && (
+                      <button onClick={() => setShowAllKeywords(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--teal)', padding: '8px 0 0', fontFamily: 'var(--font)' }}>
+                        {showAllKeywords ? 'Show less' : `See all (${missingKw.length})`}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Modules used */}
+                {(() => {
+                  const usedModules = rankedModules.filter(m => selectedIds.includes(m.module_id))
+                  if (usedModules.length === 0) return null
+                  return (
+                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10, padding: '16px 18px' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>Modules used</div>
+                      {usedModules.map(m => (
+                        <div key={m.module_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--border2)' }}>
+                          <div style={{ width: 3, height: 28, borderRadius: 2, flexShrink: 0, background: m.weight === 'anchor' ? 'var(--teal)' : m.weight === 'strong' ? 'var(--indigo)' : 'var(--amber)' }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.title}</div>
+                            {m.source_company && <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{m.source_company}</div>}
+                          </div>
+                          {m.match_score > 0 && (
+                            <span className={`mod-score ${scoreClass(m.match_score)}`} style={{ fontSize: 10, flexShrink: 0 }}>{m.match_score}%</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

@@ -70,6 +70,15 @@ function IconShield() {
     </svg>
   );
 }
+function IconResume() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <path d="M9 1H3.5A1.5 1.5 0 002 2.5v10A1.5 1.5 0 003.5 14h8A1.5 1.5 0 0013 12.5V5L9 1Z" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M9 1v4h4" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+      <path d="M5 8h5M5 10.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  )
+}
 function IconPerson() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -87,6 +96,7 @@ export default function AppSidebar({ footer, plan, isAdmin }: { footer?: React.R
     { href: '/generate', label: 'Generate', icon: <IconStar />, exact: false },
     { href: '/matches', label: 'Job Matches', icon: <IconTarget />, exact: false },
     { href: '/applications', label: 'Applications', icon: <IconFiles />, exact: false },
+    { href: '/resumes', label: 'My Resumes', icon: <IconResume />, exact: false },
     { href: '/my-info', label: 'My Info', icon: <IconPerson />, exact: true },
   ];
 
