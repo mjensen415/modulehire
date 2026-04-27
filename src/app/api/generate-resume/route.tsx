@@ -523,6 +523,8 @@ export async function POST(req: Request) {
       cover_letter,
       job_level,
       format = 'classic',
+      confirmed_phrases,
+      confirmed_themes,
     }: {
       module_ids: string[]
       jd_id: string
@@ -537,6 +539,8 @@ export async function POST(req: Request) {
       cover_letter?: CoverLetterConfig
       job_level?: string
       format?: 'classic' | 'corporate' | 'chronological' | 'combination'
+      confirmed_phrases?: string[]
+      confirmed_themes?: string[]
     } = await req.json()
 
     const { data: jd, error: jdError } = await supabase
@@ -585,6 +589,16 @@ export async function POST(req: Request) {
       ? `Frame experience for a ${job_level}-level role. Emphasize ${levelFraming[job_level]}.`
       : ''
 
+    const phrasesToUse: string[] = confirmed_phrases?.length ? confirmed_phrases : (jd.extracted_phrases || [])
+    const themesToUse: string[] = confirmed_themes?.length ? confirmed_themes : (jd.extracted_themes || [])
+
+    const atsInstruction = phrasesToUse.length > 0
+      ? `ATS OPTIMIZATION — mandatory:
+- You MUST include EACH of these exact phrases verbatim at least once: ${phrasesToUse.join(', ')}
+- Naturally work in terminology for these themes: ${themesToUse.join(', ')}
+- Goal: ATS score above 90. Do not omit any phrase from the list.`
+      : (themesToUse.length > 0 ? `- Mirror these JD themes naturally: ${themesToUse.join(', ')}` : '')
+
     const compactInstruction = ''
 
     const roleTitle = jd.extracted_role_type ?? 'Resume'
@@ -601,7 +615,7 @@ export async function POST(req: Request) {
 
 Rules:
 - Write punchy, metric-driven bullet points (start each with a strong verb)
-- Mirror these JD phrases naturally: ${(jd.extracted_phrases || []).join(', ')}
+${atsInstruction}
 ${levelInstruction ? `- ${levelInstruction}` : ''}
 - Summary: ${summaryInstruction}
 
@@ -683,7 +697,7 @@ CRITICAL BULLET RULES — follow exactly:
 - Each bullet MUST start with a past-tense action verb (Built, Led, Grew, Launched, Managed, Drove, Scaled, etc.)
 - Extract specific metrics and outcomes from the module content — do NOT copy the paragraph verbatim
 - Do NOT put paragraph text as a single bullet — always decompose into multiple short bullets
-- Mirror these JD phrases naturally: ${(jd.extracted_phrases || []).join(', ')}
+${atsInstruction}
 ${levelInstruction ? `- ${levelInstruction}` : ''}
 
 Summary: ${summaryInstruction}

@@ -6,7 +6,7 @@ import ScoreGauge from '@/components/ScoreGauge'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
-type Step = 'input' | 'analyzing' | 'selecting' | 'configuring' | 'generating' | 'done'
+type Step = 'input' | 'analyzing' | 'confirming' | 'selecting' | 'configuring' | 'generating' | 'done'
 
 type JDData = {
   jd_id: string
@@ -64,9 +64,10 @@ function weightColor(w: string) {
 
 // ─── STEP INDICATOR ───────────────────────────────────────────────────────────
 
-const STEPS: Step[] = ['input', 'selecting', 'configuring', 'done']
+const STEPS: Step[] = ['input', 'confirming', 'selecting', 'configuring', 'done']
 const STEP_LABELS: Record<string, string> = {
   input: 'Job description',
+  confirming: 'Confirm keywords',
   selecting: 'Select modules',
   configuring: 'Configure',
   done: 'Download',
@@ -74,7 +75,11 @@ const STEP_LABELS: Record<string, string> = {
 
 function StepIndicator({ current }: { current: Step }) {
   const displaySteps = STEPS
-  const currentIdx = displaySteps.indexOf(current === 'analyzing' ? 'input' : current === 'generating' ? 'configuring' : current)
+  const currentIdx = displaySteps.indexOf(
+    current === 'analyzing' ? 'input'
+    : current === 'generating' ? 'configuring'
+    : current
+  )
   return (
     <div style={{ display: 'flex', gap: 0, alignItems: 'center' }}>
       {displaySteps.map((s, i) => (
@@ -148,6 +153,11 @@ export default function GeneratePage() {
   const [missingKeywords, setMissingKeywords] = useState<string[]>([])
   const [showDownloadMenu, setShowDownloadMenu] = useState(false)
   const [atsScore, setAtsScore] = useState<number | null>(null)
+  const [confirmedPhrases, setConfirmedPhrases] = useState<string[]>([])
+  const [confirmedThemes, setConfirmedThemes] = useState<string[]>([])
+  const [phraseInput, setPhraseInput] = useState('')
+  const [themeInput, setThemeInput] = useState('')
+  const [confirmLoading, setConfirmLoading] = useState(false)
   const skillInputRef = useRef<HTMLInputElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const searchParams = useSearchParams()
@@ -164,6 +174,8 @@ export default function GeneratePage() {
         if (data.error) throw new Error(data.error)
         setJdData(data.jd)
         setJdText(data.jd_text ?? '')
+        setConfirmedPhrases(data.jd.extracted_phrases ?? [])
+        setConfirmedThemes(data.jd.extracted_themes ?? [])
         // Now match modules
         return fetch('/api/match-modules', {
           method: 'POST',
@@ -304,11 +316,31 @@ export default function GeneratePage() {
       const analyzeData = await analyzeRes.json()
       if (!analyzeRes.ok) throw new Error(analyzeData.error ?? 'Analysis failed')
       setJdData(analyzeData)
+      setConfirmedPhrases(analyzeData.extracted_phrases ?? [])
+      setConfirmedThemes(analyzeData.extracted_themes ?? [])
+      setStep('confirming')
+    } catch (e) {
+      setErrorMessage((e as Error).message)
+      setStep('input')
+    }
+  }
+
+  // ── Step 1.5: confirm keywords then match ───────────────────────────────────
+
+  async function handleConfirm() {
+    setConfirmLoading(true)
+    setErrorMessage('')
+    try {
+      await fetch(`/api/job-descriptions/${jdData!.jd_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extracted_phrases: confirmedPhrases, extracted_themes: confirmedThemes }),
+      })
 
       const matchRes = await fetch('/api/match-modules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jd_id: analyzeData.jd_id }),
+        body: JSON.stringify({ jd_id: jdData!.jd_id }),
       })
       const matchData = await matchRes.json()
       if (!matchRes.ok) throw new Error(matchData.error ?? 'Matching failed')
@@ -316,11 +348,8 @@ export default function GeneratePage() {
       const ranked: RankedModule[] = matchData.ranked_modules ?? []
       setRankedModules(ranked)
       setUnmatchedModules(matchData.unmatched_modules ?? [])
-
-      // Default: select all with score >= 70
       setSelectedIds(ranked.filter(m => m.match_score >= 70).map(m => m.module_id))
 
-      // Pre-populate skills from skill-type modules
       const skillModules = ranked.filter(m => m.type === 'skill' && m.match_score >= 70)
       if (skillModules.length > 0) {
         setSkills(skillModules.map(m => m.title))
@@ -329,7 +358,8 @@ export default function GeneratePage() {
       setStep('selecting')
     } catch (e) {
       setErrorMessage((e as Error).message)
-      setStep('input')
+    } finally {
+      setConfirmLoading(false)
     }
   }
 
@@ -429,6 +459,8 @@ export default function GeneratePage() {
             : { include: false, tone: coverLetterTone },
           job_level: jobLevel || undefined,
           format: resumeFormat,
+          confirmed_phrases: confirmedPhrases,
+          confirmed_themes: confirmedThemes,
         }),
       })
       const data = await res.json()
@@ -466,6 +498,11 @@ export default function GeneratePage() {
     setCoverLetterText(null)
     setCoverLetterUrl(null)
     setErrorMessage('')
+    setConfirmedPhrases([])
+    setConfirmedThemes([])
+    setPhraseInput('')
+    setThemeInput('')
+    setConfirmLoading(false)
   }
 
   // ── RENDER ──────────────────────────────────────────────────────────────────
@@ -481,6 +518,14 @@ export default function GeneratePage() {
           <StepIndicator current={step} />
         </div>
         <div className="top-bar-right">
+          {step === 'confirming' && (
+            <>
+              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep('input')}>← Back</button>
+              <button className="btn-primary" onClick={handleConfirm} disabled={confirmLoading}>
+                {confirmLoading ? <><Spinner /> Matching…</> : 'Looks good →'}
+              </button>
+            </>
+          )}
           {step === 'selecting' && (
             <button className="btn-primary" onClick={() => setStep('configuring')} disabled={selectedIds.length === 0}>
               Configure →
@@ -648,6 +693,108 @@ export default function GeneratePage() {
         </div>
       )}
 
+      {/* ── CONFIRMING ────────────────────────────────────────────────────── */}
+      {step === 'confirming' && (
+        <div className="dash-content" style={{ maxWidth: 680, margin: '0 auto', width: '100%', padding: '40px 24px' }}>
+
+          <div style={{ marginBottom: 24 }}>
+            <div className="page-title" style={{ marginBottom: 4 }}>Confirm extracted keywords</div>
+            <div style={{ fontSize: 13, color: 'var(--text3)' }}>
+              {jdData?.extracted_company && <strong style={{ color: 'var(--text2)' }}>{jdData.extracted_company}</strong>}
+              {jdData?.extracted_role_type && <span style={{ color: 'var(--text3)' }}> · {jdData.extracted_role_type}</span>}
+            </div>
+            <p className="page-sub" style={{ marginTop: 8, marginBottom: 0 }}>
+              Review the keywords we extracted. Remove ones that don&apos;t fit, add any we missed, then click &ldquo;Looks good&rdquo;.
+            </p>
+          </div>
+
+          {errorMessage && (
+            <div style={{ background: 'var(--rose-dim, oklch(0.4 0.18 10 / 0.15))', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)', marginBottom: 16 }}>
+              {errorMessage}
+            </div>
+          )}
+
+          {/* Phrases */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+              Key phrases <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>({confirmedPhrases.length})</span>
+            </div>
+            <div
+              style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 10px', background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 8, cursor: 'text', minHeight: 44 }}
+              onClick={e => { if (e.target === e.currentTarget) (e.currentTarget.querySelector('input') as HTMLInputElement)?.focus() }}
+            >
+              {confirmedPhrases.map(p => (
+                <span key={p} style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 4, padding: '2px 8px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--teal)' }}>
+                  {p}
+                  <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--teal)', fontSize: 14, lineHeight: 1, padding: 0, opacity: 0.7 }} onClick={() => setConfirmedPhrases(ps => ps.filter(x => x !== p))}>×</button>
+                </span>
+              ))}
+              <input
+                style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: 'var(--text)', minWidth: 160, flex: 1 }}
+                placeholder={confirmedPhrases.length === 0 ? 'Add a phrase and press Enter…' : ''}
+                value={phraseInput}
+                onChange={e => setPhraseInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault()
+                    const v = phraseInput.trim().replace(/,+$/, '')
+                    if (v && !confirmedPhrases.includes(v)) setConfirmedPhrases(ps => [...ps, v])
+                    setPhraseInput('')
+                  } else if (e.key === 'Backspace' && !phraseInput && confirmedPhrases.length > 0) {
+                    setConfirmedPhrases(ps => ps.slice(0, -1))
+                  }
+                }}
+                onBlur={() => {
+                  const v = phraseInput.trim().replace(/,+$/, '')
+                  if (v && !confirmedPhrases.includes(v)) setConfirmedPhrases(ps => [...ps, v])
+                  setPhraseInput('')
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Themes */}
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+              Themes <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>({confirmedThemes.length})</span>
+            </div>
+            <div
+              style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 10px', background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 8, cursor: 'text', minHeight: 44 }}
+              onClick={e => { if (e.target === e.currentTarget) (e.currentTarget.querySelector('input') as HTMLInputElement)?.focus() }}
+            >
+              {confirmedThemes.map(t => (
+                <span key={t} style={{ background: 'var(--indigo-dim, oklch(0.35 0.12 270 / 0.25))', border: '1px solid var(--indigo, oklch(0.65 0.2 270))', borderRadius: 4, padding: '2px 8px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--indigo, oklch(0.65 0.2 270))' }}>
+                  {t}
+                  <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 14, lineHeight: 1, padding: 0, opacity: 0.7 }} onClick={() => setConfirmedThemes(ts => ts.filter(x => x !== t))}>×</button>
+                </span>
+              ))}
+              <input
+                style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: 'var(--text)', minWidth: 160, flex: 1 }}
+                placeholder={confirmedThemes.length === 0 ? 'Add a theme and press Enter…' : ''}
+                value={themeInput}
+                onChange={e => setThemeInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault()
+                    const v = themeInput.trim().replace(/,+$/, '')
+                    if (v && !confirmedThemes.includes(v)) setConfirmedThemes(ts => [...ts, v])
+                    setThemeInput('')
+                  } else if (e.key === 'Backspace' && !themeInput && confirmedThemes.length > 0) {
+                    setConfirmedThemes(ts => ts.slice(0, -1))
+                  }
+                }}
+                onBlur={() => {
+                  const v = themeInput.trim().replace(/,+$/, '')
+                  if (v && !confirmedThemes.includes(v)) setConfirmedThemes(ts => [...ts, v])
+                  setThemeInput('')
+                }}
+              />
+            </div>
+          </div>
+
+        </div>
+      )}
+
       {/* ── SELECTING ─────────────────────────────────────────────────────── */}
       {step === 'selecting' && (
         <div className="selection-layout" style={{ flex: 1, overflow: 'hidden' }}>
@@ -783,6 +930,27 @@ export default function GeneratePage() {
                 {errorMessage}
               </div>
             )}
+
+            {/* Estimated ATS score banner */}
+            {confirmedPhrases.length > 0 && (() => {
+              const moduleContent = rankedModules
+                .filter(m => selectedIds.includes(m.module_id))
+                .map(m => m.content.toLowerCase())
+                .join(' ')
+              const phraseMatches = confirmedPhrases.filter(p => moduleContent.includes(p.toLowerCase())).length
+              const estimatedScore = Math.min(100, 50 + Math.min(30, selectedIds.length * 3) + Math.min(20, phraseMatches * 2))
+              return (
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10, padding: '14px 18px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <ScoreGauge score={estimatedScore} size="sm" />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Estimated ATS score: {estimatedScore}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+                      {phraseMatches}/{confirmedPhrases.length} keywords in selected modules · Actual score calculated after generation
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Format */}
             <div className="config-section">

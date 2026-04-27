@@ -35,3 +35,27 @@ export async function GET(_req: Request, { params }: RouteContext) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 })
   }
 }
+
+export async function PATCH(req: Request, { params }: RouteContext) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { id } = await params
+    const { extracted_phrases, extracted_themes } = await req.json()
+
+    const { data, error } = await supabase
+      .from('job_descriptions')
+      .update({ extracted_phrases, extracted_themes })
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select('id')
+      .single()
+
+    if (error) throw error
+    return NextResponse.json({ id: data.id })
+  } catch (error) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
+  }
+}

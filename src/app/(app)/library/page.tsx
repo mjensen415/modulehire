@@ -69,6 +69,19 @@ export default function LibraryPage() {
   const [newDates, setNewDates] = useState('')
   const [savingJob, setSavingJob] = useState(false)
 
+  // Inline job editing
+  const [editingJobId, setEditingJobId] = useState<string | null>(null)
+  const [editCompany, setEditCompany] = useState('')
+  const [editTitle, setEditTitle] = useState('')
+  const [editStartDate, setEditStartDate] = useState('')
+  const [editEndDate, setEditEndDate] = useState('')
+  const [editLocation, setEditLocation] = useState('')
+  const [savingEditJob, setSavingEditJob] = useState(false)
+
+  // Inline job deletion confirm
+  const [confirmDeleteJobId, setConfirmDeleteJobId] = useState<string | null>(null)
+  const [deletingJob, setDeletingJob] = useState(false)
+
   // Add skill
   const [newSkillName, setNewSkillName] = useState('')
   const [savingSkill, setSavingSkill] = useState(false)
@@ -224,6 +237,48 @@ export default function LibraryPage() {
     })
   }
 
+  function startEditJob(job: Job) {
+    setEditingJobId(job.id)
+    setEditCompany(job.company)
+    setEditTitle(job.title ?? '')
+    setEditStartDate(job.start_date ?? '')
+    setEditEndDate(job.end_date ?? '')
+    setEditLocation(job.location ?? '')
+  }
+
+  async function saveEditJob() {
+    if (!editingJobId) return
+    setSavingEditJob(true)
+    const res = await fetch(`/api/job-experiences/${editingJobId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company: editCompany,
+        title: editTitle || null,
+        start_date: editStartDate || null,
+        end_date: editEndDate || null,
+        location: editLocation || null,
+      }),
+    })
+    const data = await res.json()
+    if (data.job) {
+      setJobs(prev => prev.map(j => j.id === editingJobId ? data.job : j))
+      setEditingJobId(null)
+    }
+    setSavingEditJob(false)
+  }
+
+  async function deleteJob(jobId: string) {
+    setDeletingJob(true)
+    await fetch(`/api/job-experiences/${jobId}`, { method: 'DELETE' })
+    const nextJob = jobs.find(j => j.id !== jobId)
+    setSelectedJobId(nextJob?.id ?? null)
+    setJobs(prev => prev.filter(j => j.id !== jobId))
+    setMja(prev => prev.filter(a => a.job_id !== jobId))
+    setConfirmDeleteJobId(null)
+    setDeletingJob(false)
+  }
+
   async function syncJobsFromModules() {
     setSyncing(true)
     setSyncMessage('')
@@ -276,7 +331,7 @@ export default function LibraryPage() {
             {jobs.map(job => (
               <button
                 key={job.id}
-                onClick={() => setSelectedJobId(job.id)}
+                onClick={() => { setSelectedJobId(job.id); setEditingJobId(null); setConfirmDeleteJobId(null) }}
                 style={{
                   display: 'block', width: '100%', textAlign: 'left',
                   padding: '10px 14px', border: 'none',
@@ -385,14 +440,67 @@ export default function LibraryPage() {
             {selectedJob ? (
               <>
                 {/* Job header */}
-                <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', background: 'var(--bg2)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0 }}>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{selectedJob.company}{selectedJob.title ? ` — ${selectedJob.title}` : ''}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                      {[selectedJob.start_date, selectedJob.end_date].filter(Boolean).join('–')}
-                      {selectedJob.location && ` · ${selectedJob.location}`}
+                <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', background: 'var(--bg2)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexShrink: 0 }}>
+                  {editingJobId === selectedJob.id ? (
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                        <input autoFocus className="form-input" style={{ fontSize: 13, padding: '4px 8px', flex: '0 0 160px' }} placeholder="Company" value={editCompany} onChange={e => setEditCompany(e.target.value)} />
+                        <input className="form-input" style={{ fontSize: 13, padding: '4px 8px', flex: 1 }} placeholder="Title" value={editTitle} onChange={e => setEditTitle(e.target.value)} />
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                        <input className="form-input" style={{ fontSize: 12, padding: '4px 8px', flex: 1 }} placeholder="Start date" value={editStartDate} onChange={e => setEditStartDate(e.target.value)} />
+                        <input className="form-input" style={{ fontSize: 12, padding: '4px 8px', flex: 1 }} placeholder="End date" value={editEndDate} onChange={e => setEditEndDate(e.target.value)} />
+                        <input className="form-input" style={{ fontSize: 12, padding: '4px 8px', flex: 1 }} placeholder="Location" value={editLocation} onChange={e => setEditLocation(e.target.value)} />
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="btn-primary" style={{ fontSize: 11, padding: '4px 12px' }} onClick={saveEditJob} disabled={savingEditJob || !editCompany.trim()}>
+                          {savingEditJob ? '…' : 'Save'}
+                        </button>
+                        <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 12px' }} onClick={() => setEditingJobId(null)}>Cancel</button>
+                      </div>
                     </div>
-                  </div>
+                  ) : confirmDeleteJobId === selectedJob.id ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 12, color: 'var(--text2)' }}>Delete this job and all its assignments?</span>
+                      <button
+                        className="btn-primary"
+                        style={{ fontSize: 11, padding: '4px 12px', background: 'var(--rose)', borderColor: 'var(--rose)' }}
+                        onClick={() => deleteJob(selectedJob.id)}
+                        disabled={deletingJob}
+                      >
+                        {deletingJob ? '…' : 'Yes, delete'}
+                      </button>
+                      <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 12px' }} onClick={() => setConfirmDeleteJobId(null)}>Cancel</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{selectedJob.company}{selectedJob.title ? ` — ${selectedJob.title}` : ''}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                          {[selectedJob.start_date, selectedJob.end_date].filter(Boolean).join('–')}
+                          {selectedJob.location && ` · ${selectedJob.location}`}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          onClick={() => startEditJob(selectedJob)}
+                          title="Edit job"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', padding: 4, borderRadius: 4, display: 'flex', alignItems: 'center' }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2l2 2-6 6H3V8l6-6z"/></svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteJobId(selectedJob.id)}
+                          title="Delete job"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', padding: 4, borderRadius: 4, display: 'flex', alignItems: 'center' }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3.5h9M4.5 3.5V2h4v1.5M5 6v4M8 6v4M3 3.5l.5 7h6l.5-7"/></svg>
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Two-column: modules | skills */}
@@ -410,7 +518,9 @@ export default function LibraryPage() {
                       {selectedModules.length === 0 && (
                         <div style={{ padding: '24px 16px', textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>
                           No modules assigned yet.<br />
-                          <span style={{ color: 'var(--teal)' }}>Pick from the repository below →</span>
+                          <span style={{ color: 'var(--teal)' }}>
+                            {modules.filter(m => !mja.some(a => a.module_id === m.id && a.job_id === selectedJobId)).length} modules available in repository below ↓
+                          </span>
                         </div>
                       )}
                       {selectedModules.map(m => {
@@ -512,6 +622,12 @@ export default function LibraryPage() {
                           </div>
                         )
                       })}
+
+                      {selectedSkills.length === 0 && suggestedSkills.length === 0 && (
+                        <div style={{ padding: '24px 16px', textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>
+                          No skills yet. Add one below or they&apos;ll be suggested from your module themes.
+                        </div>
+                      )}
 
                       {/* Suggestions */}
                       {suggestedSkills.length > 0 && (
