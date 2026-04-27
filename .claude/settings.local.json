@@ -11,7 +11,9 @@
       "Bash(git commit *)",
       "Bash(git push *)",
       "Bash(git pull *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(npm audit *)",
+      "Bash(python3 *)"
     ]
   }
 }

@@ -3,6 +3,8 @@ import { aiComplete } from '@/lib/ai'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { jsonrepair } from 'jsonrepair'
+import { checkAndLog } from '@/lib/rate-limit'
+import { isUuid } from '@/lib/validate'
 
 export const maxDuration = 60
 
@@ -31,14 +33,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { jd_id } = await req.json()
+    const limit = await checkAndLog(supabase, user.id, 'rl_match_modules', 60, 3600)
+    if (!limit.ok) {
+      return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } })
+    }
 
+    const { jd_id } = await req.json()
+    if (!isUuid(jd_id)) {
+      return NextResponse.json({ error: 'Invalid jd_id' }, { status: 400 })
+    }
+
+    // Scope JD lookup to this user — RLS should also enforce this, but be explicit
     const { data: jd, error: jdError } = await supabase
       .from('job_descriptions')
       .select('*')
       .eq('id', jd_id)
+      .eq('user_id', user.id)
       .single()
-    if (jdError) throw jdError
+    if (jdError || !jd) return NextResponse.json({ error: 'Job description not found' }, { status: 404 })
 
     const { data: modules, error: modError } = await supabase
       .from('modules')
@@ -130,6 +142,6 @@ JSON:`
     })
   } catch (error) {
     console.error(error)
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
+    return NextResponse.json({ error: 'Request failed' }, { status: 500 })
   }
 }

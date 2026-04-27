@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-const ALLOWED_PATCH_FIELDS = new Set(['name', 'phone', 'linkedin_url', 'location'])
+const ALLOWED_PATCH_FIELDS: Record<string, number> = {
+  name: 200,
+  phone: 30,
+  linkedin_url: 500,
+  location: 200,
+}
 
 export async function GET() {
   try {
@@ -26,7 +31,8 @@ export async function GET() {
       plan: data.plan ?? 'free',
     })
   } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
+    console.error('[api/me]', error)
+    return NextResponse.json({ error: 'Request failed' }, { status: 500 })
   }
 }
 
@@ -39,7 +45,11 @@ export async function PATCH(req: Request) {
     const body = await req.json()
     const update: Record<string, string> = {}
     for (const [key, val] of Object.entries(body)) {
-      if (ALLOWED_PATCH_FIELDS.has(key) && typeof val === 'string') {
+      const max = ALLOWED_PATCH_FIELDS[key]
+      if (max && typeof val === 'string') {
+        if (val.length > max) {
+          return NextResponse.json({ error: `${key} is too long (max ${max})` }, { status: 400 })
+        }
         update[key] = val
       }
     }
@@ -58,6 +68,7 @@ export async function PATCH(req: Request) {
     if (error) throw error
     return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
+    console.error('[api/me]', error)
+    return NextResponse.json({ error: 'Request failed' }, { status: 500 })
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { createAdminClient } from '@/lib/supabase/server';
+import { isUuid } from '@/lib/validate';
 import Stripe from 'stripe';
 
 export const dynamic = 'force-dynamic';
@@ -30,6 +31,18 @@ export async function POST(req: Request) {
     const session = event.data.object as Stripe.Checkout.Session;
     const userId = session.client_reference_id;
     if (!userId || !session.subscription || !session.customer) return NextResponse.json({ ok: true });
+
+    if (!isUuid(userId)) {
+      console.error('[stripe webhook] invalid client_reference_id:', userId);
+      return NextResponse.json({ ok: true });
+    }
+
+    // Verify the user actually exists before mutating their plan
+    const { data: existingUser } = await supabase.from('users').select('id').eq('id', userId).single();
+    if (!existingUser) {
+      console.error('[stripe webhook] user not found for client_reference_id:', userId);
+      return NextResponse.json({ ok: true });
+    }
 
     const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
     const periodEnd = new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString();

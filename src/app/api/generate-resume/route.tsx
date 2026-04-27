@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { aiComplete } from '@/lib/ai'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
+import { checkAndLog } from '@/lib/rate-limit'
+import { isUuid } from '@/lib/validate'
 import * as docx from 'docx'
 import { renderToBuffer, Document as PdfDoc, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
 import React from 'react'
@@ -509,6 +511,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const limit = await checkAndLog(supabase, user.id, 'rl_generate_resume', 20, 3600)
+    if (!limit.ok) {
+      return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } })
+    }
+
     const {
       module_ids,
       jd_id,
@@ -543,16 +550,25 @@ export async function POST(req: Request) {
       confirmed_themes?: string[]
     } = await req.json()
 
+    if (!isUuid(jd_id)) {
+      return NextResponse.json({ error: 'Invalid jd_id' }, { status: 400 })
+    }
+    if (!Array.isArray(module_ids) || module_ids.length === 0 || module_ids.length > 100 || !module_ids.every(isUuid)) {
+      return NextResponse.json({ error: 'Invalid module_ids' }, { status: 400 })
+    }
+
     const { data: jd, error: jdError } = await supabase
       .from('job_descriptions')
       .select('*')
       .eq('id', jd_id)
+      .eq('user_id', user.id)
       .single()
-    if (jdError) throw jdError
+    if (jdError || !jd) return NextResponse.json({ error: 'Job description not found' }, { status: 404 })
 
     const { data: modules, error: modError } = await supabase
       .from('modules')
       .select('*')
+      .eq('user_id', user.id)
       .in('id', module_ids)
     if (modError) throw modError
 
@@ -867,6 +883,6 @@ Rules:
     })
   } catch (error) {
     console.error(error)
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
+    return NextResponse.json({ error: 'Request failed' }, { status: 500 })
   }
 }

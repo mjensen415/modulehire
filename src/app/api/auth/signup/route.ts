@@ -5,50 +5,66 @@ export async function POST(req: Request) {
   try {
     const { code, email, password } = await req.json()
 
+    if (typeof code !== 'string' || typeof email !== 'string' || typeof password !== 'string') {
+      return NextResponse.json({ error: 'Code, email, and password are required.' }, { status: 400 })
+    }
     if (!code || !email || !password) {
       return NextResponse.json({ error: 'Code, email, and password are required.' }, { status: 400 })
     }
     if (password.length < 6) {
       return NextResponse.json({ error: 'Password must be at least 6 characters.' }, { status: 400 })
     }
+    if (password.length > 200) {
+      return NextResponse.json({ error: 'Password is too long.' }, { status: 400 })
+    }
+    if (email.length > 320) {
+      return NextResponse.json({ error: 'Email is too long.' }, { status: 400 })
+    }
 
     const normalizedCode = code.toUpperCase().trim()
+    const normalizedEmail = email.toLowerCase().trim()
     const supabase = await createAdminClient()
 
-    // Re-validate code server-side (can't trust client)
-    const { data: codeRow } = await supabase
+    // Atomic claim: only one request can flip used_at from null to now()
+    const claimedAt = new Date().toISOString()
+    const { data: claimed, error: claimError } = await supabase
       .from('beta_codes')
-      .select('code, is_active, used_at')
+      .update({ used_by_email: normalizedEmail, used_at: claimedAt })
       .eq('code', normalizedCode)
+      .eq('is_active', true)
+      .is('used_at', null)
+      .select('code')
       .single()
 
-    if (!codeRow || !codeRow.is_active || codeRow.used_at) {
+    if (claimError || !claimed) {
       return NextResponse.json({ error: 'Invalid or already-used beta code.' }, { status: 400 })
     }
 
-    // Create the user (email confirmed immediately — no email verification step)
+    // Create the user
     const { data: { user }, error: createError } = await supabase.auth.admin.createUser({
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       password,
       email_confirm: true,
     })
 
     if (createError) {
-      // Surface readable errors
+      // Roll the claim back so the code stays usable
+      await supabase
+        .from('beta_codes')
+        .update({ used_at: null, used_by_email: null })
+        .eq('code', normalizedCode)
+        .eq('used_at', claimedAt)
+
       if (createError.message.includes('already registered')) {
         return NextResponse.json({ error: 'An account with this email already exists.' }, { status: 400 })
       }
-      throw createError
+      console.error('[signup] createUser failed:', createError)
+      return NextResponse.json({ error: 'Could not create account.' }, { status: 500 })
     }
-
-    // Mark code as used
-    await supabase
-      .from('beta_codes')
-      .update({ used_by_email: email.toLowerCase().trim(), used_at: new Date().toISOString() })
-      .eq('code', normalizedCode)
 
     return NextResponse.json({ success: true, userId: user?.id })
   } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
+    console.error('[signup]', error)
+    return NextResponse.json({ error: 'Could not create account.' }, { status: 500 })
   }
 }

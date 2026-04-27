@@ -40,6 +40,6 @@ export async function PATCH(
     return NextResponse.json({ user: data });
   } catch (error) {
     console.error(error);
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+    return NextResponse.json({ error: 'Request failed' }, { status: 500 });
   }
 }

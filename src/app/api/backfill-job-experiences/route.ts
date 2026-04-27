@@ -103,6 +103,7 @@ export async function POST() {
 
     return NextResponse.json({ jobs_created: jobsCreated, assignments_created: assignmentsCreated })
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    console.error('[backfill-job-experiences/route.ts]', e)
+    return NextResponse.json({ error: 'Request failed' }, { status: 500 })
   }
 }

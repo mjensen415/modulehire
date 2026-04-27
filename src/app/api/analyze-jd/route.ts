@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { aiComplete } from '@/lib/ai'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
+import { checkAndLog } from '@/lib/rate-limit'
 
 export const maxDuration = 60
 
@@ -30,9 +31,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const limit = await checkAndLog(supabase, user.id, 'rl_analyze_jd', 30, 3600)
+    if (!limit.ok) {
+      return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } })
+    }
+
     const { raw_text } = await req.json()
-    if (!raw_text) {
+    if (typeof raw_text !== 'string' || !raw_text) {
       return NextResponse.json({ error: 'Missing raw_text' }, { status: 400 })
+    }
+    if (raw_text.length > 50_000) {
+      return NextResponse.json({ error: 'Job description too long (max 50,000 chars)' }, { status: 400 })
     }
 
     // Insert JD row first so we have an ID
@@ -96,7 +105,7 @@ JSON:`
       extracted_phrases: updated.extracted_phrases,
     })
   } catch (error) {
-    console.error(error)
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
+    console.error('[analyze-jd]', error)
+    return NextResponse.json({ error: 'Could not analyze job description.' }, { status: 500 })
   }
 }

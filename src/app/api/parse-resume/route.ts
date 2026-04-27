@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { parseModules } from '@/lib/parse-modules'
+import { checkAndLog } from '@/lib/rate-limit'
+import { isUuid } from '@/lib/validate'
 
 export const maxDuration = 60
 
@@ -29,9 +31,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const limit = await checkAndLog(supabase, user.id, 'rl_parse_resume', 10, 3600)
+    if (!limit.ok) {
+      return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } })
+    }
+
     const { raw_text, resume_id } = await req.json()
-    if (!raw_text || !resume_id) {
-      return NextResponse.json({ error: 'Missing raw_text or resume_id' }, { status: 400 })
+    if (typeof raw_text !== 'string' || !raw_text || !isUuid(resume_id)) {
+      return NextResponse.json({ error: 'Missing or invalid raw_text or resume_id' }, { status: 400 })
+    }
+    if (raw_text.length > 200_000) {
+      return NextResponse.json({ error: 'Resume too long (max 200,000 chars)' }, { status: 400 })
     }
 
     const { modules: insertedModules, contact, jobSyncError } = await parseModules(supabase, user.id, resume_id, raw_text)
@@ -71,6 +81,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ resume_id, modules: insertedModules, module_count: insertedModules.length, contact, profileUpdated, ...(jobSyncError && { job_sync_error: jobSyncError }) })
   } catch (error) {
     console.error(error)
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
+    return NextResponse.json({ error: 'Request failed' }, { status: 500 })
   }
 }

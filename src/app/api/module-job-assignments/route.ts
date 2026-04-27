@@ -7,14 +7,19 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+    // Only return assignments where the module belongs to this user.
     const { data, error } = await supabase
       .from('module_job_assignments')
-      .select('module_id, job_id')
+      .select('module_id, job_id, modules!inner(user_id)')
+      .eq('modules.user_id', user.id)
 
     if (error) throw error
-    return NextResponse.json({ assignments: data ?? [] })
+    return NextResponse.json({
+      assignments: (data ?? []).map(a => ({ module_id: a.module_id, job_id: a.job_id })),
+    })
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    console.error('[module-job-assignments GET]', e)
+    return NextResponse.json({ error: 'Could not load assignments.' }, { status: 500 })
   }
 }
 
@@ -27,15 +32,19 @@ export async function POST(req: Request) {
     const { module_id, job_id } = await req.json()
     if (!module_id || !job_id) return NextResponse.json({ error: 'module_id and job_id required.' }, { status: 400 })
 
-    // Verify job belongs to user
-    const { data: job } = await supabase.from('job_experiences').select('id').eq('id', job_id).eq('user_id', user.id).single()
-    if (!job) return NextResponse.json({ error: 'Job not found.' }, { status: 404 })
+    // Verify both job AND module belong to this user
+    const [jobRes, modRes] = await Promise.all([
+      supabase.from('job_experiences').select('id').eq('id', job_id).eq('user_id', user.id).single(),
+      supabase.from('modules').select('id').eq('id', module_id).eq('user_id', user.id).single(),
+    ])
+    if (!jobRes.data || !modRes.data) return NextResponse.json({ error: 'Not found.' }, { status: 404 })
 
     const { error } = await supabase.from('module_job_assignments').upsert({ module_id, job_id })
     if (error) throw error
     return NextResponse.json({ success: true })
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    console.error('[module-job-assignments POST]', e)
+    return NextResponse.json({ error: 'Could not save assignment.' }, { status: 500 })
   }
 }
 
@@ -46,6 +55,14 @@ export async function DELETE(req: Request) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { module_id, job_id } = await req.json()
+    if (!module_id || !job_id) return NextResponse.json({ error: 'module_id and job_id required.' }, { status: 400 })
+
+    // Verify ownership before delete (RLS should also enforce, but make it explicit)
+    const [jobRes, modRes] = await Promise.all([
+      supabase.from('job_experiences').select('id').eq('id', job_id).eq('user_id', user.id).single(),
+      supabase.from('modules').select('id').eq('id', module_id).eq('user_id', user.id).single(),
+    ])
+    if (!jobRes.data || !modRes.data) return NextResponse.json({ error: 'Not found.' }, { status: 404 })
 
     const { error } = await supabase
       .from('module_job_assignments')
@@ -56,6 +73,7 @@ export async function DELETE(req: Request) {
     if (error) throw error
     return NextResponse.json({ success: true })
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    console.error('[module-job-assignments DELETE]', e)
+    return NextResponse.json({ error: 'Could not delete assignment.' }, { status: 500 })
   }
 }

@@ -17,6 +17,7 @@ export async function GET() {
     if (error) throw error
     return NextResponse.json({ modules: data ?? [] })
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    console.error('[my-modules/route.ts]', e)
+    return NextResponse.json({ error: 'Request failed' }, { status: 500 })
   }
 }

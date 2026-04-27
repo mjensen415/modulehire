@@ -59,6 +59,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ resumes: withUrls })
   } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
+    console.error('[my-resumes/route.ts]', error)
+    return NextResponse.json({ error: 'Request failed' }, { status: 500 })
   }
 }

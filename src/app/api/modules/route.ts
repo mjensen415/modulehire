@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requiredString, optionalString, ValidationError } from '@/lib/validate'
+
+const VALID_WEIGHTS = new Set(['anchor', 'strong', 'supporting'])
+const VALID_TYPES = new Set(['experience', 'skill', 'story', 'positioning'])
+const VALID_EMP_TYPES = new Set(['full-time', 'consulting', 'contract', 'board', 'volunteer'])
 
 export async function POST(req: Request) {
   try {
@@ -8,31 +13,35 @@ export async function POST(req: Request) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await req.json()
-    const { title, content, weight, type, source_company, source_role_title, date_start, date_end, employment_type } = body
 
-    if (!title?.trim()) return NextResponse.json({ error: 'Title is required' }, { status: 400 })
-    if (!content?.trim()) return NextResponse.json({ error: 'Content is required' }, { status: 400 })
-
-    const { data, error } = await supabase
-      .from('modules')
-      .insert({
+    let row
+    try {
+      row = {
         user_id: user.id,
-        title: title.trim(),
-        content: content.trim(),
-        weight: weight ?? 'supporting',
-        type: type ?? 'experience',
-        source_company: source_company?.trim() || null,
-        source_role_title: source_role_title?.trim() || null,
-        date_start: date_start?.trim() || null,
-        date_end: date_end?.trim() || null,
-        employment_type: employment_type?.trim() || null,
-      })
-      .select()
-      .single()
+        title: requiredString(body.title, 200, 'title'),
+        content: requiredString(body.content, 50_000, 'content'),
+        weight: VALID_WEIGHTS.has(body.weight) ? body.weight : 'supporting',
+        type: VALID_TYPES.has(body.type) ? body.type : 'experience',
+        source_company: optionalString(body.source_company, 200, 'source_company'),
+        source_role_title: optionalString(body.source_role_title, 200, 'source_role_title'),
+        date_start: optionalString(body.date_start, 20, 'date_start'),
+        date_end: optionalString(body.date_end, 20, 'date_end'),
+        employment_type: VALID_EMP_TYPES.has(body.employment_type) ? body.employment_type : null,
+      }
+    } catch (e) {
+      if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 })
+      throw e
+    }
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const { data, error } = await supabase.from('modules').insert(row).select().single()
+
+    if (error) {
+      console.error('[modules POST]', error)
+      return NextResponse.json({ error: 'Could not save module.' }, { status: 500 })
+    }
     return NextResponse.json({ module: data }, { status: 201 })
   } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
+    console.error('[modules POST]', error)
+    return NextResponse.json({ error: 'Could not save module.' }, { status: 500 })
   }
 }

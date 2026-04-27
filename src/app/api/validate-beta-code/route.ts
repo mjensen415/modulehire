@@ -29,6 +29,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ valid: true, message: 'Code accepted!' })
   } catch (error) {
-    return NextResponse.json({ valid: false, message: (error as Error).message }, { status: 500 })
+    console.error('[validate-beta-code]', error)
+    return NextResponse.json({ valid: false, message: 'Could not validate code.' }, { status: 500 })
   }
 }
