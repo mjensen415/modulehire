@@ -80,7 +80,7 @@ export default function ScoreGauge({ score, size = 'md', showLabel = true }: Sco
       aria-label={`ATS score: ${clampedScore} — ${label}`}
     >
       <defs>
-        <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%" gradientUnits="userSpaceOnUse"
+        <linearGradient id={gradId} gradientUnits="userSpaceOnUse"
           x1={String(s.cx - s.r)} y1={String(s.cy)} x2={String(s.cx + s.r)} y2={String(s.cy)}>
           <stop offset="0%"   stopColor="#ef4444" />
           <stop offset="35%"  stopColor="#f97316" />
