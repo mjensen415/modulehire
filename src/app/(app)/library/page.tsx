@@ -84,6 +84,15 @@ export default function LibraryPage() {
   const [confirmDeleteJobId, setConfirmDeleteJobId] = useState<string | null>(null)
   const [deletingJob, setDeletingJob] = useState(false)
 
+  // Module edit modal
+  const [editingModuleId, setEditingModuleId] = useState<string | null>(null)
+  const [editModuleTitle, setEditModuleTitle] = useState('')
+  const [editModuleContent, setEditModuleContent] = useState('')
+  const [editModuleWeight, setEditModuleWeight] = useState('supporting')
+  const [editModuleThemes, setEditModuleThemes] = useState('')
+  const [editModuleLoading, setEditModuleLoading] = useState(false)
+  const [savingModule, setSavingModule] = useState(false)
+
   // Add skill
   const [newSkillName, setNewSkillName] = useState('')
   const [savingSkill, setSavingSkill] = useState(false)
@@ -128,6 +137,45 @@ export default function LibraryPage() {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
+
+  // ─── Module edit modal actions ──────────────────────────────────────────────
+  async function openEditModal(moduleId: string) {
+    setEditingModuleId(moduleId)
+    setEditModuleLoading(true)
+    const res = await fetch(`/api/modules/${moduleId}`)
+    const data = await res.json()
+    if (data.module) {
+      setEditModuleTitle(data.module.title ?? '')
+      setEditModuleContent(data.module.content ?? '')
+      setEditModuleWeight(data.module.weight ?? 'supporting')
+      setEditModuleThemes((data.module.themes ?? []).join(', '))
+    }
+    setEditModuleLoading(false)
+  }
+
+  function closeEditModal() {
+    setEditingModuleId(null)
+    setEditModuleTitle(''); setEditModuleContent('')
+    setEditModuleWeight('supporting'); setEditModuleThemes('')
+  }
+
+  async function saveModuleEdit() {
+    if (!editingModuleId || savingModule) return
+    setSavingModule(true)
+    const themes = editModuleThemes.split(',').map(t => t.trim()).filter(Boolean)
+    const res = await fetch(`/api/modules/${editingModuleId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: editModuleTitle, content: editModuleContent, weight: editModuleWeight, themes }),
+    })
+    if (res.ok) {
+      setModules(prev => prev.map(m =>
+        m.id === editingModuleId ? { ...m, title: editModuleTitle, weight: editModuleWeight, themes } : m
+      ))
+      closeEditModal()
+    }
+    setSavingModule(false)
+  }
 
   // ─── Derived state ──────────────────────────────────────────────────────────
   const selectedJob = jobs.find(j => j.id === selectedJobId) ?? null
@@ -555,7 +603,7 @@ export default function LibraryPage() {
                               <Pips weight={m.weight} />
                               <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                 <button
-                                  onClick={() => router.push(`/library/${m.id}/edit`)}
+                                  onClick={() => openEditModal(m.id)}
                                   style={{ color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 4px', display: 'flex', alignItems: 'center' }}
                                   title="Edit module"
                                 >
@@ -786,6 +834,102 @@ export default function LibraryPage() {
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ── Module Edit Modal ── */}
+      {editingModuleId && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) closeEditModal() }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+          }}
+        >
+          <div style={{
+            background: 'var(--surface)', border: '1px solid var(--border2)',
+            borderRadius: 16, width: '100%', maxWidth: 560,
+            boxShadow: '0 32px 80px rgba(0,0,0,0.6)',
+            overflow: 'hidden',
+          }}>
+            {/* Header */}
+            <div style={{ padding: '18px 22px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>Edit Module</div>
+              <button onClick={closeEditModal} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 20, lineHeight: 1, padding: '0 2px' }}>×</button>
+            </div>
+
+            {editModuleLoading ? (
+              <div style={{ padding: '48px 22px', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Loading…</div>
+            ) : (
+              <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                {/* Title */}
+                <div>
+                  <label style={{ fontSize: 11, fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text3)', display: 'block', marginBottom: 6 }}>Title</label>
+                  <input
+                    value={editModuleTitle}
+                    onChange={e => setEditModuleTitle(e.target.value)}
+                    style={{ width: '100%', fontSize: 13, padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border2)', background: 'var(--bg2)', color: 'var(--text)', fontFamily: 'var(--font)', outline: 'none', boxSizing: 'border-box' }}
+                    placeholder="Module title"
+                    autoFocus
+                  />
+                </div>
+
+                {/* Content */}
+                <div>
+                  <label style={{ fontSize: 11, fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text3)', display: 'block', marginBottom: 6 }}>Content</label>
+                  <textarea
+                    value={editModuleContent}
+                    onChange={e => setEditModuleContent(e.target.value)}
+                    rows={6}
+                    style={{ width: '100%', fontSize: 13, padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border2)', background: 'var(--bg2)', color: 'var(--text)', fontFamily: 'var(--font)', outline: 'none', resize: 'vertical', lineHeight: 1.6, boxSizing: 'border-box' }}
+                    placeholder="Describe what this module covers…"
+                  />
+                </div>
+
+                {/* Weight + Themes row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 11, fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text3)', display: 'block', marginBottom: 6 }}>Weight</label>
+                    <select
+                      value={editModuleWeight}
+                      onChange={e => setEditModuleWeight(e.target.value)}
+                      style={{ width: '100%', fontSize: 13, padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border2)', background: 'var(--bg2)', color: 'var(--text)', fontFamily: 'var(--font)', outline: 'none', cursor: 'pointer' }}
+                    >
+                      <option value="anchor">Anchor (5 pips)</option>
+                      <option value="strong">Strong (3 pips)</option>
+                      <option value="supporting">Supporting (2 pips)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text3)', display: 'block', marginBottom: 6 }}>Themes <span style={{ opacity: 0.5, textTransform: 'none', fontFamily: 'var(--font)', letterSpacing: 0 }}>(comma-separated)</span></label>
+                    <input
+                      value={editModuleThemes}
+                      onChange={e => setEditModuleThemes(e.target.value)}
+                      style={{ width: '100%', fontSize: 13, padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border2)', background: 'var(--bg2)', color: 'var(--text)', fontFamily: 'var(--font)', outline: 'none', boxSizing: 'border-box' }}
+                      placeholder="leadership, data, community…"
+                    />
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
+                  <button onClick={closeEditModal} style={{ fontSize: 13, padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border2)', background: 'none', color: 'var(--text3)', cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveModuleEdit}
+                    disabled={savingModule || !editModuleTitle.trim()}
+                    style={{ fontSize: 13, padding: '8px 20px', borderRadius: 8, border: 'none', background: 'var(--teal)', color: '#fff', cursor: savingModule ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', fontWeight: 600, opacity: (!editModuleTitle.trim() || savingModule) ? 0.6 : 1 }}
+                  >
+                    {savingModule ? 'Saving…' : 'Save changes'}
+                  </button>
+                </div>
+
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -30,8 +30,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${jakarta.variable} ${mono.variable} h-full antialiased`}
     >
+      <head>
+        {/* Blocking script — applies saved theme before first paint to prevent flash */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('mh-theme')||(window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t)}catch(e){}})()` }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

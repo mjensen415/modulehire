@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import ModuleHireLogo from '@/components/ModuleHireLogo';
 import FeedbackModal from '@/components/FeedbackModal';
+import ThemeToggle from '@/components/ThemeToggle';
 
 function IconGrid() {
   return (
@@ -110,9 +111,12 @@ export default function AppSidebar({ footer, plan, isAdmin }: { footer?: React.R
 
   return (
     <aside className="app-sidebar">
-      <Link href="/dashboard" className="sidebar-logo">
-        <ModuleHireLogo size="sidebar" />
-      </Link>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px 0 0' }}>
+        <Link href="/dashboard" className="sidebar-logo">
+          <ModuleHireLogo size="sidebar" />
+        </Link>
+        <ThemeToggle />
+      </div>
 
       <div className="sidebar-section">
         <div className="sidebar-section-label">Workspace</div>
