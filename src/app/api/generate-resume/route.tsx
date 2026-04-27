@@ -609,9 +609,12 @@ export async function POST(req: Request) {
     const themesToUse: string[] = confirmed_themes?.length ? confirmed_themes : (jd.extracted_themes || [])
 
     const atsInstruction = phrasesToUse.length > 0
-      ? `ATS OPTIMIZATION — mandatory:
-- You MUST include EACH of these exact phrases verbatim at least once: ${phrasesToUse.join(', ')}
-- Naturally work in terminology for these themes: ${themesToUse.join(', ')}
+      ? `KEYWORD OPTIMIZATION RULES:
+- You MUST incorporate as many of the following JD key phrases verbatim into the resume as naturally possible: ${phrasesToUse.join(', ')}
+- For each JD theme that matches a module, use the exact theme language in bullet points: ${themesToUse.join(', ')}
+- Lead every bullet point with a strong action verb
+- Prioritize keyword density over stylistic variation — repetition of key terms is acceptable and desirable for ATS
+- Do NOT summarize or paraphrase key phrases — use them word-for-word where possible
 - Goal: ATS score above 90. Do not omit any phrase from the list.`
       : (themesToUse.length > 0 ? `- Mirror these JD themes naturally: ${themesToUse.join(', ')}` : '')
 

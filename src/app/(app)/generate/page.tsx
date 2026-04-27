@@ -156,7 +156,6 @@ export default function GeneratePage() {
   const [confirmedPhrases, setConfirmedPhrases] = useState<string[]>([])
   const [confirmedThemes, setConfirmedThemes] = useState<string[]>([])
   const [phraseInput, setPhraseInput] = useState('')
-  const [themeInput, setThemeInput] = useState('')
   const [confirmLoading, setConfirmLoading] = useState(false)
   const skillInputRef = useRef<HTMLInputElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -501,7 +500,6 @@ export default function GeneratePage() {
     setConfirmedPhrases([])
     setConfirmedThemes([])
     setPhraseInput('')
-    setThemeInput('')
     setConfirmLoading(false)
   }
 
@@ -697,15 +695,14 @@ export default function GeneratePage() {
       {step === 'confirming' && (
         <div className="dash-content" style={{ maxWidth: 680, margin: '0 auto', width: '100%', padding: '40px 24px' }}>
 
-          <div style={{ marginBottom: 24 }}>
-            <div className="page-title" style={{ marginBottom: 4 }}>Confirm extracted keywords</div>
-            <div style={{ fontSize: 13, color: 'var(--text3)' }}>
-              {jdData?.extracted_company && <strong style={{ color: 'var(--text2)' }}>{jdData.extracted_company}</strong>}
-              {jdData?.extracted_role_type && <span style={{ color: 'var(--text3)' }}> · {jdData.extracted_role_type}</span>}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
+              We found these keywords in the job description
             </div>
-            <p className="page-sub" style={{ marginTop: 8, marginBottom: 0 }}>
-              Review the keywords we extracted. Remove ones that don&apos;t fit, add any we missed, then click &ldquo;Looks good&rdquo;.
-            </p>
+            <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+              {jdData?.extracted_company && <strong style={{ color: 'var(--text2)' }}>{jdData.extracted_company}</strong>}
+              {jdData?.extracted_role_type && <span> · {jdData.extracted_role_type}</span>}
+            </div>
           </div>
 
           {errorMessage && (
@@ -714,82 +711,63 @@ export default function GeneratePage() {
             </div>
           )}
 
-          {/* Phrases */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
-              Key phrases <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>({confirmedPhrases.length})</span>
-            </div>
-            <div
-              style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 10px', background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 8, cursor: 'text', minHeight: 44 }}
-              onClick={e => { if (e.target === e.currentTarget) (e.currentTarget.querySelector('input') as HTMLInputElement)?.focus() }}
-            >
-              {confirmedPhrases.map(p => (
-                <span key={p} style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 4, padding: '2px 8px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--teal)' }}>
-                  {p}
-                  <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--teal)', fontSize: 14, lineHeight: 1, padding: 0, opacity: 0.7 }} onClick={() => setConfirmedPhrases(ps => ps.filter(x => x !== p))}>×</button>
+          {/* Themes — teal pills */}
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>Themes</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {confirmedThemes.length === 0 && (
+                <span style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>No themes detected.</span>
+              )}
+              {confirmedThemes.map(t => (
+                <span key={t} style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 999, padding: '3px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--teal)' }}>
+                  {t}
+                  <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--teal)', fontSize: 14, lineHeight: 1, padding: 0, opacity: 0.7 }} onClick={() => setConfirmedThemes(ts => ts.filter(x => x !== t))} aria-label={`Remove ${t}`}>×</button>
                 </span>
               ))}
-              <input
-                style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: 'var(--text)', minWidth: 160, flex: 1 }}
-                placeholder={confirmedPhrases.length === 0 ? 'Add a phrase and press Enter…' : ''}
-                value={phraseInput}
-                onChange={e => setPhraseInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ',') {
-                    e.preventDefault()
-                    const v = phraseInput.trim().replace(/,+$/, '')
-                    if (v && !confirmedPhrases.includes(v)) setConfirmedPhrases(ps => [...ps, v])
-                    setPhraseInput('')
-                  } else if (e.key === 'Backspace' && !phraseInput && confirmedPhrases.length > 0) {
-                    setConfirmedPhrases(ps => ps.slice(0, -1))
-                  }
-                }}
-                onBlur={() => {
-                  const v = phraseInput.trim().replace(/,+$/, '')
-                  if (v && !confirmedPhrases.includes(v)) setConfirmedPhrases(ps => [...ps, v])
-                  setPhraseInput('')
-                }}
-              />
             </div>
           </div>
 
-          {/* Themes */}
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
-              Themes <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>({confirmedThemes.length})</span>
+          {/* Phrases — gray pills */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>Key phrases</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {confirmedPhrases.length === 0 && (
+                <span style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>No phrases detected.</span>
+              )}
+              {confirmedPhrases.map(p => {
+                const display = p.length > 40 ? p.slice(0, 40) + '…' : p
+                return (
+                  <span key={p} title={p.length > 40 ? p : undefined} style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 999, padding: '3px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text2)' }}>
+                    {display}
+                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 14, lineHeight: 1, padding: 0 }} onClick={() => setConfirmedPhrases(ps => ps.filter(x => x !== p))} aria-label={`Remove ${p}`}>×</button>
+                  </span>
+                )
+              })}
             </div>
-            <div
-              style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 10px', background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 8, cursor: 'text', minHeight: 44 }}
-              onClick={e => { if (e.target === e.currentTarget) (e.currentTarget.querySelector('input') as HTMLInputElement)?.focus() }}
-            >
-              {confirmedThemes.map(t => (
-                <span key={t} style={{ background: 'var(--indigo-dim, oklch(0.35 0.12 270 / 0.25))', border: '1px solid var(--indigo, oklch(0.65 0.2 270))', borderRadius: 4, padding: '2px 8px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--indigo, oklch(0.65 0.2 270))' }}>
-                  {t}
-                  <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 14, lineHeight: 1, padding: 0, opacity: 0.7 }} onClick={() => setConfirmedThemes(ts => ts.filter(x => x !== t))}>×</button>
-                </span>
-              ))}
-              <input
-                style={{ background: 'none', border: 'none', outline: 'none', fontSize: 13, color: 'var(--text)', minWidth: 160, flex: 1 }}
-                placeholder={confirmedThemes.length === 0 ? 'Add a theme and press Enter…' : ''}
-                value={themeInput}
-                onChange={e => setThemeInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ',') {
-                    e.preventDefault()
-                    const v = themeInput.trim().replace(/,+$/, '')
-                    if (v && !confirmedThemes.includes(v)) setConfirmedThemes(ts => [...ts, v])
-                    setThemeInput('')
-                  } else if (e.key === 'Backspace' && !themeInput && confirmedThemes.length > 0) {
-                    setConfirmedThemes(ts => ts.slice(0, -1))
-                  }
-                }}
-                onBlur={() => {
-                  const v = themeInput.trim().replace(/,+$/, '')
-                  if (v && !confirmedThemes.includes(v)) setConfirmedThemes(ts => [...ts, v])
-                  setThemeInput('')
-                }}
-              />
-            </div>
+          </div>
+
+          {/* Add keyword */}
+          <div style={{ marginBottom: 28, display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              className="mod-edit-input"
+              style={{ flex: 1, fontSize: 13 }}
+              placeholder="+ Add keyword"
+              value={phraseInput}
+              onChange={e => setPhraseInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  const v = phraseInput.trim().replace(/,+$/, '')
+                  if (v && !confirmedPhrases.includes(v)) setConfirmedPhrases(ps => [...ps, v])
+                  setPhraseInput('')
+                }
+              }}
+              onBlur={() => {
+                const v = phraseInput.trim().replace(/,+$/, '')
+                if (v && !confirmedPhrases.includes(v)) setConfirmedPhrases(ps => [...ps, v])
+                setPhraseInput('')
+              }}
+            />
           </div>
 
         </div>
@@ -931,22 +909,27 @@ export default function GeneratePage() {
               </div>
             )}
 
-            {/* Estimated ATS score banner */}
-            {confirmedPhrases.length > 0 && (() => {
-              const moduleContent = rankedModules
-                .filter(m => selectedIds.includes(m.module_id))
-                .map(m => m.content.toLowerCase())
-                .join(' ')
-              const phraseMatches = confirmedPhrases.filter(p => moduleContent.includes(p.toLowerCase())).length
-              const estimatedScore = Math.min(100, 50 + Math.min(30, selectedIds.length * 3) + Math.min(20, phraseMatches * 2))
+            {/* Estimated ATS score */}
+            {selectedIds.length > 0 && (() => {
+              const selected = rankedModules.filter(m => selectedIds.includes(m.module_id))
+              const anchors = selected.filter(m => m.weight === 'anchor').length
+              const strongs = selected.filter(m => m.weight === 'strong').length
+              const supporting = selected.length - anchors - strongs
+              const estimatedScore = Math.min(
+                95,
+                50 + Math.min(30, anchors * 10) + Math.min(20, strongs * 5) + Math.min(10, supporting * 2)
+              )
               return (
-                <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10, padding: '14px 18px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <ScoreGauge score={estimatedScore} size="sm" />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Estimated ATS score: {estimatedScore}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
-                      {phraseMatches}/{confirmedPhrases.length} keywords in selected modules · Actual score calculated after generation
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>Estimated ATS score</span>
+                    <div style={{ width: 120, height: 4, borderRadius: 2, background: 'var(--bg3)', overflow: 'hidden' }}>
+                      <div style={{ width: `${estimatedScore}%`, height: '100%', background: 'var(--teal)', transition: 'width 0.2s' }} />
                     </div>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--teal)' }}>~{estimatedScore}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic', marginTop: 4 }}>
+                    ATS systems vary by company — this is an estimate.
                   </div>
                 </div>
               )
