@@ -107,6 +107,7 @@ JSON array:`
   if (dbError) throw dbError
 
   // Additive: upsert job_experiences and module_job_assignments using admin client (bypasses RLS).
+  let jobSyncError: string | undefined
   try {
     const admin = getAdminClient()
 
@@ -185,6 +186,7 @@ JSON array:`
     }
   } catch (err) {
     console.error('[parseModules] job_experience/assignment upsert failed:', err)
+    jobSyncError = (err as Error).message
   }
 
   // Extract contact info from the top of the resume (small, fast second call)
@@ -231,5 +233,5 @@ JSON:`
     // Contact extraction is best-effort — don't fail the whole parse
   }
 
-  return { modules: insertedModules, contact }
+  return { modules: insertedModules, contact, jobSyncError }
 }

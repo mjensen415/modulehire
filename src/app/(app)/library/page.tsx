@@ -57,6 +57,11 @@ export default function LibraryPage() {
   const [loading, setLoading] = useState(true)
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
 
+  // Sync state
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState('')
+  const [loadTrigger, setLoadTrigger] = useState(0)
+
   // Add job form
   const [showAddJob, setShowAddJob] = useState(false)
   const [newCompany, setNewCompany] = useState('')
@@ -96,7 +101,7 @@ export default function LibraryPage() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, [loadTrigger])
 
   // Close picker on outside click
   useEffect(() => {
@@ -219,6 +224,19 @@ export default function LibraryPage() {
     })
   }
 
+  async function syncJobsFromModules() {
+    setSyncing(true)
+    setSyncMessage('')
+    const res = await fetch('/api/backfill-job-experiences', { method: 'POST' })
+    const data = await res.json()
+    if (res.ok) {
+      setSyncMessage(`Synced ${data.jobs_created} job${data.jobs_created !== 1 ? 's' : ''}`)
+      setLoadTrigger(t => t + 1)
+      setTimeout(() => setSyncMessage(''), 3000)
+    }
+    setSyncing(false)
+  }
+
   // ─── Render ─────────────────────────────────────────────────────────────────
   const s: React.CSSProperties = {}
   void s
@@ -327,13 +345,37 @@ export default function LibraryPage() {
                 </div>
               </div>
             ) : (
-              <button
-                onClick={() => setShowAddJob(true)}
-                style={{ marginTop: 'auto', padding: '10px 14px', background: 'none', border: 'none', borderTop: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text3)', width: '100%', textAlign: 'left' }}
-              >
-                <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M5.5 1v9M1 5.5h9"/></svg>
-                Add job
-              </button>
+              <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border)' }}>
+                <button
+                  onClick={() => setShowAddJob(true)}
+                  style={{ padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text3)', width: '100%', textAlign: 'left' }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M5.5 1v9M1 5.5h9"/></svg>
+                  Add job
+                </button>
+                <button
+                  onClick={syncJobsFromModules}
+                  disabled={syncing}
+                  style={{ padding: '8px 14px', background: 'none', border: 'none', borderTop: '1px solid var(--border)', cursor: syncing ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: syncMessage ? 'var(--teal)' : 'var(--text3)', width: '100%', textAlign: 'left', opacity: syncing ? 0.6 : 1 }}
+                >
+                  {syncing ? (
+                    <>
+                      <svg className="spinner" width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="5.5" cy="5.5" r="4" strokeDasharray="8 18" opacity="0.4" /><path d="M5.5 1.5A4 4 0 019.5 5.5" /></svg>
+                      Syncing…
+                    </>
+                  ) : syncMessage ? (
+                    <>
+                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="5.5" cy="5.5" r="4.5" /><path d="M3.5 5.5l1.5 1.5 2.5-2.5" /></svg>
+                      {syncMessage}
+                    </>
+                  ) : (
+                    <>
+                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M1.5 5.5A4 4 0 019.5 5.5M9.5 5.5l-1.5-1.5M9.5 5.5l-1.5 1.5" /></svg>
+                      Sync jobs from modules
+                    </>
+                  )}
+                </button>
+              </div>
             )}
           </div>
 

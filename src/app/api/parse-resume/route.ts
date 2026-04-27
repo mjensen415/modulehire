@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing raw_text or resume_id' }, { status: 400 })
     }
 
-    const { modules: insertedModules, contact } = await parseModules(supabase, user.id, resume_id, raw_text)
+    const { modules: insertedModules, contact, jobSyncError } = await parseModules(supabase, user.id, resume_id, raw_text)
 
     const adminSb = await createAdminClient()
     let profileUpdated = false
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
 
     await supabase.from('usage_events').insert({ user_id: user.id, action: 'upload_resume' })
 
-    return NextResponse.json({ resume_id, modules: insertedModules, module_count: insertedModules.length, contact, profileUpdated })
+    return NextResponse.json({ resume_id, modules: insertedModules, module_count: insertedModules.length, contact, profileUpdated, ...(jobSyncError && { job_sync_error: jobSyncError }) })
   } catch (error) {
     console.error(error)
     return NextResponse.json({ error: (error as Error).message }, { status: 500 })
