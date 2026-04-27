@@ -114,7 +114,7 @@ JSON array:`
     const seen = new Set<string>()
     const uniqueExperiences: {
       company: string
-      title: string
+      title: string | null
       start_date: string | null
       end_date: string | null
       employment_type: string
