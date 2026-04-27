@@ -36,36 +36,39 @@ export async function POST(req: Request) {
 
     const { modules: insertedModules, contact } = await parseModules(supabase, user.id, resume_id, raw_text)
 
-    // On every upload: check each key field and fill any that are empty
+    const adminSb = await createAdminClient()
+    let profileUpdated = false
+
     if (contact) {
-      const adminSb = await createAdminClient()
-      const { data: existing, error: fetchErr } = await adminSb
+      // Fetch existing profile to decide: auto-apply (empty profile) or let the client prompt
+      const { data: existing } = await adminSb
         .from('users')
-        .select('name, email, phone, linkedin_url, location')
+        .select('name, email')
         .eq('id', user.id)
         .single()
 
-      if (fetchErr) console.error('Profile fetch failed (will attempt upsert):', fetchErr)
+      const emailPrefix = (existing?.email ?? user.email ?? '').split('@')[0]
+      const profileIsEmpty = !existing?.name || existing.name.trim() === '' || existing.name === emailPrefix
 
       const profileUpdate: Record<string, string> = {}
-      if (!existing?.name && contact.full_name) profileUpdate.name = contact.full_name
-      if (!existing?.email && contact.email) profileUpdate.email = contact.email
-      if (!existing?.phone && contact.phone) profileUpdate.phone = contact.phone
-      if (!existing?.linkedin_url && contact.linkedin_url) profileUpdate.linkedin_url = contact.linkedin_url
-      if (!existing?.location && contact.location) profileUpdate.location = contact.location
+      if (contact.full_name)    profileUpdate.name         = contact.full_name
+      if (contact.email)        profileUpdate.email        = contact.email
+      if (contact.phone)        profileUpdate.phone        = contact.phone
+      if (contact.linkedin_url) profileUpdate.linkedin_url = contact.linkedin_url
+      if (contact.location)     profileUpdate.location     = contact.location
 
-      if (Object.keys(profileUpdate).length > 0) {
+      if (profileIsEmpty && Object.keys(profileUpdate).length > 0) {
         const { error: upsertErr } = await adminSb
           .from('users')
           .upsert({ id: user.id, ...profileUpdate })
         if (upsertErr) console.error('Profile upsert failed:', upsertErr)
-        else console.log('Profile auto-filled fields:', Object.keys(profileUpdate))
+        else profileUpdated = true
       }
     }
 
     await supabase.from('usage_events').insert({ user_id: user.id, action: 'upload_resume' })
 
-    return NextResponse.json({ resume_id, modules: insertedModules, module_count: insertedModules.length, contact })
+    return NextResponse.json({ resume_id, modules: insertedModules, module_count: insertedModules.length, contact, profileUpdated })
   } catch (error) {
     console.error(error)
     return NextResponse.json({ error: (error as Error).message }, { status: 500 })

@@ -5,6 +5,14 @@ import { useRouter } from 'next/navigation'
 
 type Stage = 'idle' | 'uploading' | 'extracting' | 'parsing' | 'done' | 'error'
 
+type ContactInfo = {
+  full_name: string | null
+  email: string | null
+  phone: string | null
+  linkedin_url: string | null
+  location: string | null
+}
+
 // ---------------------------------------------------------------------------
 // Resume parse animation
 // ---------------------------------------------------------------------------
@@ -286,6 +294,10 @@ export default function Upload() {
   const [errorMessage, setErrorMessage] = useState('')
   const [moduleCount, setModuleCount] = useState(0)
   const [pasteText, setPasteText] = useState('')
+  const [pendingContact, setPendingContact] = useState<ContactInfo | null>(null)
+  const [showProfileModal, setShowProfileModal] = useState(false)
+  const [dontAskAgain, setDontAskAgain] = useState(false)
+  const [profileUpdating, setProfileUpdating] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
@@ -325,7 +337,7 @@ export default function Upload() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resume_id: uploadData.resume_id, raw_text: uploadData.raw_text }),
       })
-      let parseData: { error?: string; module_count?: number; modules?: unknown[] } = {}
+      let parseData: { error?: string; module_count?: number; modules?: unknown[]; profileUpdated?: boolean; contact?: ContactInfo } = {}
       try { parseData = await parseRes.json() } catch { /* non-JSON 504 */ }
       if (!parseRes.ok) {
         if (parseRes.status === 504) throw new Error('AI parse timed out — model took too long. Try again or paste a shorter resume.')
@@ -338,7 +350,15 @@ export default function Upload() {
         modules: parseData.modules,
       }))
       setStage('done')
-      setTimeout(() => router.push('/module-review'), 1500)
+
+      const hasContactFields = parseData.contact && Object.values(parseData.contact).some(v => v !== null)
+      const skipModal = localStorage.getItem('mh-profile-sync-skip') === 'true'
+      if (!parseData.profileUpdated && hasContactFields && !skipModal) {
+        setPendingContact(parseData.contact!)
+        setShowProfileModal(true)
+      } else {
+        setTimeout(() => router.push('/module-review'), 1500)
+      }
     } catch (e) {
       setErrorMessage((e as Error).message)
       setStage('error')
@@ -369,7 +389,7 @@ export default function Upload() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resume_id: uploadData.resume_id, raw_text: uploadData.raw_text }),
       })
-      let parseData: { error?: string; module_count?: number; modules?: unknown[] } = {}
+      let parseData: { error?: string; module_count?: number; modules?: unknown[]; profileUpdated?: boolean; contact?: ContactInfo } = {}
       try { parseData = await parseRes.json() } catch { /* non-JSON 504 */ }
       if (!parseRes.ok) {
         if (parseRes.status === 504) throw new Error('AI parse timed out — model took too long. Try again or paste a shorter resume.')
@@ -382,7 +402,15 @@ export default function Upload() {
         modules: parseData.modules,
       }))
       setStage('done')
-      setTimeout(() => router.push('/module-review'), 1500)
+
+      const hasContactFields = parseData.contact && Object.values(parseData.contact).some(v => v !== null)
+      const skipModal = localStorage.getItem('mh-profile-sync-skip') === 'true'
+      if (!parseData.profileUpdated && hasContactFields && !skipModal) {
+        setPendingContact(parseData.contact!)
+        setShowProfileModal(true)
+      } else {
+        setTimeout(() => router.push('/module-review'), 1500)
+      }
     } catch (e) {
       setErrorMessage((e as Error).message)
       setStage('error')
@@ -393,6 +421,31 @@ export default function Upload() {
     setStage('idle')
     setErrorMessage('')
     setModuleCount(0)
+  }
+
+  async function handleProfileUpdate() {
+    if (dontAskAgain) localStorage.setItem('mh-profile-sync-skip', 'true')
+    if (pendingContact) {
+      setProfileUpdating(true)
+      const body: Record<string, string> = {}
+      if (pendingContact.full_name)    body.name         = pendingContact.full_name
+      if (pendingContact.phone)        body.phone        = pendingContact.phone
+      if (pendingContact.linkedin_url) body.linkedin_url = pendingContact.linkedin_url
+      if (pendingContact.location)     body.location     = pendingContact.location
+      if (Object.keys(body).length > 0) {
+        await fetch('/api/me', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+      }
+    }
+    router.push('/module-review')
+  }
+
+  function handleProfileSkip() {
+    if (dontAskAgain) localStorage.setItem('mh-profile-sync-skip', 'true')
+    router.push('/module-review')
   }
 
   return (
@@ -510,11 +563,11 @@ export default function Upload() {
           )}
 
           {/* Done state */}
-          {stage === 'done' && (
+          {stage === 'done' && !showProfileModal && (
             <div className="parsing-state visible">
               <div className="parsing-card">
                 <div className="parsing-title">✓ Found {moduleCount} modules — redirecting…</div>
-                {STEPS.map((label, i) => (
+                {STEPS.map((label) => (
                   <div key={label} className="parse-step done">
                     <div className="parse-step-icon done"><IconCheck /></div>
                     <span className="parse-step-text">{label}</span>
@@ -523,6 +576,77 @@ export default function Upload() {
                 <div className="progress-bar-wrap">
                   <div className="progress-bar" style={{ width: '100%', animation: 'none' }} />
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Profile sync modal */}
+          {stage === 'done' && showProfileModal && pendingContact && (
+            <div className="parsing-state visible">
+              <div className="parsing-card">
+                <div className="parsing-title">Update your profile info?</div>
+                <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>
+                  We found contact info in this resume. Want to update My Info?
+                </p>
+                <div style={{ fontSize: 13, marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {pendingContact.full_name && (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <span style={{ color: 'var(--text2)', minWidth: 64 }}>Name</span>
+                      <span>{pendingContact.full_name}</span>
+                    </div>
+                  )}
+                  {pendingContact.email && (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <span style={{ color: 'var(--text2)', minWidth: 64 }}>Email</span>
+                      <span>{pendingContact.email}</span>
+                    </div>
+                  )}
+                  {pendingContact.phone && (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <span style={{ color: 'var(--text2)', minWidth: 64 }}>Phone</span>
+                      <span>{pendingContact.phone}</span>
+                    </div>
+                  )}
+                  {pendingContact.linkedin_url && (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <span style={{ color: 'var(--text2)', minWidth: 64 }}>LinkedIn</span>
+                      <span style={{ wordBreak: 'break-all' }}>{pendingContact.linkedin_url}</span>
+                    </div>
+                  )}
+                  {pendingContact.location && (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <span style={{ color: 'var(--text2)', minWidth: 64 }}>Location</span>
+                      <span>{pendingContact.location}</span>
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={handleProfileUpdate}
+                    disabled={profileUpdating}
+                  >
+                    {profileUpdating ? 'Updating…' : 'Yes, update'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    onClick={handleProfileSkip}
+                    disabled={profileUpdating}
+                  >
+                    Skip
+                  </button>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text2)', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={dontAskAgain}
+                    onChange={e => setDontAskAgain(e.target.checked)}
+                  />
+                  Don&apos;t ask again
+                </label>
               </div>
             </div>
           )}
