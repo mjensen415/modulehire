@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, KeyboardEvent, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import ScoreGauge from '@/components/ScoreGauge'
+import { isAtFreeLimit } from '@/lib/plan'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -173,6 +174,8 @@ export default function GeneratePage() {
   const [alignmentError, setAlignmentError] = useState<string | null>(null)
   const [savingToLibrary, setSavingToLibrary] = useState(false)
   const [savedToLibrary, setSavedToLibrary] = useState(false)
+  const [showOveragePrompt, setShowOveragePrompt] = useState(false)
+  const [overageCheckoutLoading, setOverageCheckoutLoading] = useState(false)
   const skillInputRef = useRef<HTMLInputElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const searchParams = useSearchParams()
@@ -495,11 +498,44 @@ export default function GeneratePage() {
     URL.revokeObjectURL(blobUrl)
   }
 
+  async function handleOverageCheckout() {
+    setOverageCheckoutLoading(true)
+    try {
+      const res = await fetch('/api/checkout/overage', { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.url) {
+        window.location.href = data.url as string
+        return
+      }
+      setErrorMessage(data.error ?? 'Could not start checkout.')
+    } catch {
+      setErrorMessage('Could not start checkout.')
+    } finally {
+      setOverageCheckoutLoading(false)
+    }
+  }
+
   // ── Step 4: generate ────────────────────────────────────────────────────────
 
   async function handleGenerate() {
-    setStep('generating')
     setErrorMessage('')
+    setShowOveragePrompt(false)
+
+    // Gate free users at their monthly limit before kicking off generation
+    try {
+      const usageRes = await fetch('/api/usage')
+      if (usageRes.ok) {
+        const usage = await usageRes.json() as { count: number; overage_credits: number; plan: string }
+        if (usage.plan === 'free' && isAtFreeLimit(usage.count, usage.overage_credits)) {
+          setShowOveragePrompt(true)
+          return
+        }
+      }
+    } catch {
+      // Non-fatal — fall through and let the server enforce limits
+    }
+
+    setStep('generating')
     try {
       const orderedIds = rankedModules
         .filter(m => selectedIds.includes(m.module_id))
@@ -583,6 +619,8 @@ export default function GeneratePage() {
     setAlignmentError(null)
     setSavingToLibrary(false)
     setSavedToLibrary(false)
+    setShowOveragePrompt(false)
+    setOverageCheckoutLoading(false)
   }
 
   // ── RENDER ──────────────────────────────────────────────────────────────────
@@ -1279,6 +1317,38 @@ export default function GeneratePage() {
             {errorMessage && (
               <div style={{ background: 'oklch(0.4 0.18 10 / 0.15)', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)', marginBottom: 20 }}>
                 {errorMessage}
+              </div>
+            )}
+
+            {/* Overage prompt — free plan, monthly resume limit reached */}
+            {showOveragePrompt && (
+              <div style={{
+                background: 'var(--surface)',
+                border: '1px solid var(--amber, oklch(0.75 0.16 60))',
+                borderRadius: 10,
+                padding: '18px 20px',
+                marginBottom: 24,
+              }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
+                  You&apos;ve used your 2 free resumes this month.
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 14 }}>
+                  $4 to generate one more — no subscription needed.
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handleOverageCheckout}
+                    disabled={overageCheckoutLoading}
+                    style={overageCheckoutLoading ? { opacity: 0.7, display: 'inline-flex', alignItems: 'center', gap: 6 } : { display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    {overageCheckoutLoading ? <><Spinner /> Starting checkout…</> : 'Generate for $4 →'}
+                  </button>
+                  <a href="/pricing" style={{ fontSize: 13, color: 'var(--teal)', textDecoration: 'none' }}>
+                    Or upgrade for unlimited →
+                  </a>
+                </div>
               </div>
             )}
 
