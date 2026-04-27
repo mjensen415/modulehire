@@ -17,7 +17,7 @@ export default function PublicNav() {
       </ul>
       <div className="nav-cta">
         <ThemeToggle />
-        <Link href="/signin" className="btn-code-sm">Have a code? Sign in →</Link>
+        <Link href="/signin" className="btn-ghost-sm">Sign in</Link>
         <Link href="/request-access" className="btn-primary-sm">Request beta access</Link>
       </div>
     </nav>

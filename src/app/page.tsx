@@ -271,8 +271,8 @@ export default function Home() {
           </Link>
         </div>
         <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text3)' }}>
-          Already have a code?{' '}
-          <Link href="/signin" style={{ color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>Sign in here →</Link>
+          Already have an account?{' '}
+          <Link href="/signin" style={{ color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>Sign in →</Link>
         </div>
 
         {/* THREE-COLUMN VISUAL */}
@@ -384,8 +384,8 @@ export default function Home() {
           </Link>
         </div>
         <div style={{marginTop: 16, fontSize: 13, color: 'var(--text3)'}}>
-          Already have a code?{' '}
-          <Link href="/signin" style={{ color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>Sign in here →</Link>
+          Already have an account?{' '}
+          <Link href="/signin" style={{ color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>Sign in →</Link>
         </div>
       </section>
 
