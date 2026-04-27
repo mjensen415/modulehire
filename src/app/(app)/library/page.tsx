@@ -261,7 +261,7 @@ export default function LibraryPage() {
                 onClick={() => setSelectedJobId(job.id)}
                 style={{
                   display: 'block', width: '100%', textAlign: 'left',
-                  padding: '10px 14px', background: 'none', border: 'none',
+                  padding: '10px 14px', border: 'none',
                   borderLeft: `2px solid ${selectedJobId === job.id ? 'var(--teal)' : 'transparent'}`,
                   background: selectedJobId === job.id ? 'var(--teal-dim)' : 'transparent',
                   cursor: 'pointer', transition: 'all 0.1s',
