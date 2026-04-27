@@ -170,6 +170,7 @@ export default function GeneratePage() {
   const [alignmentMatched, setAlignmentMatched] = useState<string[]>([])
   const [alignmentStates, setAlignmentStates] = useState<Record<string, 'accepted' | 'skipped'>>({})
   const [alignmentLoading, setAlignmentLoading] = useState(false)
+  const [alignmentError, setAlignmentError] = useState<string | null>(null)
   const [savingToLibrary, setSavingToLibrary] = useState(false)
   const [savedToLibrary, setSavedToLibrary] = useState(false)
   const skillInputRef = useRef<HTMLInputElement>(null)
@@ -381,6 +382,7 @@ export default function GeneratePage() {
 
   async function handleAlign() {
     setAlignmentLoading(true)
+    setAlignmentError(null)
     setStep('aligning')
     setAlignmentStates({})
     setAlignmentSuggestions([])
@@ -396,9 +398,11 @@ export default function GeneratePage() {
       if (res.ok) {
         setAlignmentSuggestions(data.gaps ?? [])
         setAlignmentMatched(data.matched ?? [])
+      } else {
+        setAlignmentError(data.error ?? 'Theme analysis failed. You can still continue to configure.')
       }
     } catch {
-      // Non-fatal — let the user proceed without suggestions
+      setAlignmentError('Could not reach the theme analysis service. You can still continue to configure.')
     } finally {
       setAlignmentLoading(false)
     }
@@ -576,6 +580,7 @@ export default function GeneratePage() {
     setAlignmentMatched([])
     setAlignmentStates({})
     setAlignmentLoading(false)
+    setAlignmentError(null)
     setSavingToLibrary(false)
     setSavedToLibrary(false)
   }
@@ -1008,13 +1013,68 @@ export default function GeneratePage() {
                 </>
               )}
 
-              {/* Zero gaps */}
-              {!alignmentLoading && alignmentSuggestions.length === 0 && (
-                <div style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 10, padding: '20px 22px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--teal)', marginBottom: 6 }}>
-                    All JD themes are already covered by your selected modules.
+              {/* Error state */}
+              {!alignmentLoading && alignmentError && (
+                <div style={{ background: 'oklch(0.4 0.18 10 / 0.12)', border: '1px solid var(--rose)', borderRadius: 10, padding: '20px 22px' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--rose)', marginBottom: 6 }}>
+                    Theme analysis didn&apos;t complete
                   </div>
-                  <button className="btn-primary" style={{ marginTop: 8 }} onClick={() => setStep('configuring')}>Continue to configure →</button>
+                  <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.55 }}>
+                    {alignmentError}
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      className="btn-ghost"
+                      style={{ fontSize: 12 }}
+                      onClick={() => { setAlignmentError(null); handleAlign() }}
+                    >
+                      ↺ Retry
+                    </button>
+                    <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('configuring')}>
+                      Skip and continue →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Zero gaps — truly all covered */}
+              {!alignmentLoading && !alignmentError && alignmentSuggestions.length === 0 && alignmentMatched.length > 0 && (
+                <div style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 10, padding: '20px 22px' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--teal)', marginBottom: 8 }}>
+                    ✓ All JD themes are already covered by your selected modules.
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+                    {alignmentMatched.map(t => (
+                      <span key={t} style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', color: 'var(--teal)', borderRadius: 999, padding: '3px 10px', fontSize: 12 }}>
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                  <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('configuring')}>Continue to configure →</button>
+                </div>
+              )}
+
+              {/* No themes extracted from JD at all */}
+              {!alignmentLoading && !alignmentError && alignmentSuggestions.length === 0 && alignmentMatched.length === 0 && (
+                <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '20px 22px' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
+                    No theme gaps found
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.55 }}>
+                    No themes were extracted from this job description, or the analysis couldn&apos;t identify any gaps. Your modules look good — continue to configure.
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      className="btn-ghost"
+                      style={{ fontSize: 12 }}
+                      onClick={() => handleAlign()}
+                    >
+                      ↺ Retry
+                    </button>
+                    <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('configuring')}>
+                      Continue to configure →
+                    </button>
+                  </div>
                 </div>
               )}
 

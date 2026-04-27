@@ -56,11 +56,11 @@ export async function POST(req: Request) {
 
 Required keys:
 {
-  "extracted_company": "company name",
-  "extracted_role_type": "one of: vp-community, head-of-community, director-community, senior-manager-community, community-manager, developer-relations, developer-advocacy, developer-community-manager, community-marketing, community-ops, community-enablement, content-strategy, ic-community",
-  "extracted_themes": ["5-8 themes from: community-building, community-marketing, community-programs, community-ops, community-health, ambassador-programs, member-lifecycle, retention, engagement, developer-relations, developer-enablement, feedback-loops, ai, technical-content, hackathons, product-collaboration, product-advisory, cross-functional, data-driven, zero-to-one, scale, growth, brand, content-strategy, events, enablement, partnerships, lifecycle-marketing, leadership, executive, consulting, startup"],
+  "extracted_company": "company name or empty string if not found",
+  "extracted_role_type": "best match from: vp-community, head-of-community, director-community, senior-manager-community, community-manager, developer-relations, developer-advocacy, developer-community-manager, community-marketing, community-ops, community-enablement, content-strategy, ic-community, software-engineer, product-manager, designer, data-scientist, marketing-manager, sales, operations, finance, hr, other",
+  "extracted_themes": ["5-8 short skill or competency themes that this role requires — use plain English phrases like 'cross-functional collaboration', 'data analysis', 'team leadership', 'product strategy', 'customer success', 'technical writing', 'go-to-market', 'stakeholder management'. Choose themes that reflect the actual requirements of THIS specific job description, not a predefined list."],
   "extracted_seniority": "one of: ic, manager, senior-manager, director, vp, c-suite",
-  "extracted_phrases": ["5-10 exact verbatim phrases from the job description"]
+  "extracted_phrases": ["5-10 exact verbatim phrases from the job description that a resume should echo to pass ATS"]
 }
 
 Job Description:
