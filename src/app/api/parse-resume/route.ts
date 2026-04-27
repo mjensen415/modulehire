@@ -45,24 +45,21 @@ export async function POST(req: Request) {
         .eq('id', user.id)
         .single()
 
-      if (fetchErr) {
-        console.error('Profile fetch failed:', fetchErr)
-      } else {
-        const profileUpdate: Record<string, string> = {}
-        if (!existing?.name && contact.full_name) profileUpdate.name = contact.full_name
-        if (!existing?.email && contact.email) profileUpdate.email = contact.email
-        if (!existing?.phone && contact.phone) profileUpdate.phone = contact.phone
-        if (!existing?.linkedin_url && contact.linkedin_url) profileUpdate.linkedin_url = contact.linkedin_url
-        if (!existing?.location && contact.location) profileUpdate.location = contact.location
+      if (fetchErr) console.error('Profile fetch failed (will attempt upsert):', fetchErr)
 
-        if (Object.keys(profileUpdate).length > 0) {
-          const { error: updateErr } = await adminSb
-            .from('users')
-            .update(profileUpdate)
-            .eq('id', user.id)
-          if (updateErr) console.error('Profile update failed:', updateErr)
-          else console.log('Profile auto-filled fields:', Object.keys(profileUpdate))
-        }
+      const profileUpdate: Record<string, string> = {}
+      if (!existing?.name && contact.full_name) profileUpdate.name = contact.full_name
+      if (!existing?.email && contact.email) profileUpdate.email = contact.email
+      if (!existing?.phone && contact.phone) profileUpdate.phone = contact.phone
+      if (!existing?.linkedin_url && contact.linkedin_url) profileUpdate.linkedin_url = contact.linkedin_url
+      if (!existing?.location && contact.location) profileUpdate.location = contact.location
+
+      if (Object.keys(profileUpdate).length > 0) {
+        const { error: upsertErr } = await adminSb
+          .from('users')
+          .upsert({ id: user.id, ...profileUpdate })
+        if (upsertErr) console.error('Profile upsert failed:', upsertErr)
+        else console.log('Profile auto-filled fields:', Object.keys(profileUpdate))
       }
     }
 

@@ -442,16 +442,20 @@ export default function Upload() {
                 <div className="file-badges">
                   {['PDF', 'DOCX'].map(t => <span key={t} className="file-badge">{t}</span>)}
                 </div>
-                <div className="upload-or">or</div>
-                <button
-                  className="btn-primary"
-                  onClick={e => { e.stopPropagation(); fileInputRef.current?.click() }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                    <path d="M2 10V12h10V10M7 2v8M4 5l3-3 3 3" />
-                  </svg>
-                  Browse files
-                </button>
+                <div style={{ textAlign: 'center' }}>
+                  <div className="upload-or">or</div>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, margin: '0 auto' }}
+                    onClick={e => { e.stopPropagation(); fileInputRef.current?.click() }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                      <path d="M2 10V12h10V10M7 2v8M4 5l3-3 3 3" />
+                    </svg>
+                    Browse files
+                  </button>
+                </div>
               </div>
 
               <div className="paste-toggle">

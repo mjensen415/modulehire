@@ -97,6 +97,84 @@ JSON array:`
 
   if (dbError) throw dbError
 
+  // Additive: upsert job_experiences and module_job_assignments. Errors here are logged but never thrown.
+  try {
+    // 1. Collect unique (source_company, source_role_title, date_start, date_end) combinations
+    const seen = new Set<string>()
+    const uniqueExperiences: {
+      company: string
+      title: string
+      start_date: string | null
+      end_date: string | null
+      employment_type: string
+    }[] = []
+
+    for (const m of modulesData) {
+      const company    = String(m.source_company    ?? '')
+      const roleTitle  = String(m.source_role_title ?? '')
+      const dateStart  = String(m.date_start        ?? '')
+      const dateEnd    = String(m.date_end           ?? '')
+      const key = `${company}||${roleTitle}||${dateStart}||${dateEnd}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        uniqueExperiences.push({
+          company,
+          title:            roleTitle,
+          start_date:       dateStart ? `${dateStart}-01` : null,
+          end_date:         dateEnd && dateEnd.toLowerCase() !== 'present' ? `${dateEnd}-01` : null,
+          employment_type:  String(m.employment_type ?? 'full-time'),
+        })
+      }
+    }
+
+    if (uniqueExperiences.length > 0) {
+      // 2. Upsert — ON CONFLICT (user_id, company, title, start_date) DO NOTHING
+      const { error: jeError } = await supabase
+        .from('job_experiences')
+        .upsert(
+          uniqueExperiences.map(e => ({ user_id: userId, ...e })),
+          { onConflict: 'user_id,company,title,start_date', ignoreDuplicates: true }
+        )
+      if (jeError) throw jeError
+
+      // 3. Fetch back rows (inserted + pre-existing) to get their IDs
+      const companies = [...new Set(uniqueExperiences.map(e => e.company))]
+      const { data: jobExperiences, error: fetchError } = await supabase
+        .from('job_experiences')
+        .select('id, company, title, start_date')
+        .eq('user_id', userId)
+        .in('company', companies)
+      if (fetchError) throw fetchError
+
+      // 4. Build lookup: "company||title||start_date" → job id
+      const jobLookup = new Map<string, string>()
+      for (const je of (jobExperiences ?? [])) {
+        const k = `${je.company}||${je.title}||${je.start_date ?? ''}`
+        jobLookup.set(k, je.id)
+      }
+
+      // 5. Map each inserted module to its job_experience and collect assignments
+      const assignments: { module_id: string; job_id: string }[] = []
+      for (const mod of (insertedModules ?? []) as Record<string, unknown>[]) {
+        const company   = String(mod.source_company    ?? '')
+        const roleTitle = String(mod.source_role_title ?? '')
+        const dateStart = mod.date_start ? `${mod.date_start}-01` : ''
+        const k = `${company}||${roleTitle}||${dateStart}`
+        const jobId = jobLookup.get(k)
+        if (jobId) assignments.push({ module_id: String(mod.id), job_id: jobId })
+      }
+
+      if (assignments.length > 0) {
+        const { error: assignError } = await supabase
+          .from('module_job_assignments')
+          .upsert(assignments, { onConflict: 'module_id,job_id', ignoreDuplicates: true })
+        if (assignError) throw assignError
+      }
+    }
+  } catch (err) {
+    console.error('[parseModules] job_experience/assignment upsert failed:', err)
+  }
+
   // Extract contact info from the top of the resume (small, fast second call)
   let contact: {
     full_name: string | null
