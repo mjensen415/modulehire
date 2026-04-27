@@ -697,7 +697,7 @@ export default function GeneratePage() {
 
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
-              We found these keywords in the job description
+              We found these themes in the job description
             </div>
             <div style={{ fontSize: 12, color: 'var(--text3)' }}>
               {jdData?.extracted_company && <strong style={{ color: 'var(--text2)' }}>{jdData.extracted_company}</strong>}
