@@ -294,7 +294,7 @@ export default function ModuleReview() {
       <div className="top-bar">
         <div className="top-bar-left">
           <div className="top-bar-title">Review extracted modules</div>
-          <div className="top-bar-sub">{active.length} module{active.length !== 1 ? 's' : ''} · {companies.length} company{companies.length !== 1 ? 'ies' : ''}</div>
+          <div className="top-bar-sub">{active.length} module{active.length !== 1 ? 's' : ''} · {companies.length} compan{companies.length !== 1 ? 'ies' : 'y'}</div>
         </div>
         <div className="top-bar-right">
           <button className="btn-primary" onClick={acceptAll} disabled={saving}>

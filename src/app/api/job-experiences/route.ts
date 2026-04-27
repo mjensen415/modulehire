@@ -11,8 +11,7 @@ export async function GET() {
       .from('job_experiences')
       .select('*')
       .eq('user_id', user.id)
-      .order('sort_order', { ascending: true })
-      .order('created_at', { ascending: false })
+      .order('start_date', { ascending: false, nullsFirst: false })
 
     if (error) throw error
     return NextResponse.json({ jobs: data ?? [] })
