@@ -532,6 +532,7 @@ export async function POST(req: Request) {
       format = 'classic',
       confirmed_phrases,
       confirmed_themes,
+      module_augmentations,
     }: {
       module_ids: string[]
       jd_id: string
@@ -548,6 +549,7 @@ export async function POST(req: Request) {
       format?: 'classic' | 'corporate' | 'chronological' | 'combination'
       confirmed_phrases?: string[]
       confirmed_themes?: string[]
+      module_augmentations?: Record<string, string>
     } = await req.json()
 
     if (!isUuid(jd_id)) {
@@ -572,7 +574,13 @@ export async function POST(req: Request) {
       .in('id', module_ids)
     if (modError) throw modError
 
-    const sortedModules = module_ids.map((id: string) => modules.find(m => m.id === id)).filter(Boolean)
+    const sortedModules = module_ids
+      .map((id: string) => modules.find(m => m.id === id))
+      .filter((m): m is Record<string, unknown> => Boolean(m))
+      .map((m) => {
+        const augmented = module_augmentations?.[String(m.id)]
+        return augmented ? { ...m, content: augmented } : m
+      })
 
     const variantFraming: Record<string, string> = {
       A: 'Lead with community impact and grassroots momentum',
