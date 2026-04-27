@@ -7,10 +7,25 @@ import Stripe from 'stripe';
 export const dynamic = 'force-dynamic';
 
 function planFromPriceId(priceId: string | undefined): 'free' | 'starter' | 'pro' {
-  if (priceId === process.env.STRIPE_PRO_PRICE_ID) return 'pro';
-  // STRIPE_STARTER_PRICE_ID is the new env var; fall back to the legacy name during migration.
-  if (priceId === process.env.STRIPE_STARTER_PRICE_ID || priceId === process.env.STRIPE_STANDARD_PRICE_ID) return 'starter';
+  if (!priceId) return 'free';
+  if (
+    priceId === process.env.STRIPE_PRICE_PRO_MONTHLY ||
+    priceId === process.env.STRIPE_PRICE_PRO_ANNUAL ||
+    priceId === process.env.STRIPE_PRO_PRICE_ID
+  ) return 'pro';
+  if (
+    priceId === process.env.STRIPE_PRICE_STARTER_MONTHLY ||
+    priceId === process.env.STRIPE_PRICE_STARTER_ANNUAL ||
+    priceId === process.env.STRIPE_STARTER_PRICE_ID ||
+    // legacy env name during migration
+    priceId === process.env.STRIPE_STANDARD_PRICE_ID
+  ) return 'starter';
   return 'free';
+}
+
+function userIdFromSubscriptionMetadata(sub: Stripe.Subscription): string | null {
+  const raw = sub.metadata?.supabase_user_id;
+  return typeof raw === 'string' && isUuid(raw) ? raw : null;
 }
 
 export async function POST(req: Request) {
@@ -30,22 +45,23 @@ export async function POST(req: Request) {
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
-    const userId = session.client_reference_id;
-    if (!userId || !session.subscription || !session.customer) return NextResponse.json({ ok: true });
+    if (!session.subscription || !session.customer) return NextResponse.json({ ok: true });
 
-    if (!isUuid(userId)) {
-      console.error('[stripe webhook] invalid client_reference_id:', userId);
+    const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
+    // Prefer the subscription metadata user id (set by /api/checkout); fall back to legacy client_reference_id.
+    const userId = userIdFromSubscriptionMetadata(subscription) ?? session.client_reference_id ?? null;
+    if (!userId || !isUuid(userId)) {
+      console.error('[stripe webhook] could not resolve user id for session:', session.id);
       return NextResponse.json({ ok: true });
     }
 
     // Verify the user actually exists before mutating their plan
     const { data: existingUser } = await supabase.from('users').select('id').eq('id', userId).single();
     if (!existingUser) {
-      console.error('[stripe webhook] user not found for client_reference_id:', userId);
+      console.error('[stripe webhook] user not found:', userId);
       return NextResponse.json({ ok: true });
     }
 
-    const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
     const periodEnd = new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString();
     const priceId = subscription.items.data[0]?.price.id;
     const plan = planFromPriceId(priceId);
@@ -64,18 +80,22 @@ export async function POST(req: Request) {
     const plan = planFromPriceId(priceId);
     const periodEnd = new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString();
 
-    await supabase.from('users').update({ plan, plan_period_end: periodEnd })
-      .eq('stripe_subscription_id', subscription.id);
+    // Prefer metadata.supabase_user_id; fall back to looking up by stripe_subscription_id.
+    const userId = userIdFromSubscriptionMetadata(subscription);
+    const query = supabase.from('users').update({ plan, plan_period_end: periodEnd });
+    await (userId ? query.eq('id', userId) : query.eq('stripe_subscription_id', subscription.id));
   }
 
   if (event.type === 'customer.subscription.deleted') {
     const subscription = event.data.object as Stripe.Subscription;
 
-    await supabase.from('users').update({
+    const userId = userIdFromSubscriptionMetadata(subscription);
+    const query = supabase.from('users').update({
       plan: 'free',
       stripe_subscription_id: null,
       plan_period_end: null,
-    }).eq('stripe_subscription_id', subscription.id);
+    });
+    await (userId ? query.eq('id', userId) : query.eq('stripe_subscription_id', subscription.id));
   }
 
   return NextResponse.json({ ok: true });
