@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, KeyboardEvent, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
+import ScoreGauge from '@/components/ScoreGauge'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -146,6 +147,7 @@ export default function GeneratePage() {
   const [matchedKeywords, setMatchedKeywords] = useState<string[]>([])
   const [missingKeywords, setMissingKeywords] = useState<string[]>([])
   const [showDownloadMenu, setShowDownloadMenu] = useState(false)
+  const [atsScore, setAtsScore] = useState<number | null>(null)
   const skillInputRef = useRef<HTMLInputElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const searchParams = useSearchParams()
@@ -437,6 +439,7 @@ export default function GeneratePage() {
       setCoverLetterUrl(data.cover_letter_url ?? null)
       setMatchedKeywords(data.matched_keywords ?? [])
       setMissingKeywords(data.missing_keywords ?? [])
+      setAtsScore(data.ats_score ?? null)
       setStep('done')
     } catch (e) {
       setErrorMessage((e as Error).message)
@@ -456,6 +459,7 @@ export default function GeneratePage() {
     setResumeFormat('classic')
     setMatchedKeywords([])
     setMissingKeywords([])
+    setAtsScore(null)
     setShowDownloadMenu(false)
     setGeneratedUrls(null)
     setResumeHtml(null)
@@ -1086,22 +1090,9 @@ export default function GeneratePage() {
       {step === 'done' && generatedUrls && (() => {
         const matchedKw = keywords.filter(k => k.found)
         const missingKw = keywords.filter(k => !k.found)
-        const score = keywords.length > 0 ? Math.round((matchedKw.length / keywords.length) * 100) : 0
-        const scoreLabel = score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : 'Fair'
-        const scoreColor = score >= 80 ? 'var(--teal)' : score >= 60 ? '#f5a623' : '#e05c5c'
         const VISIBLE_KW = 5
-
-        // SVG arc gauge
-        const r = 54, cx = 70, cy = 72, strokeW = 10
-        const circumference = Math.PI * r  // half circle
-        const progress = (score / 100) * circumference
-        const gaugeArc = (color: string, dashArray: string) => (
-          <path
-            d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
-            fill="none" stroke={color} strokeWidth={strokeW}
-            strokeLinecap="round" strokeDasharray={dashArray}
-          />
-        )
+        // Use server-computed atsScore when available, fall back to keyword ratio
+        const displayScore = atsScore ?? (keywords.length > 0 ? Math.round((matchedKw.length / keywords.length) * 100) : 0)
 
         return (
           <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
@@ -1159,19 +1150,20 @@ export default function GeneratePage() {
               {/* ── RIGHT: score + keywords ── */}
               <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-                {/* Score gauge card */}
-                {keywords.length > 0 && (
-                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10, padding: '20px 20px 16px', textAlign: 'center' }}>
-                    <svg width="140" height="80" viewBox="0 0 140 80" style={{ display: 'block', margin: '0 auto 4px' }}>
-                      {/* Track */}
-                      {gaugeArc('var(--bg3)', `${circumference} ${circumference}`)}
-                      {/* Fill */}
-                      {gaugeArc(scoreColor, `${progress} ${circumference}`)}
-                      <text x={cx} y={cy - 6} textAnchor="middle" fontSize="26" fontWeight="700" fill={scoreColor} fontFamily="var(--font)">{score}</text>
-                      <text x={cx} y={cy + 12} textAnchor="middle" fontSize="11" fill="var(--text3)" fontFamily="var(--font)">{scoreLabel}</text>
-                    </svg>
-                    <div style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>Keyword match score</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>{matchedKw.length} of {keywords.length} JD keywords found</div>
+                {/* ATS Score gauge card */}
+                {(atsScore != null || keywords.length > 0) && (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10, padding: '20px 20px 14px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+                      <ScoreGauge score={displayScore} size="md" />
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600, marginBottom: 2 }}>ATS Score</div>
+                    {keywords.length > 0 && (
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                        {matchedKw.length}/{keywords.length} keywords · {
+                          [contact.name, contact.email, contact.phone, contact.linkedin, contact.location].filter(Boolean).length
+                        }/5 contact fields
+                      </div>
+                    )}
                   </div>
                 )}
 

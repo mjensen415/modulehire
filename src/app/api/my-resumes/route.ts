@@ -29,7 +29,7 @@ export async function GET(req: Request) {
       .from('generated_resumes')
       .select(`
         id, title, positioning_variant, created_at, expires_at, is_temp, docx_url, pdf_url,
-        job_description_id,
+        job_description_id, ats_score,
         job_descriptions (extracted_company, extracted_role_type)
       `)
       .eq('user_id', user.id)

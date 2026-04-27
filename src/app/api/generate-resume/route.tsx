@@ -783,6 +783,23 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
       else missingKeywords.push(kw)
     }
 
+    // ── ATS score (composite 0–100) ───────────────────────────────────────────
+    // 60% keyword match · 20% contact completeness · 10% module count · 10% has summary
+    const kwScore = jdKeywords.length > 0
+      ? Math.round((matchedKeywords.length / jdKeywords.length) * 100)
+      : 75 // no keywords to check — give benefit of the doubt
+    const contactFields = [contact.name, contact.email, contact.phone, contact.linkedin, contact.location]
+    const contactScore = Math.round((contactFields.filter(Boolean).length / 5) * 100)
+    const moduleScore = Math.min(module_ids.length, 8) / 8 * 100
+    const summaryScore = include_summary ? 100 : 0
+    const atsScore = Math.round(kwScore * 0.6 + contactScore * 0.2 + moduleScore * 0.1 + summaryScore * 0.1)
+
+    // Save score back to the DB record
+    await supabase
+      .from('generated_resumes')
+      .update({ ats_score: atsScore })
+      .eq('id', resumeId)
+
     let coverLetterText: string | null = null
     let coverLetterUrl: string | null = null
 
@@ -832,6 +849,7 @@ Rules:
       cover_letter_url: coverLetterUrl,
       matched_keywords: matchedKeywords,
       missing_keywords: missingKeywords,
+      ats_score: atsScore,
     })
   } catch (error) {
     console.error(error)

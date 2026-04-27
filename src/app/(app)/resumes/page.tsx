@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { ScoreChip } from '@/components/ScoreGauge'
 
 type GeneratedResume = {
   id: string
@@ -14,6 +15,7 @@ type GeneratedResume = {
   pdf_signed: string | null
   expired: boolean
   job_description_id: string | null
+  ats_score: number | null
   job_descriptions: {
     extracted_company: string | null
     extracted_role_type: string | null
@@ -114,15 +116,16 @@ export default function ResumesPage() {
 
                   {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {r.title}
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text3)', display: 'flex', gap: 10 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text3)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                       <span>{formatDate(r.created_at)}</span>
                       {r.positioning_variant && <span>Variant {r.positioning_variant}</span>}
                       {r.is_temp && r.expires_at && (
                         <span style={{ color: 'var(--rose)', opacity: 0.8 }}>{timeUntilExpiry(r.expires_at)}</span>
                       )}
+                      <ScoreChip score={r.ats_score} />
                     </div>
                   </div>
 
