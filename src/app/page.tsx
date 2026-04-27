@@ -251,12 +251,17 @@ export default function Home() {
           Parse your resume into modular skill blocks. Reassemble them instantly into tailored applications — tuned to each job description.
         </p>
 
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--teal)', border: '1px solid var(--teal-glow)', background: 'var(--teal-dim)', borderRadius: 20, padding: '4px 12px', marginBottom: 20, fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--teal)', display: 'inline-block' }} />
+          PRIVATE BETA
+        </div>
+
         <div className="hero-ctas">
-          <Link href="/signin" className="btn-primary" style={{textDecoration: 'none'}}>
+          <Link href="/request-access" className="btn-primary" style={{textDecoration: 'none'}}>
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
               <path d="M7.5 1v9M4 7l3.5 3.5L11 7M2 13h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Upload your resume
+            Request beta access
           </Link>
           <Link href="/how-it-works" className="btn-secondary" style={{textDecoration: 'none'}}>
             See how it works
@@ -264,6 +269,10 @@ export default function Home() {
               <path d="M1 7h12M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </Link>
+        </div>
+        <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text3)' }}>
+          Already have a code?{' '}
+          <Link href="/signin" style={{ color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>Sign in here →</Link>
         </div>
 
         {/* THREE-COLUMN VISUAL */}
@@ -367,12 +376,16 @@ export default function Home() {
           Your experience doesn't change. The story you tell does. ModuleHire Labs makes every application feel like it was made just for that role.
         </p>
         <div style={{display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap'}}>
-          <Link href="/signin" className="btn-primary" style={{fontSize:'15px', padding:'14px 28px', textDecoration: 'none'}}>
-            Upload your resume — it's free
+          <Link href="/request-access" className="btn-primary" style={{fontSize:'15px', padding:'14px 28px', textDecoration: 'none'}}>
+            Request beta access →
           </Link>
           <Link href="/how-it-works" className="btn-secondary" style={{fontSize:'15px', padding:'14px 28px', textDecoration: 'none'}}>
             View sample output
           </Link>
+        </div>
+        <div style={{marginTop: 16, fontSize: 13, color: 'var(--text3)'}}>
+          Already have a code?{' '}
+          <Link href="/signin" style={{ color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>Sign in here →</Link>
         </div>
       </section>
 

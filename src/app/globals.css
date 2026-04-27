@@ -15,6 +15,24 @@
   --sidebar-w: 220px;
 }
 
+/* ─── LIGHT THEME ─── */
+[data-theme="light"] {
+  --bg: #f5f7fc; --bg2: #eef0f8; --bg3: #e6e9f4;
+  --surface: #ffffff; --surface2: #f0f2fa;
+  --border: rgba(0,0,0,0.07); --border2: rgba(0,0,0,0.13);
+  --text: #0d1224; --text2: #3d4663; --text3: #7a82a0;
+}
+[data-theme="light"] nav {
+  background: rgba(245,247,252,0.92);
+  border-bottom-color: rgba(0,0,0,0.08);
+}
+[data-theme="light"] .app-topbar {
+  background: rgba(245,247,252,0.95);
+}
+[data-theme="light"] .auth-card { background: var(--surface); }
+[data-theme="light"] .auth-bg { background: radial-gradient(ellipse 50% 50% at 50% 40%, oklch(0.65 0.20 195 / 0.05) 0%, transparent 70%); }
+[data-theme="light"] .hero-bg-grid { opacity: 0.4; }
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
 body { 
@@ -932,6 +950,10 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
   .btn-ghost-sm:hover { color: var(--text); }
   .btn-primary-sm { font-size: 13px; font-weight: 600; background: var(--teal); color: #fff; border: none; border-radius: 6px; padding: 8px 16px; cursor: pointer; font-family: var(--font); transition: opacity 0.2s, transform 0.15s; text-decoration: none; display: inline-block; }
   .btn-primary-sm:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-code-sm { font-size: 13px; font-weight: 600; background: transparent; color: var(--teal); border: 1px solid var(--teal-glow); border-radius: 6px; padding: 7px 14px; cursor: pointer; font-family: var(--font); transition: all 0.2s; text-decoration: none; display: inline-block; white-space: nowrap; }
+  .btn-code-sm:hover { background: var(--teal-dim); }
+  .theme-toggle { width: 32px; height: 32px; border-radius: 7px; background: transparent; border: 1px solid var(--border2); color: var(--text3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0; }
+  .theme-toggle:hover { background: var(--surface); color: var(--text); border-color: var(--border2); }
 
   /* DOCS LAYOUT */
   .docs-layout { display: flex; padding-top: 60px; min-height: 100vh; }

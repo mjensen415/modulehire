@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { ScoreChip } from '@/components/ScoreGauge'
 
 type Resume = {
   id: string
@@ -12,6 +13,7 @@ type Resume = {
   jd_id: string | null
   company: string | null
   role_type: string | null
+  ats_score: number | null
 }
 
 const STATUSES = ['draft', 'sent', 'viewed', 'interview', 'offer', 'rejected'] as const
@@ -125,6 +127,7 @@ export default function ApplicationsPage() {
           status: string | null
           job_descriptions: { extracted_company: string | null; extracted_role_type: string | null } | null
           jd_id?: string | null
+          ats_score?: number | null
         }) => ({
           id: r.id,
           title: r.title,
@@ -134,6 +137,7 @@ export default function ApplicationsPage() {
           jd_id: r.jd_id ?? null,
           company: r.job_descriptions?.extracted_company ?? null,
           role_type: r.job_descriptions?.extracted_role_type ?? null,
+          ats_score: r.ats_score ?? null,
         }))
         setResumes(mapped)
       })
@@ -254,7 +258,7 @@ export default function ApplicationsPage() {
               {/* Header */}
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: '1fr 160px 130px 120px 100px',
+                gridTemplateColumns: '1fr 160px 90px 130px 120px 80px',
                 padding: '10px 20px',
                 borderBottom: '1px solid var(--border2)',
                 fontSize: 11,
@@ -265,6 +269,7 @@ export default function ApplicationsPage() {
               }}>
                 <span>Resume / Role</span>
                 <span>Company</span>
+                <span>Score</span>
                 <span>Date</span>
                 <span>Status</span>
                 <span></span>
@@ -283,7 +288,7 @@ export default function ApplicationsPage() {
                     key={r.id}
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '1fr 160px 130px 120px 100px',
+                      gridTemplateColumns: '1fr 160px 90px 130px 120px 80px',
                       padding: '14px 20px',
                       alignItems: 'center',
                       borderBottom: i < displayed.length - 1 ? '1px solid var(--border2)' : 'none',
@@ -307,6 +312,11 @@ export default function ApplicationsPage() {
                     {/* Company */}
                     <div style={{ fontSize: 12, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {r.company ?? '—'}
+                    </div>
+
+                    {/* Score */}
+                    <div>
+                      <ScoreChip score={r.ats_score} />
                     </div>
 
                     {/* Date */}

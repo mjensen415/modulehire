@@ -128,6 +128,7 @@ export default async function Dashboard() {
     { data: resumes, count: resumeCount },
     { data: jds, count: jdCount },
     { data: recentJdFull },
+    { data: scoreRows },
   ] = await Promise.all([
     supabase
       .from('modules')
@@ -137,7 +138,7 @@ export default async function Dashboard() {
       .limit(6),
     supabase
       .from('generated_resumes')
-      .select('id, title, created_at, positioning_variant', { count: 'exact' })
+      .select('id, title, created_at, positioning_variant, ats_score', { count: 'exact' })
       .order('created_at', { ascending: false })
       .limit(4),
     supabase
@@ -151,6 +152,11 @@ export default async function Dashboard() {
       .order('created_at', { ascending: false })
       .limit(1)
       .single(),
+    supabase
+      .from('generated_resumes')
+      .select('ats_score')
+      .not('ats_score', 'is', null)
+      .is('deleted_at', null),
   ]);
 
   const displayName = user?.user_metadata?.full_name?.split(' ')[0]
@@ -160,11 +166,16 @@ export default async function Dashboard() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
+  const scoredResumes = (scoreRows ?? []) as Array<{ ats_score: number }>
+  const avgScore = scoredResumes.length > 0
+    ? Math.round(scoredResumes.reduce((sum, r) => sum + r.ats_score, 0) / scoredResumes.length)
+    : null;
+
   const stats = [
     { label: 'Modules', value: String(moduleCount ?? 0), change: 'in your library', up: false, color: 'var(--teal)' },
     { label: 'Job descriptions', value: String(jdCount ?? 0), change: 'analyzed', up: false, color: 'var(--amber)' },
     { label: 'Resumes generated', value: String(resumeCount ?? 0), change: 'all time', up: false, color: 'var(--indigo)' },
-    { label: 'Match score avg', value: '—', change: 'run a match to see', up: false, color: 'var(--green)' },
+    { label: 'Match score avg', value: avgScore !== null ? `${avgScore}` : '—', change: avgScore !== null ? `across ${scoredResumes.length} resume${scoredResumes.length !== 1 ? 's' : ''}` : 'run a match to see', up: false, color: 'var(--green)' },
   ];
 
   const typedModules: ModuleRecord[] = (modules ?? []) as ModuleRecord[];

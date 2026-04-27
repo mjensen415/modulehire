@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import ThemeToggle from '@/components/ThemeToggle'
 
 export default function PublicNav() {
   return (
@@ -6,6 +7,7 @@ export default function PublicNav() {
       <Link href="/" className="nav-logo">
         <div className="nav-logo-mark">MH</div>
         ModuleHire Labs
+        <span style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 400, marginLeft: 2 }}>Beta</span>
       </Link>
       <ul className="nav-links">
         <li><Link href="/how-it-works">How it works</Link></li>
@@ -14,8 +16,9 @@ export default function PublicNav() {
         <li><Link href="/docs">FAQs/Docs</Link></li>
       </ul>
       <div className="nav-cta">
-        <Link href="/signin" className="btn-ghost-sm">Sign in</Link>
-        <Link href="/signin" className="btn-primary-sm">Get started free</Link>
+        <ThemeToggle />
+        <Link href="/signin" className="btn-code-sm">Have a code? Sign in →</Link>
+        <Link href="/request-access" className="btn-primary-sm">Request beta access</Link>
       </div>
     </nav>
   )
