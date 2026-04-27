@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import ModuleHireLogo from '@/components/ModuleHireLogo';
 
 function IconGrid() {
   return (
@@ -107,8 +108,7 @@ export default function AppSidebar({ footer, plan, isAdmin }: { footer?: React.R
   return (
     <aside className="app-sidebar">
       <Link href="/dashboard" className="sidebar-logo">
-        <div className="logo-mark">MH</div>
-        ModuleHire Labs
+        <ModuleHireLogo size="sidebar" />
       </Link>
 
       <div className="sidebar-section">
