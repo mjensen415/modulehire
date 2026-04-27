@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Job = { id: string; company: string; title: string | null; start_date: string | null; end_date: string | null; location: string | null; employment_type: string | null }
@@ -49,6 +50,7 @@ function Pips({ weight }: { weight: string | null }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function LibraryPage() {
+  const router = useRouter()
   const [jobs, setJobs] = useState<Job[]>([])
   const [modules, setModules] = useState<Module[]>([])
   const [mja, setMja] = useState<MJA[]>([])       // module-job assignments
@@ -328,6 +330,13 @@ export default function LibraryPage() {
               Work Experience
             </div>
 
+            {jobs.length === 0 && !showAddJob && (
+              <div style={{ padding: '24px 14px', textAlign: 'center', flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>No work experience yet</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.5 }}>Add a job manually or upload a resume — we&apos;ll extract your work history automatically.</div>
+              </div>
+            )}
+
             {jobs.map(job => (
               <button
                 key={job.id}
@@ -354,8 +363,8 @@ export default function LibraryPage() {
                   )}
                   <span style={{
                     fontSize: 10, padding: '1px 5px', borderRadius: 10,
-                    background: selectedJobId === job.id ? 'var(--teal-dim)' : 'var(--surface)',
-                    color: selectedJobId === job.id ? 'var(--teal)' : 'var(--text3)',
+                    background: selectedJobId === job.id && jobModules(job.id).length > 0 ? 'var(--teal-dim)' : 'var(--surface)',
+                    color: selectedJobId === job.id && jobModules(job.id).length > 0 ? 'var(--teal)' : 'var(--text3)',
                     border: '1px solid var(--border2)',
                   }}>
                     {jobModules(job.id).length}
@@ -544,13 +553,22 @@ export default function LibraryPage() {
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                               <Pips weight={m.weight} />
-                              <button
-                                onClick={() => unassignModuleFromJob(m.id, selectedJobId!)}
-                                style={{ fontSize: 10, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 4px' }}
-                                title="Remove from this job"
-                              >
-                                ×
-                              </button>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                <button
+                                  onClick={() => router.push(`/library/${m.id}/edit`)}
+                                  style={{ color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 4px', display: 'flex', alignItems: 'center' }}
+                                  title="Edit module"
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2l2 2-6 6H3V8l6-6z"/></svg>
+                                </button>
+                                <button
+                                  onClick={() => unassignModuleFromJob(m.id, selectedJobId!)}
+                                  style={{ fontSize: 12, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 4px', lineHeight: 1 }}
+                                  title="Remove from this job"
+                                >
+                                  ×
+                                </button>
+                              </div>
                             </div>
                           </div>
                         )
@@ -632,7 +650,7 @@ export default function LibraryPage() {
                       {/* Suggestions */}
                       {suggestedSkills.length > 0 && (
                         <div style={{ padding: '8px 16px' }}>
-                          <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)', letterSpacing: '0.06em', marginBottom: 6 }}>SUGGESTED FROM YOUR MODULES</div>
+                          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>Suggested from your modules</div>
                           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                             {suggestedSkills.map(t => (
                               <button
@@ -753,7 +771,14 @@ export default function LibraryPage() {
                     </div>
                   )
                 })}
-                {repoModules.length === 0 && (
+                {repoModules.length === 0 && modules.length === 0 && (
+                  <div style={{ gridColumn: '1/-1', padding: '40px 20px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>No modules yet</div>
+                    <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 16 }}>Upload a resume to automatically extract your experience into modules.</div>
+                    <Link href="/upload" className="btn-primary" style={{ fontSize: 12, textDecoration: 'none', display: 'inline-block' }}>Upload a resume</Link>
+                  </div>
+                )}
+                {repoModules.length === 0 && modules.length > 0 && (
                   <div style={{ gridColumn: '1/-1', padding: '20px', textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>
                     No modules match your search.
                   </div>

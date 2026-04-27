@@ -57,6 +57,7 @@ export default async function AdminPage({
     { count: totalModules },
     { count: resumesThisMonth },
     { count: matchesThisMonth },
+    { count: totalFeedback },
   ] = await Promise.all([
     adminClient.from('users').select('id', { count: 'exact', head: true }),
     adminClient.from('users').select('id', { count: 'exact', head: true }).eq('plan', 'free'),
@@ -67,6 +68,7 @@ export default async function AdminPage({
       .eq('action', 'generate_resume').gte('created_at', monthStart.toISOString()),
     adminClient.from('usage_events').select('id', { count: 'exact', head: true })
       .eq('action', 'match_job').gte('created_at', monthStart.toISOString()),
+    adminClient.from('beta_feedback').select('id', { count: 'exact', head: true }),
   ]);
 
   // User list paginated
@@ -108,11 +110,29 @@ export default async function AdminPage({
 
   const totalPages = Math.ceil((userCount ?? 0) / pageSize);
 
+  // Recent beta feedback + email lookup
+  const { data: feedback } = await adminClient
+    .from('beta_feedback')
+    .select('id, rating, category, message, page_url, created_at, user_id')
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  const feedbackUserIds = [...new Set((feedback ?? []).map(f => f.user_id).filter(Boolean))] as string[];
+  const { data: feedbackUsers } = feedbackUserIds.length > 0
+    ? await adminClient.from('users').select('id, email').in('id', feedbackUserIds)
+    : { data: [] as Array<{ id: string; email: string }> };
+
+  const feedbackUserMap: Record<string, string> = {};
+  for (const u of feedbackUsers ?? []) {
+    feedbackUserMap[u.id] = u.email;
+  }
+
   const stats = [
     { label: 'Total users', value: totalUsers ?? 0, sub: `${freeUsers ?? 0} free · ${standardUsers ?? 0} standard · ${proUsers ?? 0} pro` },
     { label: 'Total modules', value: totalModules ?? 0, sub: 'active (not deleted)' },
     { label: 'Resumes this month', value: resumesThisMonth ?? 0, sub: 'generate_resume events' },
     { label: 'Matches this month', value: matchesThisMonth ?? 0, sub: 'match_job events' },
+    { label: 'Beta feedback', value: totalFeedback ?? 0, sub: 'all-time submissions' },
   ];
 
   return (
@@ -199,6 +219,57 @@ export default async function AdminPage({
               )}
             </div>
           )}
+        </div>
+
+        {/* BETA FEEDBACK */}
+        <div className="section-card" style={{ marginTop: 24 }}>
+          <div className="section-head">
+            <div className="section-head-title">Beta feedback</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+              {feedback?.length ?? 0} most recent
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>User</th>
+                  <th>Rating</th>
+                  <th>Category</th>
+                  <th>Page</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(feedback ?? []).map(f => (
+                  <tr key={f.id}>
+                    <td style={{ fontSize: 12, color: 'var(--text3)', whiteSpace: 'nowrap' }}>
+                      {new Date(f.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                    </td>
+                    <td style={{ fontSize: 12 }}>{feedbackUserMap[f.user_id] ?? '—'}</td>
+                    <td style={{ fontSize: 13, textAlign: 'center' }}>
+                      {f.rating ? '★'.repeat(f.rating) + '☆'.repeat(5 - f.rating) : '—'}
+                    </td>
+                    <td>
+                      {f.category && (
+                        <span className={`plan-chip plan-${f.category === 'bug' ? 'free' : f.category === 'feature' ? 'standard' : f.category === 'praise' ? 'pro' : 'free'}`}>
+                          {f.category}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                      {f.page_url ?? '—'}
+                    </td>
+                    <td style={{ fontSize: 12, maxWidth: 360, color: 'var(--text2)' }}>{f.message}</td>
+                  </tr>
+                ))}
+                {(feedback ?? []).length === 0 && (
+                  <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: '24px 0' }}>No feedback yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </>

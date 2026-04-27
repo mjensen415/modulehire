@@ -1,8 +1,10 @@
 'use client'
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import ModuleHireLogo from '@/components/ModuleHireLogo';
+import FeedbackModal from '@/components/FeedbackModal';
 
 function IconGrid() {
   return (
@@ -90,6 +92,7 @@ function IconPerson() {
 }
 export default function AppSidebar({ footer, plan, isAdmin }: { footer?: React.ReactNode; plan?: string; isAdmin?: boolean }) {
   const pathname = usePathname();
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: <IconGrid />, exact: true },
@@ -146,6 +149,21 @@ export default function AppSidebar({ footer, plan, isAdmin }: { footer?: React.R
       </div>
 
       {footer}
+
+      <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border)', padding: '10px 12px' }}>
+        <button
+          onClick={() => setFeedbackOpen(true)}
+          className="nav-item"
+          style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '8px 10px' }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 1H2a1 1 0 00-1 1v7a1 1 0 001 1h2v2.5L7 10h5a1 1 0 001-1V2a1 1 0 00-1-1z"/>
+          </svg>
+          Share feedback
+        </button>
+      </div>
+
+      <FeedbackModal isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </aside>
   );
 }
