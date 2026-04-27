@@ -133,28 +133,33 @@ export default async function Dashboard() {
     supabase
       .from('modules')
       .select('id, title, weight, themes, role_types, type, source_company', { count: 'exact' })
+      .eq('user_id', user!.id)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(6),
     supabase
       .from('generated_resumes')
       .select('id, title, created_at, positioning_variant, ats_score', { count: 'exact' })
+      .eq('user_id', user!.id)
       .order('created_at', { ascending: false })
       .limit(4),
     supabase
       .from('job_descriptions')
       .select('id, extracted_company, extracted_role_type, created_at', { count: 'exact' })
+      .eq('user_id', user!.id)
       .order('created_at', { ascending: false })
       .limit(4),
     supabase
       .from('job_descriptions')
       .select('id, extracted_company, extracted_role_type, extracted_phrases, extracted_themes')
+      .eq('user_id', user!.id)
       .order('created_at', { ascending: false })
       .limit(1)
       .single(),
     supabase
       .from('generated_resumes')
       .select('ats_score')
+      .eq('user_id', user!.id)
       .not('ats_score', 'is', null)
       .is('deleted_at', null),
   ]);
