@@ -52,7 +52,7 @@ export default async function AdminPage({
   const [
     { count: totalUsers },
     { count: freeUsers },
-    { count: standardUsers },
+    { count: starterUsers },
     { count: proUsers },
     { count: totalModules },
     { count: resumesThisMonth },
@@ -61,7 +61,7 @@ export default async function AdminPage({
   ] = await Promise.all([
     adminClient.from('users').select('id', { count: 'exact', head: true }),
     adminClient.from('users').select('id', { count: 'exact', head: true }).eq('plan', 'free'),
-    adminClient.from('users').select('id', { count: 'exact', head: true }).eq('plan', 'standard'),
+    adminClient.from('users').select('id', { count: 'exact', head: true }).eq('plan', 'starter'),
     adminClient.from('users').select('id', { count: 'exact', head: true }).eq('plan', 'pro'),
     adminClient.from('modules').select('id', { count: 'exact', head: true }).is('deleted_at', null),
     adminClient.from('usage_events').select('id', { count: 'exact', head: true })
@@ -128,7 +128,7 @@ export default async function AdminPage({
   }
 
   const stats = [
-    { label: 'Total users', value: totalUsers ?? 0, sub: `${freeUsers ?? 0} free · ${standardUsers ?? 0} standard · ${proUsers ?? 0} pro` },
+    { label: 'Total users', value: totalUsers ?? 0, sub: `${freeUsers ?? 0} free · ${starterUsers ?? 0} starter · ${proUsers ?? 0} pro` },
     { label: 'Total modules', value: totalModules ?? 0, sub: 'active (not deleted)' },
     { label: 'Resumes this month', value: resumesThisMonth ?? 0, sub: 'generate_resume events' },
     { label: 'Matches this month', value: matchesThisMonth ?? 0, sub: 'match_job events' },

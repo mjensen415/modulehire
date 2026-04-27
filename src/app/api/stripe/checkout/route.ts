@@ -4,7 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { safeReturnUrl } from '@/lib/safe-return-url';
 
 const PRICE_IDS: Record<string, string | undefined> = {
-  standard: process.env.STRIPE_STANDARD_PRICE_ID,
+  // STRIPE_STARTER_PRICE_ID is the new env var; fall back to the legacy name during migration.
+  starter: process.env.STRIPE_STARTER_PRICE_ID ?? process.env.STRIPE_STANDARD_PRICE_ID,
   pro: process.env.STRIPE_PRO_PRICE_ID,
 };
 

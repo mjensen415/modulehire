@@ -138,7 +138,7 @@ export default function AppSidebar({ footer, plan, isAdmin }: { footer?: React.R
           <span className="nav-item-icon"><IconSettings /></span>
           Settings
         </Link>
-        {(plan === 'free' || plan === 'standard') && (
+        {(plan === 'free' || plan === 'starter') && (
           <Link href="/billing" className={`nav-item${pathname === '/billing' ? ' active' : ''}`}>
             <span className="nav-item-icon"><IconUpgrade /></span>
             Upgrade

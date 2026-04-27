@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { getUserPlanContext, PLAN_LIMITS } from '@/lib/plans';
+import { moduleLimit, FREE_LIMIT, STARTER_LIMIT } from '@/lib/plan';
 
 // ─── ICONS ───
 function IconBlocks() {
@@ -121,7 +121,9 @@ export default async function Dashboard() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const planCtx = await getUserPlanContext(supabase);
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
 
   const [
     { data: modules, count: moduleCount },
@@ -129,6 +131,8 @@ export default async function Dashboard() {
     { data: jds, count: jdCount },
     { data: recentJdFull },
     { data: scoreRows },
+    { data: profileRow },
+    { count: resumesThisMonthCount },
   ] = await Promise.all([
     supabase
       .from('modules')
@@ -162,6 +166,17 @@ export default async function Dashboard() {
       .eq('user_id', user!.id)
       .not('ats_score', 'is', null)
       .is('deleted_at', null),
+    supabase
+      .from('users')
+      .select('plan, is_admin')
+      .eq('id', user!.id)
+      .single(),
+    supabase
+      .from('usage_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user!.id)
+      .eq('action', 'generate_resume')
+      .gte('created_at', monthStart.toISOString()),
   ]);
 
   const displayName = user?.user_metadata?.full_name?.split(' ')[0]
@@ -203,18 +218,18 @@ export default async function Dashboard() {
     : [];
 
   // Plan gate state
-  const plan = planCtx?.plan ?? 'free';
-  const limits = PLAN_LIMITS[plan];
-  const currentModuleCount = planCtx?.module_count ?? (moduleCount ?? 0);
-  const resumesThisMonth = planCtx?.resumes_this_month ?? 0;
-  const matchesThisMonth = planCtx?.matches_this_month ?? 0;
-  const isAdmin = planCtx?.is_admin ?? false;
+  const plan = (profileRow?.plan ?? 'free') as string;
+  const isAdmin = profileRow?.is_admin ?? false;
+  const currentModuleCount = moduleCount ?? 0;
+  const resumesThisMonth = resumesThisMonthCount ?? 0;
 
-  const nearModuleLimit = !isAdmin && limits.modules !== -1 && currentModuleCount >= limits.modules - 2;
-  const atModuleLimit = !isAdmin && limits.modules !== -1 && currentModuleCount >= limits.modules;
-  const nearResumeLimit = !isAdmin && limits.resumes_per_month !== -1 && resumesThisMonth >= limits.resumes_per_month - 1;
-  const atResumeLimit = !isAdmin && limits.resumes_per_month !== -1 && resumesThisMonth >= limits.resumes_per_month;
-  const atMatchLimit = !isAdmin && limits.matches_per_month !== -1 && matchesThisMonth >= limits.matches_per_month;
+  const moduleCap = moduleLimit(plan);
+  const resumeCap = plan === 'pro' ? Infinity : plan === 'starter' ? STARTER_LIMIT : FREE_LIMIT;
+
+  const nearModuleLimit = !isAdmin && Number.isFinite(moduleCap) && currentModuleCount >= moduleCap - 2;
+  const atModuleLimit = !isAdmin && Number.isFinite(moduleCap) && currentModuleCount >= moduleCap;
+  const nearResumeLimit = !isAdmin && Number.isFinite(resumeCap) && resumesThisMonth >= resumeCap - 1;
+  const atResumeLimit = !isAdmin && Number.isFinite(resumeCap) && resumesThisMonth >= resumeCap;
 
   return (
     <>
@@ -239,13 +254,13 @@ export default async function Dashboard() {
         {/* PLAN WARNING BANNERS */}
         {nearModuleLimit && !atModuleLimit && (
           <div className="plan-warning-banner">
-            ⚠️ You&apos;re using {currentModuleCount}/{limits.modules} modules on the {plan} plan.
+            ⚠️ You&apos;re using {currentModuleCount}/{moduleCap} modules on the {plan} plan.
             <Link href="/billing">Upgrade →</Link>
           </div>
         )}
         {nearResumeLimit && !atResumeLimit && (
           <div className="plan-warning-banner">
-            ⚠️ You&apos;ve used {resumesThisMonth}/{limits.resumes_per_month} resume generations this month.
+            ⚠️ You&apos;ve used {resumesThisMonth}/{resumeCap} resume generations this month.
             <Link href="/billing">Upgrade →</Link>
           </div>
         )}
@@ -331,7 +346,7 @@ export default async function Dashboard() {
               </div>
               <div className="quick-actions">
                 {[
-                  { icon: '🔍', color: 'var(--teal-dim)', title: 'Find matches', desc: 'Paste a job description', href: '/generate', blocked: atMatchLimit },
+                  { icon: '🔍', color: 'var(--teal-dim)', title: 'Find matches', desc: 'Paste a job description', href: '/generate', blocked: false },
                   { icon: '⚡', color: 'var(--amber-dim)', title: 'Generate resume', desc: 'Pick modules + role', href: '/generate', blocked: atResumeLimit },
                   { icon: '✏️', color: 'var(--indigo-dim)', title: 'Edit a module', desc: 'Refine your skills', href: '/library', blocked: false },
                   { icon: '📤', color: 'var(--green-dim)', title: 'Upload resume', desc: 'Add or replace source', href: '/upload', blocked: atModuleLimit },

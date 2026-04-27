@@ -6,9 +6,10 @@ import Stripe from 'stripe';
 
 export const dynamic = 'force-dynamic';
 
-function planFromPriceId(priceId: string | undefined): 'free' | 'standard' | 'pro' {
+function planFromPriceId(priceId: string | undefined): 'free' | 'starter' | 'pro' {
   if (priceId === process.env.STRIPE_PRO_PRICE_ID) return 'pro';
-  if (priceId === process.env.STRIPE_STANDARD_PRICE_ID) return 'standard';
+  // STRIPE_STARTER_PRICE_ID is the new env var; fall back to the legacy name during migration.
+  if (priceId === process.env.STRIPE_STARTER_PRICE_ID || priceId === process.env.STRIPE_STANDARD_PRICE_ID) return 'starter';
   return 'free';
 }
 

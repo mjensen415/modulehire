@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { PLAN_LIMITS, Plan } from '@/lib/plans';
+import { FREE_LIMIT, STARTER_LIMIT, moduleLimit, uploadLimit } from '@/lib/plan';
+
+type Plan = 'free' | 'starter' | 'pro';
 
 function IconCheck() {
   return (
@@ -19,8 +21,8 @@ function PlanFeature({ text }: { text: string }) {
   );
 }
 
-function formatLimit(n: number, unit: string) {
-  return n === -1 ? `Unlimited ${unit}` : `${n} ${unit}`;
+function fmtLimit(n: number, unit: string) {
+  return Number.isFinite(n) ? `${n} ${unit}` : `Unlimited ${unit}`;
 }
 
 const PLANS: Array<{
@@ -37,25 +39,25 @@ const PLANS: Array<{
     price: '$0/mo',
     desc: 'Get started with the basics.',
     features: [
-      formatLimit(PLAN_LIMITS.free.modules, 'modules'),
-      formatLimit(PLAN_LIMITS.free.resumes_per_month, 'resume generations/mo'),
-      formatLimit(PLAN_LIMITS.free.matches_per_month, 'job matches/mo'),
+      fmtLimit(moduleLimit('free'), 'modules'),
+      `${FREE_LIMIT} resume generations/mo`,
+      fmtLimit(uploadLimit('free'), 'resume upload/mo'),
       'Temporary file storage (24h)',
     ],
     cta: 'Current plan',
   },
   {
-    key: 'standard',
-    name: 'Standard',
+    key: 'starter',
+    name: 'Starter',
     price: '$9/mo',
     desc: 'For active job seekers.',
     features: [
-      formatLimit(PLAN_LIMITS.standard.modules, 'modules'),
-      formatLimit(PLAN_LIMITS.standard.resumes_per_month, 'resume generations/mo'),
-      'Unlimited job matches',
+      fmtLimit(moduleLimit('starter'), 'modules'),
+      `${STARTER_LIMIT} resume generations/mo`,
+      fmtLimit(uploadLimit('starter'), 'resume uploads/mo'),
       'Permanent file storage',
     ],
-    cta: 'Upgrade to Standard',
+    cta: 'Upgrade to Starter',
   },
   {
     key: 'pro',
@@ -65,7 +67,7 @@ const PLANS: Array<{
     features: [
       'Unlimited modules',
       'Unlimited resume generations',
-      'Unlimited job matches',
+      'Unlimited resume uploads',
       'Permanent file storage',
     ],
     cta: 'Upgrade to Pro',
@@ -102,7 +104,7 @@ export default async function PricingPage() {
             const isCurrent = plan.key === currentPlan;
             const isDowngrade = (
               (currentPlan === 'pro' && plan.key !== 'pro') ||
-              (currentPlan === 'standard' && plan.key === 'free')
+              (currentPlan === 'starter' && plan.key === 'free')
             );
 
             return (

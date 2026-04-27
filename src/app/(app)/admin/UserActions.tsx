@@ -14,7 +14,7 @@ export function PlanSelect({ userId, currentPlan }: { userId: string; currentPla
   return (
     <select defaultValue={currentPlan} className="admin-select" onChange={handleChange}>
       <option value="free">free</option>
-      <option value="standard">standard</option>
+      <option value="starter">starter</option>
       <option value="pro">pro</option>
     </select>
   )
