@@ -113,47 +113,51 @@ function OutputResume() {
 }
 
 function ArrowsSVG() {
+  // SVG spans the full hero-visual (1200 viewBox units = full grid width).
+  // Grid columns: source 220px | middle 1fr | output 220px
+  // At max-width 1200px: source x=0–220, middle x=220–980, output x=980–1200
+  // Modules are centred in the middle column (~x=490–710).
+  // Arrows start inside the source panel and end inside the output panel.
   return (
     <svg className="arrows-svg" viewBox="0 0 1200 480" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <marker id="arrowTeal" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+        <marker id="arrowTeal" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
           <path d="M0,0 L6,3 L0,6 Z" fill="oklch(0.65 0.20 195)" opacity="0.9"/>
         </marker>
-        <marker id="arrowAmber" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+        <marker id="arrowAmber" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
           <path d="M0,0 L6,3 L0,6 Z" fill="oklch(0.72 0.18 58)" opacity="0.9"/>
         </marker>
-        <marker id="arrowIndigo" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+        <marker id="arrowIndigo" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
           <path d="M0,0 L6,3 L0,6 Z" fill="oklch(0.62 0.18 270)" opacity="0.9"/>
         </marker>
       </defs>
 
+      {/* source → modules */}
       <path className="arrow-path extract" opacity="0.7"
-        d="M 230 150 C 310 150, 360 175, 440 185"
+        d="M 200 150 C 310 150, 400 175, 490 185"
         markerEnd="url(#arrowTeal)" />
-
       <path className="arrow-path amber-path" opacity="0.7"
-        d="M 230 240 C 310 240, 360 245, 440 250"
+        d="M 200 240 C 310 240, 400 248, 490 252"
         markerEnd="url(#arrowAmber)" />
-
       <path className="arrow-path indigo-path" opacity="0.7"
-        d="M 230 310 C 310 310, 360 305, 440 315"
+        d="M 200 320 C 310 320, 400 312, 490 318"
         markerEnd="url(#arrowIndigo)" />
 
+      {/* modules → output */}
       <path className="arrow-path inject" opacity="0.7"
-        d="M 660 185 C 740 185, 800 160, 870 150"
+        d="M 710 185 C 810 185, 900 162, 1000 150"
         markerEnd="url(#arrowTeal)" />
-
       <path className="arrow-path inject-amber" opacity="0.7"
-        d="M 660 250 C 740 250, 800 235, 870 230"
+        d="M 710 252 C 810 252, 900 244, 1000 240"
         markerEnd="url(#arrowAmber)" />
-
       <path className="arrow-path inject-indigo" opacity="0.7"
-        d="M 660 315 C 740 315, 800 305, 870 310"
+        d="M 710 318 C 810 318, 900 328, 1000 320"
         markerEnd="url(#arrowIndigo)" />
 
-      <circle className="arrow-dot" cx="232" cy="150" r="2.5" fill="oklch(0.65 0.20 195)" />
-      <circle className="arrow-dot" cx="232" cy="240" r="2.5" fill="oklch(0.72 0.18 58)" style={{animationDelay:'0.4s'}} />
-      <circle className="arrow-dot" cx="232" cy="310" r="2.5" fill="oklch(0.62 0.18 270)" style={{animationDelay:'0.8s'}} />
+      {/* origin dots — anchored inside source panel */}
+      <circle className="arrow-dot" cx="200" cy="150" r="2.5" fill="oklch(0.65 0.20 195)" />
+      <circle className="arrow-dot" cx="200" cy="240" r="2.5" fill="oklch(0.72 0.18 58)" style={{animationDelay:'0.4s'}} />
+      <circle className="arrow-dot" cx="200" cy="320" r="2.5" fill="oklch(0.62 0.18 270)" style={{animationDelay:'0.8s'}} />
     </svg>
   );
 }
@@ -278,7 +282,10 @@ export default function Home() {
         {/* THREE-COLUMN VISUAL */}
         <div className="hero-visual-wrap">
           <div className="hero-visual">
-            <div>
+            {/* SVG spans the full grid so arrows can reach both side panels */}
+            <ArrowsSVG />
+
+            <div style={{position:'relative', zIndex:2}}>
               <div style={{
                 fontFamily:'var(--mono)', fontSize:'10px', color:'var(--text3)',
                 letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:10,
@@ -287,8 +294,7 @@ export default function Home() {
               <SourceResume />
             </div>
 
-            <div className="modules-center" style={{position:'relative'}}>
-              <ArrowsSVG />
+            <div className="modules-center">
               <div style={{
                 fontFamily:'var(--mono)', fontSize:'10px', color:'var(--text3)',
                 letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:14,
@@ -298,7 +304,7 @@ export default function Home() {
               ))}
             </div>
 
-            <div>
+            <div style={{position:'relative', zIndex:2}}>
               <div style={{
                 fontFamily:'var(--mono)', fontSize:'10px', color:'var(--text3)',
                 letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:10,
