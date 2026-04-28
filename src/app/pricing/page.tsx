@@ -28,7 +28,7 @@ export default function Pricing() {
         body: JSON.stringify({ plan, interval }),
       })
       if (res.status === 401) {
-        window.location.href = '/signin?next=/pricing'
+        window.location.href = '/signin?next=/billing'
         return
       }
       const data = await res.json()

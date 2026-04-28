@@ -5,6 +5,14 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
+// Only allow relative paths starting with a single "/" — blocks open redirects
+// like "//evil.com" or "https://evil.com".
+function safeNext(raw: string | null): string {
+  if (!raw) return '/dashboard'
+  if (!raw.startsWith('/') || raw.startsWith('//')) return '/dashboard'
+  return raw
+}
+
 type CodeStatus = 'idle' | 'checking' | 'valid' | 'invalid'
 
 export default function SignIn() {
@@ -26,6 +34,15 @@ export default function SignIn() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const router = useRouter()
   const supabase = createClient()
+  const [next, setNext] = useState<string>('/dashboard')
+
+  // Read ?next= once on the client (avoids useSearchParams + Suspense churn)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const raw = new URLSearchParams(window.location.search).get('next')
+      setNext(safeNext(raw))
+    }
+  }, [])
 
   // Debounced code validation
   useEffect(() => {
@@ -63,7 +80,7 @@ export default function SignIn() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) setError(error.message)
-      else router.push('/dashboard')
+      else router.push(next)
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {
@@ -93,7 +110,7 @@ export default function SignIn() {
         password: signupPassword,
       })
       if (signInErr) throw signInErr
-      router.push('/dashboard')
+      router.push(next)
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -101,17 +118,22 @@ export default function SignIn() {
     }
   }
 
+  const oauthRedirectTo = () => {
+    const cb = `${window.location.origin}/auth/callback`
+    return next === '/dashboard' ? cb : `${cb}?next=${encodeURIComponent(next)}`
+  }
+
   const handleGoogle = async () => {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: oauthRedirectTo() },
     })
   }
 
   const handleLinkedIn = async () => {
     await supabase.auth.signInWithOAuth({
       provider: 'linkedin_oidc',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: oauthRedirectTo() },
     })
   }
 
