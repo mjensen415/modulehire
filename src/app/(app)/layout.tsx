@@ -1,4 +1,5 @@
 import '@/app/globals.css';
+import { redirect } from 'next/navigation';
 import AppSidebar from '@/components/layout/AppSidebar';
 import AppSidebarUser from '@/components/layout/AppSidebarUser';
 import { createClient } from '@/lib/supabase/server';
@@ -6,6 +7,10 @@ import { createClient } from '@/lib/supabase/server';
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect('/signin');
+  }
 
   let plan: string = 'free';
   let isAdmin: boolean = false;
