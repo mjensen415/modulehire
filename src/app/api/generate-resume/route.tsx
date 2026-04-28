@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
+import { canGenerate } from '@/lib/plan'
 import * as docx from 'docx'
 import { renderToBuffer, Document as PdfDoc, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
 import React from 'react'
@@ -516,6 +517,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } })
     }
 
+    // ── Plan gate: monthly generation limit ──────────────────────────────────
+    const now = new Date()
+    const month = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
+
+    const [usageRes, profileRes] = await Promise.all([
+      supabase
+        .from('resume_generation_counts')
+        .select('count, overage_credits')
+        .eq('user_id', user.id)
+        .eq('month', month)
+        .maybeSingle(),
+      supabase
+        .from('users')
+        .select('plan')
+        .eq('id', user.id)
+        .single(),
+    ])
+
+    const usageRow = usageRes.data as { count?: number; overage_credits?: number } | null
+    const profileRow = profileRes.data as { plan?: string } | null
+
+    const plan = (profileRow?.plan ?? 'free') as string
+    const count = usageRow?.count ?? 0
+    const overageCredits = usageRow?.overage_credits ?? 0
+
+    if (!canGenerate(plan, count, overageCredits)) {
+      return NextResponse.json(
+        { error: 'Generation limit reached.', code: 'LIMIT_REACHED', plan, count },
+        { status: 403 }
+      )
+    }
+
     const {
       module_ids,
       jd_id,
@@ -844,7 +877,8 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
     let coverLetterText: string | null = null
     let coverLetterUrl: string | null = null
 
-    if (cover_letter?.include) {
+    // Cover letter is a paid feature — silently skip for free plan
+    if (cover_letter?.include && plan !== 'free') {
       const toneDesc: Record<string, string> = {
         professional: 'Professional and concise — clear, direct, no fluff',
         warm: 'Warm and conversational — personable, human, enthusiastic',
@@ -879,6 +913,16 @@ Rules:
     }
 
     await supabase.from('usage_events').insert({ user_id: user.id, action: 'generate_resume' })
+
+    // Increment monthly resume count (atomic via RPC). Generation already succeeded —
+    // log on failure but don't fail the request.
+    const { error: incError } = await supabase.rpc('increment_resume_count', {
+      p_user_id: user.id,
+      p_month: month,
+    })
+    if (incError) {
+      console.error('[generate-resume] increment_resume_count failed:', incError)
+    }
 
     return NextResponse.json({
       resume_id: savedResume.id,
