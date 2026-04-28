@@ -1,25 +1,9 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { FREE_LIMIT, STARTER_LIMIT, moduleLimit, uploadLimit } from '@/lib/plan';
+import BillingActions from './BillingActions';
 
 type Plan = 'free' | 'starter' | 'pro';
-
-function IconCheck() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path d="M2.5 7l3.5 3.5 5.5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-
-function PlanFeature({ text }: { text: string }) {
-  return (
-    <div className="pricing-feature">
-      <span className="pricing-feature-icon"><IconCheck /></span>
-      {text}
-    </div>
-  );
-}
 
 function fmtLimit(n: number, unit: string) {
   return Number.isFinite(n) ? `${n} ${unit}` : `Unlimited ${unit}`;
@@ -29,6 +13,7 @@ const PLANS: Array<{
   key: Plan;
   name: string;
   price: string;
+  annualPrice: string;
   desc: string;
   features: string[];
   cta: string;
@@ -37,44 +22,56 @@ const PLANS: Array<{
     key: 'free',
     name: 'Free',
     price: '$0/mo',
-    desc: 'Get started with the basics.',
+    annualPrice: '',
+    desc: 'Try it out.',
     features: [
+      fmtLimit(uploadLimit('free'), 'resume upload'),
       fmtLimit(moduleLimit('free'), 'modules'),
-      `${FREE_LIMIT} resume generations/mo`,
-      fmtLimit(uploadLimit('free'), 'resume upload/mo'),
-      'Temporary file storage (24h)',
+      `${FREE_LIMIT} resumes/mo — $4 per additional`,
+      'DOCX + PDF (24-hour links)',
+      'Paste JD input',
     ],
     cta: 'Current plan',
   },
   {
     key: 'starter',
     name: 'Starter',
-    price: '$9/mo',
+    price: '$29/mo',
+    annualPrice: '$289/yr',
     desc: 'For active job seekers.',
     features: [
+      fmtLimit(uploadLimit('starter'), 'resume uploads'),
       fmtLimit(moduleLimit('starter'), 'modules'),
-      `${STARTER_LIMIT} resume generations/mo`,
-      fmtLimit(uploadLimit('starter'), 'resume uploads/mo'),
+      `${STARTER_LIMIT} resumes/mo`,
       'Permanent file storage',
+      'Cover letter generation',
+      'Save job descriptions',
+      '60-day generation history',
     ],
     cta: 'Upgrade to Starter',
   },
   {
     key: 'pro',
     name: 'Pro',
-    price: '$29/mo',
+    price: '$40/mo',
+    annualPrice: '$399/yr',
     desc: 'Unlimited everything.',
     features: [
-      'Unlimited modules',
-      'Unlimited resume generations',
       'Unlimited resume uploads',
+      'Unlimited modules',
+      'Unlimited resumes',
       'Permanent file storage',
+      'Cover letter generation',
+      'Save job descriptions',
+      'Full generation history',
+      'Faster AI generation',
+      'Early access to new features',
     ],
     cta: 'Upgrade to Pro',
   },
 ];
 
-export default async function PricingPage() {
+export default async function BillingPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/signin');
@@ -87,7 +84,6 @@ export default async function PricingPage() {
 
   const currentPlan = (profile?.plan ?? 'free') as Plan;
   const hasStripe = !!profile?.stripe_customer_id;
-  const returnUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('supabase.co', 'modulehire.com') ?? ''}/pricing`;
 
   return (
     <>
@@ -112,33 +108,32 @@ export default async function PricingPage() {
                 {isCurrent && <div className="pricing-badge">Current plan</div>}
                 <div className="pricing-card-name">{plan.name}</div>
                 <div className="pricing-card-price">{plan.price}</div>
+                {plan.annualPrice && (
+                  <div style={{ fontSize: 12, color: 'var(--teal)', marginBottom: 4 }}>
+                    or {plan.annualPrice} — save 2 months
+                  </div>
+                )}
                 <div className="pricing-card-desc">{plan.desc}</div>
                 <div className="pricing-features">
-                  {plan.features.map(f => <PlanFeature key={f} text={f} />)}
+                  {plan.features.map(f => (
+                    <div key={f} className="pricing-feature">
+                      <span className="pricing-feature-icon">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                          <path d="M2.5 7l3.5 3.5 5.5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </span>
+                      {f}
+                    </div>
+                  ))}
                 </div>
 
-                {isCurrent ? (
-                  hasStripe ? (
-                    <form action="/api/stripe/portal" method="POST">
-                      <input type="hidden" name="returnUrl" value={`/billing`} />
-                      <button type="submit" className="btn-ghost" style={{ width: '100%' }}>
-                        Manage billing
-                      </button>
-                    </form>
-                  ) : (
-                    <button className="btn-ghost" disabled style={{ width: '100%' }}>
-                      Current plan
-                    </button>
-                  )
-                ) : isDowngrade ? null : (
-                  <form action="/api/stripe/checkout" method="POST">
-                    <input type="hidden" name="plan" value={plan.key} />
-                    <input type="hidden" name="returnUrl" value={`/billing`} />
-                    <button type="submit" className="btn-primary" style={{ width: '100%' }}>
-                      {plan.cta}
-                    </button>
-                  </form>
-                )}
+                <BillingActions
+                  planKey={plan.key}
+                  cta={plan.cta}
+                  isCurrent={isCurrent}
+                  isDowngrade={isDowngrade}
+                  hasStripe={hasStripe}
+                />
               </div>
             );
           })}
@@ -154,12 +149,16 @@ export default async function PricingPage() {
               <div style={{ fontSize: 13, color: 'var(--text2)' }}>Each skill block extracted from your resume is one module. A typical resume produces 8–20 modules.</div>
             </div>
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>What happens when I hit my monthly limit?</div>
-              <div style={{ fontSize: 13, color: 'var(--text2)' }}>You'll see a message and an upgrade prompt. Existing modules and resumes are never deleted.</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>What happens when I hit my free limit?</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>You&apos;ll get a prompt to pay $4 for one more resume, or upgrade to a paid plan for unlimited. Your modules and history are never deleted.</div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>What&apos;s the difference between Starter and Pro?</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>Starter covers active job seekers — 3 uploads, 50 modules, 15 resumes/mo. Pro unlocks unlimited everything plus faster AI generation and early feature access.</div>
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Can I cancel anytime?</div>
-              <div style={{ fontSize: 13, color: 'var(--text2)' }}>Yes. Cancel from the billing portal and you'll stay on your paid plan until the period ends, then revert to Free.</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>Yes. Cancel from the billing portal and you&apos;ll stay on your paid plan until the period ends, then revert to Free.</div>
             </div>
           </div>
         </div>

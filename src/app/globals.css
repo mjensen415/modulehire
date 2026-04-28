@@ -1874,8 +1874,9 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
 
   /* PRICING CARDS */
   .pricing-section { padding: 20px 40px 100px; }
-  .pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 780px; margin: 0 auto; }
+  .pricing-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; max-width: 1060px; margin: 0 auto; }
   .price-card { background: var(--surface); border: 1px solid var(--border2); border-radius: 14px; padding: 36px 32px; position: relative; }
+  .price-card.starter { border-color: oklch(0.65 0.20 195 / 0.35); }
   .price-card.pro { border-color: var(--teal-glow); box-shadow: 0 0 0 1px var(--teal-glow), 0 24px 64px oklch(0.65 0.20 195 / 0.15); }
   .popular-badge { position: absolute; top: -13px; left: 50%; transform: translateX(-50%); font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: var(--teal); color: #fff; padding: 4px 12px; border-radius: 20px; white-space: nowrap; }
   .plan-name { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text2); margin-bottom: 16px; }
@@ -1915,7 +1916,7 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
     nav { padding: 0 20px; }
     .nav-links { display: none; }
     .page-hero, .pricing-section, .faq-section { padding-left: 20px; padding-right: 20px; }
-    .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
+    .pricing-grid { grid-template-columns: 1fr !important; max-width: 420px; }
     footer { flex-direction: column; gap: 16px; text-align: center; }
     .footer-links { flex-wrap: wrap; justify-content: center; }
   }

@@ -27,12 +27,13 @@ export default function Pricing() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan, interval }),
       })
-      const data = await res.json().catch(() => ({}))
-      if (res.ok && data.url) {
-        window.location.href = data.url as string
+      if (res.status === 401) {
+        window.location.href = '/signin?next=/pricing'
         return
       }
-      alert(data.error ?? 'Could not start checkout.')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Something went wrong')
+      if (data.url) window.location.href = data.url
     } catch (e) {
       alert((e as Error).message ?? 'Could not start checkout.')
     } finally {
