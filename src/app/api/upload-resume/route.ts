@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
+import { uploadLimit } from '@/lib/plan'
 
 export const maxDuration = 60
 
@@ -53,6 +54,27 @@ export async function POST(req: Request) {
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Plan upload-limit gate (skipped for pro)
+    const { data: profileRow } = await supabase
+      .from('users')
+      .select('plan')
+      .eq('id', user.id)
+      .single()
+    const plan = (profileRow?.plan ?? 'free') as string
+    if (plan !== 'pro') {
+      const { count: existingCount } = await supabase
+        .from('resumes')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+      const cap = uploadLimit(plan)
+      if ((existingCount ?? 0) >= cap) {
+        return NextResponse.json(
+          { error: 'Upload limit reached for your plan.', code: 'UPLOAD_LIMIT_REACHED', limit: cap },
+          { status: 403 }
+        )
+      }
     }
 
     const formData = await req.formData()
