@@ -816,83 +816,100 @@ export default function GeneratePage() {
 
       {/* ── CONFIRMING ────────────────────────────────────────────────────── */}
       {step === 'confirming' && (
-        <div className="dash-content" style={{ maxWidth: 680, margin: '0 auto', width: '100%', padding: '40px 24px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
+          <div style={{ maxWidth: 680, margin: '0 auto' }}>
 
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
-              We found these themes in the job description
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-              {jdData?.extracted_company && <strong style={{ color: 'var(--text2)' }}>{jdData.extracted_company}</strong>}
-              {jdData?.extracted_role_type && <span> · {jdData.extracted_role_type}</span>}
-            </div>
-          </div>
-
-          {errorMessage && (
-            <div style={{ background: 'var(--rose-dim, oklch(0.4 0.18 10 / 0.15))', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)', marginBottom: 16 }}>
-              {errorMessage}
-            </div>
-          )}
-
-          {/* Themes — teal pills */}
-          <div style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>Themes</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {confirmedThemes.length === 0 && (
-                <span style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>No themes detected.</span>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16 }}>
+              <div>
+                <div className="page-title" style={{ marginBottom: 4 }}>Themes &amp; keywords</div>
+                <div style={{ fontSize: 13, color: 'var(--text2)' }}>
+                  {jdData?.extracted_company && <strong style={{ color: 'var(--text)', fontWeight: 500 }}>{jdData.extracted_company}</strong>}
+                  {jdData?.extracted_role_type && <span style={{ color: 'var(--text3)' }}> · {jdData.extracted_role_type}</span>}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 5, lineHeight: 1.5 }}>
+                  Remove anything that doesn&apos;t apply — we&apos;ll use these to match and tailor your modules.
+                </div>
+              </div>
+              {(confirmedThemes.length > 0 || confirmedPhrases.length > 0) && (
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--teal)', lineHeight: 1.1 }}>
+                    {confirmedThemes.length + confirmedPhrases.length}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>keywords</div>
+                </div>
               )}
-              {confirmedThemes.map(t => (
-                <span key={t} style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 999, padding: '3px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--teal)' }}>
-                  {t}
-                  <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--teal)', fontSize: 14, lineHeight: 1, padding: 0, opacity: 0.7 }} onClick={() => setConfirmedThemes(ts => ts.filter(x => x !== t))} aria-label={`Remove ${t}`}>×</button>
-                </span>
-              ))}
             </div>
-          </div>
 
-          {/* Phrases — gray pills */}
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>Key phrases</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {confirmedPhrases.length === 0 && (
-                <span style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>No phrases detected.</span>
-              )}
-              {confirmedPhrases.map(p => {
-                const display = p.length > 40 ? p.slice(0, 40) + '…' : p
-                return (
-                  <span key={p} title={p.length > 40 ? p : undefined} style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 999, padding: '3px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--text2)' }}>
-                    {display}
-                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 14, lineHeight: 1, padding: 0 }} onClick={() => setConfirmedPhrases(ps => ps.filter(x => x !== p))} aria-label={`Remove ${p}`}>×</button>
+            {errorMessage && (
+              <div style={{ background: 'oklch(0.4 0.18 10 / 0.12)', border: '1px solid var(--rose)', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: 'var(--rose)', marginBottom: 16 }}>
+                {errorMessage}
+              </div>
+            )}
+
+            {/* Themes card */}
+            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12, padding: '16px 20px', marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Themes</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{confirmedThemes.length} theme{confirmedThemes.length !== 1 ? 's' : ''}</div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {confirmedThemes.length === 0 && (
+                  <span style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>No themes detected.</span>
+                )}
+                {confirmedThemes.map(t => (
+                  <span key={t} style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 999, padding: '4px 11px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--teal)' }}>
+                    {t}
+                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--teal)', fontSize: 14, lineHeight: 1, padding: 0, opacity: 0.7 }} onClick={() => setConfirmedThemes(ts => ts.filter(x => x !== t))} aria-label={`Remove ${t}`}>×</button>
                   </span>
-                )
-              })}
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Add keyword */}
-          <div style={{ marginBottom: 28, display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input
-              className="mod-edit-input"
-              style={{ flex: 1, fontSize: 13 }}
-              placeholder="+ Add keyword"
-              value={phraseInput}
-              onChange={e => setPhraseInput(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
+            {/* Key phrases card */}
+            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12, padding: '16px 20px', marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Key phrases</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{confirmedPhrases.length} phrase{confirmedPhrases.length !== 1 ? 's' : ''}</div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {confirmedPhrases.length === 0 && (
+                  <span style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>No phrases detected.</span>
+                )}
+                {confirmedPhrases.map(p => (
+                  <span key={p} style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 8, padding: '4px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--text2)', lineHeight: 1.4 }}>
+                    {p}
+                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 14, lineHeight: 1, padding: 0, flexShrink: 0 }} onClick={() => setConfirmedPhrases(ps => ps.filter(x => x !== p))} aria-label={`Remove ${p}`}>×</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Add keyword */}
+            <div style={{ marginBottom: 8 }}>
+              <input
+                className="mod-edit-input"
+                style={{ width: '100%', fontSize: 13 }}
+                placeholder="+ Add a keyword or phrase…"
+                value={phraseInput}
+                onChange={e => setPhraseInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    const v = phraseInput.trim().replace(/,+$/, '')
+                    if (v && !confirmedPhrases.includes(v)) setConfirmedPhrases(ps => [...ps, v])
+                    setPhraseInput('')
+                  }
+                }}
+                onBlur={() => {
                   const v = phraseInput.trim().replace(/,+$/, '')
                   if (v && !confirmedPhrases.includes(v)) setConfirmedPhrases(ps => [...ps, v])
                   setPhraseInput('')
-                }
-              }}
-              onBlur={() => {
-                const v = phraseInput.trim().replace(/,+$/, '')
-                if (v && !confirmedPhrases.includes(v)) setConfirmedPhrases(ps => [...ps, v])
-                setPhraseInput('')
-              }}
-            />
-          </div>
+                }}
+              />
+            </div>
 
+          </div>
         </div>
       )}
 
