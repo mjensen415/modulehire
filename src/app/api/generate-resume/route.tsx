@@ -129,8 +129,6 @@ function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeF
 
 function buildDocx(contact: Contact, data: StructuredData, format: ResumeFormat, contactLine: string): docx.Document {
   const twip = (inches: number) => Math.round(inches * 1440)
-  const noBorder = { style: docx.BorderStyle.NONE, size: 0, color: 'FFFFFF' } as const
-  const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideH: noBorder, insideV: noBorder }
   const bulletRef = 'body-bullets'
   const bulletConfig = [{ reference: bulletRef, levels: [{ level: 0, format: docx.LevelFormat.BULLET, text: '\u2022', alignment: docx.AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 220 } } } }] }]
   const bul = (text: string, size: number, font: string) => new docx.Paragraph({
@@ -184,50 +182,29 @@ function buildDocx(contact: Contact, data: StructuredData, format: ResumeFormat,
   }
 
   // ── Corporate ─────────────────────────────────────────────────────────────────
+  // ATS-safe: paragraph shading replaces table-based headers (tables break Workday/Taleo parsers)
   if (format === 'corporate') {
     const font = 'Calibri'
-    const CONTENT_WIDTH = 9360
-    const headerTable = () => new docx.Table({
-      width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
-      columnWidths: [CONTENT_WIDTH],
-      borders: noBorders,
-      rows: [new docx.TableRow({ children: [new docx.TableCell({
-        width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
-        shading: { fill: '000000', type: docx.ShadingType.CLEAR },
-        margins: { top: 320, bottom: 260, left: 560, right: 560 },
-        borders: noBorders,
-        children: [
-          new docx.Paragraph({ alignment: docx.AlignmentType.CENTER, children: [new docx.TextRun({ text: contact.name.toUpperCase(), size: 52, bold: true, color: 'FFFFFF', font })] }),
-        ],
-      })]})],
+    const headerPara = () => new docx.Paragraph({
+      alignment: docx.AlignmentType.CENTER,
+      shading: { type: docx.ShadingType.CLEAR, fill: '000000', color: '000000' },
+      spacing: { before: 200, after: 200 },
+      children: [new docx.TextRun({ text: contact.name.toUpperCase(), size: 52, bold: true, color: 'FFFFFF', font })],
     })
-    const contactBar = () => new docx.Table({
-      width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
-      columnWidths: [CONTENT_WIDTH],
-      borders: noBorders,
-      rows: [new docx.TableRow({ children: [new docx.TableCell({
-        width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
-        shading: { fill: 'F6F6F6', type: docx.ShadingType.CLEAR },
-        margins: { top: 100, bottom: 100, left: 360, right: 360 },
-        borders: noBorders,
-        children: [new docx.Paragraph({ alignment: docx.AlignmentType.CENTER, children: [new docx.TextRun({ text: [contact.phone, contact.location, contact.linkedin, contact.email].filter(Boolean).join('  |  '), size: 18, color: '555555', font })] })],
-      })]})],
+    const contactPara = () => new docx.Paragraph({
+      alignment: docx.AlignmentType.CENTER,
+      shading: { type: docx.ShadingType.CLEAR, fill: 'F0F0F0', color: 'F0F0F0' },
+      spacing: { before: 0, after: 0 },
+      children: [new docx.TextRun({ text: [contact.phone, contact.location, contact.linkedin, contact.email].filter(Boolean).join('  |  '), size: 18, color: '555555', font })],
     })
-    const sectionHead = (text: string) => new docx.Table({
-      width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
-      columnWidths: [CONTENT_WIDTH],
-      borders: noBorders,
-      rows: [new docx.TableRow({ children: [new docx.TableCell({
-        width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
-        shading: { fill: '222222', type: docx.ShadingType.CLEAR },
-        margins: { top: 80, bottom: 80, left: 160, right: 160 },
-        borders: noBorders,
-        children: [new docx.Paragraph({ children: [new docx.TextRun({ text: text.toUpperCase(), bold: true, size: 20, font, color: 'FFFFFF', allCaps: true })] })],
-      })]})],
+    const sectionHead = (text: string) => new docx.Paragraph({
+      shading: { type: docx.ShadingType.CLEAR, fill: '222222', color: '222222' },
+      spacing: { before: 200, after: 80 },
+      children: [new docx.TextRun({ text: text.toUpperCase(), bold: true, size: 20, font, color: 'FFFFFF', allCaps: true })],
     })
     const spacer = (n = 120) => new docx.Paragraph({ spacing: { before: 0, after: n } })
     const children = [
-      headerTable(), spacer(40), contactBar(), spacer(200),
+      headerPara(), contactPara(), spacer(200),
       ...(data.summary ? [sectionHead('Career Objective'), spacer(80), new docx.Paragraph({ children: [new docx.TextRun({ text: data.summary, size: 21, font })], spacing: { after: 160, line: 276 } })] : []),
       ...(data.experience?.length ? [
         sectionHead('Professional Experience'), spacer(80),
@@ -293,80 +270,46 @@ function structuredToSections(data: StructuredData): Section[] {
 
 function buildDocxCombination(contact: Contact, data: CombinationData): docx.Document {
   const twip = (inches: number) => Math.round(inches * 1440)
-  const CONTENT_WIDTH = 9360
   const HEADER_FILL  = 'C49098'
   const SECTION_FILL = 'EDD5D7'
   const CONTACT_FILL = 'F2F2F2'
-  const noBorder = { style: docx.BorderStyle.NONE, size: 0, color: 'FFFFFF' } as const
-  const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideH: noBorder, insideV: noBorder }
 
-  const headerTable = () => new docx.Table({
-    width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
-    columnWidths: [CONTENT_WIDTH],
-    borders: noBorders,
-    rows: [new docx.TableRow({ children: [
-      new docx.TableCell({
-        width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
-        shading: { fill: HEADER_FILL, type: docx.ShadingType.CLEAR },
-        margins: { top: 320, bottom: 280, left: 560, right: 560 },
-        borders: noBorders,
-        children: [
-          new docx.Paragraph({
-            alignment: docx.AlignmentType.CENTER,
-            spacing: { before: 0, after: 100 },
-            children: [new docx.TextRun({ text: contact.name, size: 52, bold: true, color: 'FFFFFF', font: 'Calibri' })],
-          }),
-          new docx.Paragraph({
-            alignment: docx.AlignmentType.CENTER,
-            spacing: { before: 0, after: data.summary ? 200 : 0 },
-            children: [new docx.TextRun({ text: data.job_title, size: 22, color: 'F0D8DA', font: 'Calibri' })],
-          }),
-          ...(data.summary ? [new docx.Paragraph({
-            alignment: docx.AlignmentType.CENTER,
-            spacing: { before: 0, after: 0 },
-            children: [new docx.TextRun({ text: data.summary, size: 19, color: 'F5E6E8', font: 'Calibri', italics: true })],
-          })] : []),
-        ],
-      })
-    ]})]
+  // ATS-safe: paragraph shading replaces table-based headers (tables break Workday/Taleo parsers)
+  const headerParas = (): docx.Paragraph[] => [
+    new docx.Paragraph({
+      alignment: docx.AlignmentType.CENTER,
+      shading: { type: docx.ShadingType.CLEAR, fill: HEADER_FILL, color: HEADER_FILL },
+      spacing: { before: 240, after: 80 },
+      children: [new docx.TextRun({ text: contact.name, size: 52, bold: true, color: 'FFFFFF', font: 'Calibri' })],
+    }),
+    new docx.Paragraph({
+      alignment: docx.AlignmentType.CENTER,
+      shading: { type: docx.ShadingType.CLEAR, fill: HEADER_FILL, color: HEADER_FILL },
+      spacing: { before: 0, after: data.summary ? 0 : 240 },
+      children: [new docx.TextRun({ text: data.job_title, size: 22, color: 'F0D8DA', font: 'Calibri' })],
+    }),
+    ...(data.summary ? [new docx.Paragraph({
+      alignment: docx.AlignmentType.CENTER,
+      shading: { type: docx.ShadingType.CLEAR, fill: HEADER_FILL, color: HEADER_FILL },
+      spacing: { before: 80, after: 240 },
+      children: [new docx.TextRun({ text: data.summary, size: 19, color: 'F5E6E8', font: 'Calibri', italics: true })],
+    })] : []),
+  ]
+
+  const contactPara = () => new docx.Paragraph({
+    alignment: docx.AlignmentType.CENTER,
+    shading: { type: docx.ShadingType.CLEAR, fill: CONTACT_FILL, color: CONTACT_FILL },
+    spacing: { before: 0, after: 0 },
+    children: [new docx.TextRun({
+      text: [contact.phone, contact.location, contact.linkedin, contact.email].filter(Boolean).join('  |  '),
+      size: 18, color: '555555', font: 'Calibri',
+    })],
   })
 
-  const contactBar = () => new docx.Table({
-    width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
-    columnWidths: [CONTENT_WIDTH],
-    borders: noBorders,
-    rows: [new docx.TableRow({ children: [
-      new docx.TableCell({
-        width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
-        shading: { fill: CONTACT_FILL, type: docx.ShadingType.CLEAR },
-        margins: { top: 120, bottom: 120, left: 360, right: 360 },
-        borders: noBorders,
-        children: [new docx.Paragraph({
-          alignment: docx.AlignmentType.CENTER,
-          children: [new docx.TextRun({
-            text: [contact.phone, contact.location, contact.linkedin, contact.email].filter(Boolean).join('  |  '),
-            size: 18, color: '555555', font: 'Calibri',
-          })],
-        })]
-      })
-    ]})]
-  })
-
-  const sectionHeader = (label: string) => new docx.Table({
-    width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
-    columnWidths: [CONTENT_WIDTH],
-    borders: noBorders,
-    rows: [new docx.TableRow({ children: [
-      new docx.TableCell({
-        width: { size: CONTENT_WIDTH, type: docx.WidthType.DXA },
-        shading: { fill: SECTION_FILL, type: docx.ShadingType.CLEAR },
-        margins: { top: 100, bottom: 100, left: 160, right: 160 },
-        borders: noBorders,
-        children: [new docx.Paragraph({
-          children: [new docx.TextRun({ text: label, bold: true, size: 22, font: 'Calibri', color: '3D2B2D' })],
-        })]
-      })
-    ]})]
+  const sectionHeader = (label: string) => new docx.Paragraph({
+    shading: { type: docx.ShadingType.CLEAR, fill: SECTION_FILL, color: SECTION_FILL },
+    spacing: { before: 200, after: 80 },
+    children: [new docx.TextRun({ text: label, bold: true, size: 22, font: 'Calibri', color: '3D2B2D' })],
   })
 
   const bullet = (text: string) => new docx.Paragraph({
@@ -393,9 +336,8 @@ function buildDocxCombination(contact: Contact, data: CombinationData): docx.Doc
         }
       },
       children: [
-        headerTable(),
-        spacer(80),
-        contactBar(),
+        ...headerParas(),
+        contactPara(),
         spacer(200),
 
         sectionHeader('RELEVANT SKILLS'),
