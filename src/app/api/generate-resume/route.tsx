@@ -1007,40 +1007,44 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
     const { data: pdfSigned } = await supabase.storage.from('temp').createSignedUrl(pdfPath, 3600)
 
     // ── Keyword matching analysis ─────────────────────────────────────────────
-    // Use word-level fuzzy matching so multi-word JD phrases (e.g. "campaign planning
-    // and launch management") are counted as matched when their key words appear in the
-    // resume even if the exact phrasing changed. Exact match = 1.0 credit, partial
-    // (≥60% of meaningful words found) = 0.7 credit, miss = 0.
-    const KW_STOPWORDS = new Set(['and','or','the','a','an','to','of','in','for','on','with','at','by','from','as','into','that','this','be','is','are','was','were','will','can','may','has','have','had','not','but','it','its','who','how','what','when','where','which'])
-    const kwMatchType = (keyword: string, text: string): 'exact' | 'partial' | 'miss' => {
-      const kw = keyword.toLowerCase().trim()
-      if (text.includes(kw)) return 'exact'
-      const words = kw.split(/\W+/).filter(w => w.length > 3 && !KW_STOPWORDS.has(w))
-      if (words.length === 0) return 'miss'
-      const hits = words.filter(w => text.includes(w)).length
-      return hits / words.length >= 0.6 ? 'partial' : 'miss'
-    }
+    // Strip HTML tags first so angle brackets don't interfere with text matching.
+    // Then use word-level fuzzy matching: a keyword is "matched" if ≥50% of its
+    // meaningful words (len > 2, not stopwords) appear anywhere in the resume text.
+    // This handles paraphrasing — the AI rarely echoes JD phrases verbatim but
+    // will use the same key words.
+    const KW_STOPWORDS = new Set(['and','or','the','a','an','to','of','in','for','on','with','at','by','from','as','into','that','this','be','is','are','was','were','will','can','may','has','have','had','not','but','it','its','who','how','what','when','where','which','you','your','we','our','their','they','them','these','those'])
+    const cleanResumeText = resumeHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase()
 
     // Score against the confirmed keyword lists (what the user reviewed), not raw JD fields
     const jdKeywords = [...themesToUse, ...phrasesToUse]
       .map((k: string) => k.toLowerCase().trim())
-      .filter((k: string, i: number, arr: string[]) => k.length > 2 && arr.indexOf(k) === i)
-    const resumeText = resumeHtml.toLowerCase()
+      .filter((k: string, i: number, arr: string[]) => k.length > 1 && arr.indexOf(k) === i)
     const matchedKeywords: string[] = []
     const missingKeywords: string[] = []
-    let kwCredits = 0
     for (const kw of jdKeywords) {
-      const result = kwMatchType(kw, resumeText)
-      if (result === 'exact') { matchedKeywords.push(kw); kwCredits += 1.0 }
-      else if (result === 'partial') { matchedKeywords.push(kw); kwCredits += 0.7 }
+      // 1) Exact phrase match (most reliable)
+      if (cleanResumeText.includes(kw)) {
+        matchedKeywords.push(kw)
+        continue
+      }
+      // 2) Word-level fuzzy: extract meaningful words (len > 2, not stopwords)
+      const kwWords = kw.split(/\W+/).filter(w => w.length > 2 && !KW_STOPWORDS.has(w))
+      if (kwWords.length === 0) {
+        // Very short keyword — do whole-word check
+        const re = new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`)
+        if (re.test(cleanResumeText)) matchedKeywords.push(kw)
+        else missingKeywords.push(kw)
+        continue
+      }
+      const hitCount = kwWords.filter(w => cleanResumeText.includes(w)).length
+      if (hitCount / kwWords.length >= 0.5) matchedKeywords.push(kw)
       else missingKeywords.push(kw)
     }
 
     // ── ATS score (composite 0–100) ───────────────────────────────────────────
-    // 60% keyword coverage (weighted credits) · 20% contact completeness
-    // 10% module count · 10% has summary
+    // 60% keyword coverage · 20% contact completeness · 10% module count · 10% summary
     const kwScore = jdKeywords.length > 0
-      ? Math.round((kwCredits / jdKeywords.length) * 100)
+      ? Math.round((matchedKeywords.length / jdKeywords.length) * 100)
       : 75 // no keywords to check — give benefit of the doubt
     const contactFields = [contact.name, contact.email, contact.phone, contact.linkedin, contact.location]
     const contactScore = Math.round((contactFields.filter(Boolean).length / 5) * 100)

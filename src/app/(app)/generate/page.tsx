@@ -1642,11 +1642,12 @@ export default function GeneratePage() {
 
       {/* ── DONE ──────────────────────────────────────────────────────────── */}
       {step === 'done' && generatedUrls && (() => {
-        const matchedKw = keywords.filter(k => k.found)
-        const missingKw = keywords.filter(k => !k.found)
+        // Use server-returned matched/missing arrays (fuzzy word-level matching)
+        const matchedKw = matchedKeywords
+        const missingKw = missingKeywords
+        const totalKw = matchedKw.length + missingKw.length
         const VISIBLE_KW = 5
-        // Use server-computed atsScore when available, fall back to keyword ratio
-        const displayScore = atsScore ?? (keywords.length > 0 ? Math.round((matchedKw.length / keywords.length) * 100) : 0)
+        const displayScore = atsScore ?? (totalKw > 0 ? Math.round((matchedKw.length / totalKw) * 100) : 0)
 
         return (
           <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
@@ -1705,15 +1706,15 @@ export default function GeneratePage() {
               <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
 
                 {/* ATS Score gauge card */}
-                {(atsScore != null || keywords.length > 0) && (
+                {(atsScore != null || totalKw > 0) && (
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10, padding: '20px 20px 14px', textAlign: 'center' }}>
                     <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
                       <ScoreGauge score={displayScore} size="md" />
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600, marginBottom: 2 }}>ATS Score</div>
-                    {keywords.length > 0 && (
+                    {totalKw > 0 && (
                       <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                        {matchedKw.length}/{keywords.length} keywords · {
+                        {matchedKw.length}/{totalKw} keywords · {
                           [contact.name, contact.email, contact.phone, contact.linkedin, contact.location].filter(Boolean).length
                         }/5 contact fields
                       </div>
@@ -1726,8 +1727,8 @@ export default function GeneratePage() {
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10, padding: '16px 18px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>Ranking well for</div>
                     {matchedKw.slice(0, showAllKeywords ? undefined : VISIBLE_KW).map(k => (
-                      <div key={k.phrase} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border2)' }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{k.phrase}</span>
+                      <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border2)' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{k}</span>
                         <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                           <circle cx="9" cy="9" r="8" fill="var(--teal)" opacity="0.15"/>
                           <circle cx="9" cy="9" r="8" stroke="var(--teal)" strokeWidth="1.5"/>
@@ -1749,8 +1750,8 @@ export default function GeneratePage() {
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>Consider adding</div>
                     <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10, lineHeight: 1.5 }}>These JD keywords weren&apos;t found in your resume:</div>
                     {missingKw.slice(0, showAllKeywords ? undefined : VISIBLE_KW).map(k => (
-                      <div key={k.phrase} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border2)' }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)' }}>{k.phrase}</span>
+                      <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border2)' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)' }}>{k}</span>
                         <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                           <circle cx="9" cy="9" r="8" stroke="var(--border2)" strokeWidth="1.5" fill="var(--bg3)"/>
                         </svg>
