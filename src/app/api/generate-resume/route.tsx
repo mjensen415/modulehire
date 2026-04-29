@@ -1007,21 +1007,40 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
     const { data: pdfSigned } = await supabase.storage.from('temp').createSignedUrl(pdfPath, 3600)
 
     // ── Keyword matching analysis ─────────────────────────────────────────────
-    const jdKeywords = [...(jd.extracted_phrases || []), ...(jd.extracted_themes || [])]
+    // Use word-level fuzzy matching so multi-word JD phrases (e.g. "campaign planning
+    // and launch management") are counted as matched when their key words appear in the
+    // resume even if the exact phrasing changed. Exact match = 1.0 credit, partial
+    // (≥60% of meaningful words found) = 0.7 credit, miss = 0.
+    const KW_STOPWORDS = new Set(['and','or','the','a','an','to','of','in','for','on','with','at','by','from','as','into','that','this','be','is','are','was','were','will','can','may','has','have','had','not','but','it','its','who','how','what','when','where','which'])
+    const kwMatchType = (keyword: string, text: string): 'exact' | 'partial' | 'miss' => {
+      const kw = keyword.toLowerCase().trim()
+      if (text.includes(kw)) return 'exact'
+      const words = kw.split(/\W+/).filter(w => w.length > 3 && !KW_STOPWORDS.has(w))
+      if (words.length === 0) return 'miss'
+      const hits = words.filter(w => text.includes(w)).length
+      return hits / words.length >= 0.6 ? 'partial' : 'miss'
+    }
+
+    // Score against the confirmed keyword lists (what the user reviewed), not raw JD fields
+    const jdKeywords = [...themesToUse, ...phrasesToUse]
       .map((k: string) => k.toLowerCase().trim())
       .filter((k: string, i: number, arr: string[]) => k.length > 2 && arr.indexOf(k) === i)
     const resumeText = resumeHtml.toLowerCase()
     const matchedKeywords: string[] = []
     const missingKeywords: string[] = []
+    let kwCredits = 0
     for (const kw of jdKeywords) {
-      if (resumeText.includes(kw)) matchedKeywords.push(kw)
+      const result = kwMatchType(kw, resumeText)
+      if (result === 'exact') { matchedKeywords.push(kw); kwCredits += 1.0 }
+      else if (result === 'partial') { matchedKeywords.push(kw); kwCredits += 0.7 }
       else missingKeywords.push(kw)
     }
 
     // ── ATS score (composite 0–100) ───────────────────────────────────────────
-    // 60% keyword match · 20% contact completeness · 10% module count · 10% has summary
+    // 60% keyword coverage (weighted credits) · 20% contact completeness
+    // 10% module count · 10% has summary
     const kwScore = jdKeywords.length > 0
-      ? Math.round((matchedKeywords.length / jdKeywords.length) * 100)
+      ? Math.round((kwCredits / jdKeywords.length) * 100)
       : 75 // no keywords to check — give benefit of the doubt
     const contactFields = [contact.name, contact.email, contact.phone, contact.linkedin, contact.location]
     const contactScore = Math.round((contactFields.filter(Boolean).length / 5) * 100)
