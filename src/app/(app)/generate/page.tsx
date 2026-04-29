@@ -847,40 +847,46 @@ export default function GeneratePage() {
               </div>
             )}
 
-            {/* Themes card */}
-            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12, padding: '16px 20px', marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            {/* Themes — one card row per theme */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Themes</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{confirmedThemes.length} theme{confirmedThemes.length !== 1 ? 's' : ''}</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{confirmedThemes.length} identified</div>
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {confirmedThemes.length === 0 && (
-                  <span style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>No themes detected.</span>
-                )}
+              {confirmedThemes.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', padding: '12px 0' }}>No themes detected.</div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {confirmedThemes.map(t => (
-                  <span key={t} style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 999, padding: '4px 11px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--teal)' }}>
-                    {t}
-                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--teal)', fontSize: 14, lineHeight: 1, padding: 0, opacity: 0.7 }} onClick={() => setConfirmedThemes(ts => ts.filter(x => x !== t))} aria-label={`Remove ${t}`}>×</button>
-                  </span>
+                  <div key={t} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '10px 14px', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 999, padding: '2px 8px', fontSize: 11, color: 'var(--teal)', fontWeight: 600, flexShrink: 0 }}>theme</span>
+                      <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: 500 }}>{t}</span>
+                    </div>
+                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 16, lineHeight: 1, padding: '0 2px', flexShrink: 0, opacity: 0.6 }} onClick={() => setConfirmedThemes(ts => ts.filter(x => x !== t))} aria-label={`Remove ${t}`}>×</button>
+                  </div>
                 ))}
               </div>
             </div>
 
-            {/* Key phrases card */}
-            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12, padding: '16px 20px', marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            {/* Key phrases — one card row per phrase */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Key phrases</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{confirmedPhrases.length} phrase{confirmedPhrases.length !== 1 ? 's' : ''}</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{confirmedPhrases.length} identified</div>
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {confirmedPhrases.length === 0 && (
-                  <span style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>No phrases detected.</span>
-                )}
+              {confirmedPhrases.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', padding: '12px 0' }}>No phrases detected.</div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {confirmedPhrases.map(p => (
-                  <span key={p} style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 8, padding: '4px 10px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--text2)', lineHeight: 1.4 }}>
-                    {p}
-                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 14, lineHeight: 1, padding: 0, flexShrink: 0 }} onClick={() => setConfirmedPhrases(ps => ps.filter(x => x !== p))} aria-label={`Remove ${p}`}>×</button>
-                  </span>
+                  <div key={p} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '10px 14px', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 999, padding: '2px 8px', fontSize: 11, color: 'var(--text3)', fontWeight: 600, flexShrink: 0 }}>phrase</span>
+                      <span style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.4 }}>{p}</span>
+                    </div>
+                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 16, lineHeight: 1, padding: '0 2px', flexShrink: 0, opacity: 0.6 }} onClick={() => setConfirmedPhrases(ps => ps.filter(x => x !== p))} aria-label={`Remove ${p}`}>×</button>
+                  </div>
                 ))}
               </div>
             </div>
