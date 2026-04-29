@@ -1023,15 +1023,30 @@ export default function GeneratePage() {
 
       {/* ── ALIGNING ──────────────────────────────────────────────────────── */}
       {step === 'aligning' && (() => {
-        const acceptedCount = alignmentSuggestions.filter(s => alignmentStates[s.theme] === 'accepted').length
-        const totalCount = alignmentSuggestions.length
-
         const AMBER = 'oklch(0.75 0.16 60)'
-        const AMBER_DIM = 'oklch(0.4 0.13 60 / 0.2)'
+        const AMBER_DIM = 'oklch(0.4 0.13 60 / 0.18)'
+        const AMBER_BORDER = 'oklch(0.65 0.14 60 / 0.5)'
+
+        const acceptedCount = alignmentSuggestions.filter(s => alignmentStates[s.theme] === 'accepted').length
+        const totalThemes = alignmentMatched.length + alignmentSuggestions.length
+        const coveredCount = alignmentMatched.length + acceptedCount
+        const undecidedGaps = alignmentSuggestions.filter(s => !alignmentStates[s.theme]).length
+
+        const highlightTheme = (text: string, theme: string) => {
+          if (!theme) return text
+          const escaped = theme.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          const re = new RegExp(`(${escaped})`, 'gi')
+          const parts = text.split(re)
+          return parts.map((part, i) =>
+            re.test(part)
+              ? <mark key={i} style={{ background: 'var(--teal-glow)', color: 'var(--teal)', padding: '0 2px', fontWeight: 600 }}>{part}</mark>
+              : <span key={i}>{part}</span>
+          )
+        }
 
         return (
           <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
-            <div style={{ maxWidth: 760, margin: '0 auto' }}>
+            <div style={{ maxWidth: 680, margin: '0 auto' }}>
 
               {/* Loading */}
               {alignmentLoading && (
@@ -1041,267 +1056,189 @@ export default function GeneratePage() {
                 </div>
               )}
 
-              {/* Loaded — header */}
               {!alignmentLoading && (
                 <>
-                  <div className="page-title" style={{ marginBottom: 6 }}>Theme alignment</div>
-                  <p className="page-sub" style={{ marginBottom: 20 }}>
-                    Review each gap below. Accept a rewrite to use the augmented text in this resume, or skip to keep your original.
-                  </p>
-                </>
-              )}
-
-              {/* Error state */}
-              {!alignmentLoading && alignmentError && (
-                <div style={{ background: 'oklch(0.4 0.18 10 / 0.12)', border: '1px solid var(--rose)', borderRadius: 10, padding: '20px 22px' }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--rose)', marginBottom: 6 }}>
-                    Theme analysis didn&apos;t complete
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.55 }}>
-                    {alignmentError}
-                  </div>
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <button
-                      className="btn-ghost"
-                      style={{ fontSize: 12 }}
-                      onClick={() => { setAlignmentError(null); handleAlign() }}
-                    >
-                      ↺ Retry
-                    </button>
-                    <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('configuring')}>
-                      Skip and continue →
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Zero gaps — truly all covered */}
-              {!alignmentLoading && !alignmentError && alignmentSuggestions.length === 0 && alignmentMatched.length > 0 && (
-                <div style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 10, padding: '20px 22px' }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--teal)', marginBottom: 8 }}>
-                    ✓ All JD themes are already covered by your selected modules.
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
-                    {alignmentMatched.map(t => (
-                      <span key={t} style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', color: 'var(--teal)', borderRadius: 999, padding: '3px 10px', fontSize: 12 }}>
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                  <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('configuring')}>Continue to configure →</button>
-                </div>
-              )}
-
-              {/* No themes extracted from JD at all */}
-              {!alignmentLoading && !alignmentError && alignmentSuggestions.length === 0 && alignmentMatched.length === 0 && (
-                <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '20px 22px' }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
-                    No theme gaps found
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.55 }}>
-                    No themes were extracted from this job description, or the analysis couldn&apos;t identify any gaps. Your modules look good — continue to configure.
-                  </div>
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <button
-                      className="btn-ghost"
-                      style={{ fontSize: 12 }}
-                      onClick={() => handleAlign()}
-                    >
-                      ↺ Retry
-                    </button>
-                    <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('configuring')}>
-                      Continue to configure →
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* With gaps */}
-              {!alignmentLoading && alignmentSuggestions.length > 0 && (
-                <>
-                  {/* Pill strip */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 24 }}>
-                    {alignmentMatched.map(t => (
-                      <span key={`m-${t}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', color: 'var(--teal)', borderRadius: 999, padding: '3px 10px', fontSize: 12 }}>
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2 5.5l2 2 4-4"/></svg>
-                        {t}
-                      </span>
-                    ))}
-                    {alignmentSuggestions.map(s => {
-                      const decision = alignmentStates[s.theme]
-                      if (decision === 'accepted') {
-                        return (
-                          <span key={`g-${s.theme}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', color: 'var(--teal)', borderRadius: 999, padding: '3px 10px', fontSize: 12 }}>
-                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2 5.5l2 2 4-4"/></svg>
-                            {s.theme}
-                          </span>
-                        )
-                      }
-                      if (decision === 'skipped') {
-                        return (
-                          <span key={`g-${s.theme}`} style={{ background: 'var(--bg3)', border: '1px solid var(--border2)', color: 'var(--text3)', borderRadius: 999, padding: '3px 10px', fontSize: 12, textDecoration: 'line-through' }}>
-                            {s.theme}
-                          </span>
-                        )
-                      }
-                      return (
-                        <span key={`g-${s.theme}`} style={{ background: AMBER_DIM, border: `1px solid ${AMBER}`, color: AMBER, borderRadius: 999, padding: '3px 10px', fontSize: 12 }}>
-                          {s.theme}
-                        </span>
-                      )
-                    })}
-                  </div>
-
-                  {/* Accept all */}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-                    <button
-                      className="btn-ghost"
-                      style={{ fontSize: 12 }}
-                      onClick={() => {
-                        setAlignmentStates(prev => {
-                          const next = { ...prev }
-                          for (const s of alignmentSuggestions) {
-                            if (!next[s.theme]) next[s.theme] = 'accepted'
-                          }
-                          return next
-                        })
-                      }}
-                    >
-                      Accept all
-                    </button>
-                  </div>
-
-                  {/* Suggestion cards */}
-                  {alignmentSuggestions.map(s => {
-                    const decision = alignmentStates[s.theme]
-                    const decided = !!decision
-                    const accepted = decision === 'accepted'
-                    const skipped = decision === 'skipped'
-
-                    const highlightTheme = (text: string) => {
-                      if (!s.theme) return text
-                      const escaped = s.theme.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-                      const re = new RegExp(`(${escaped})`, 'gi')
-                      const parts = text.split(re)
-                      return parts.map((part, i) =>
-                        re.test(part)
-                          ? <mark key={i} style={{ background: 'var(--teal-glow)', color: 'var(--teal)', padding: '0 3px', fontWeight: 600 }}>{part}</mark>
-                          : <span key={i}>{part}</span>
-                      )
-                    }
-
-                    return (
-                      <div
-                        key={s.theme}
-                        style={{
-                          background: 'var(--surface)',
-                          border: `1px solid ${accepted ? 'var(--teal-glow)' : 'var(--border2)'}`,
-                          borderRadius: 10,
-                          padding: '16px 18px',
-                          marginBottom: 14,
-                          opacity: skipped ? 0.6 : 1,
-                          transition: 'opacity 0.15s, border-color 0.15s',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                            <span style={{ background: AMBER_DIM, border: `1px solid ${AMBER}`, color: AMBER, borderRadius: 999, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>
-                              {s.theme}
-                            </span>
-                            <span style={{ color: 'var(--text3)' }}>→</span>
-                            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)' }}>
-                              {s.module_title}
-                            </span>
-                          </div>
-                          {decided && (
-                            <span style={{ fontSize: 11, fontWeight: 600, color: accepted ? 'var(--teal)' : 'var(--text3)' }}>
-                              {accepted ? '✓ accepted' : 'skipped'}
-                            </span>
-                          )}
-                        </div>
-
-                        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Original</div>
-                        <div style={{ borderLeft: '3px solid var(--border2)', paddingLeft: 12, marginBottom: 14, fontSize: 12, color: 'var(--text3)', lineHeight: 1.55, background: 'var(--bg3)', padding: '8px 12px', borderRadius: '0 6px 6px 0' }}>
-                          {s.original}
-                        </div>
-
-                        <div style={{ fontSize: 11, color: 'var(--teal)', marginBottom: 4 }}>Suggested rewrite</div>
-                        <div style={{ borderLeft: '3px solid var(--teal)', paddingLeft: 12, marginBottom: 14, fontSize: 13, color: 'var(--text)', lineHeight: 1.55, background: 'var(--teal-dim)', padding: '8px 12px', borderRadius: '0 6px 6px 0' }}>
-                          {highlightTheme(s.suggestion)}
-                        </div>
-
-                        {!decided && (
-                          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                            <button
-                              className="btn-ghost"
-                              style={{ fontSize: 12, padding: '6px 14px' }}
-                              onClick={() => setAlignmentStates(prev => ({ ...prev, [s.theme]: 'skipped' }))}
-                            >
-                              Skip
-                            </button>
-                            <button
-                              className="btn-primary"
-                              style={{ fontSize: 12, padding: '6px 14px' }}
-                              onClick={() => setAlignmentStates(prev => ({ ...prev, [s.theme]: 'accepted' }))}
-                            >
-                              Accept
-                            </button>
-                          </div>
-                        )}
+                  {/* Header row: title + coverage score */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16 }}>
+                    <div>
+                      <div className="page-title" style={{ marginBottom: 4 }}>Theme coverage</div>
+                      <div style={{ fontSize: 13, color: 'var(--text2)' }}>
+                        {jdData?.extracted_company && <strong style={{ color: 'var(--text)', fontWeight: 500 }}>{jdData.extracted_company}</strong>}
+                        {jdData?.extracted_role_type && <span style={{ color: 'var(--text3)' }}> · {jdData.extracted_role_type}</span>}
                       </div>
-                    )
-                  })}
-
-                  {/* Save to library card */}
-                  {acceptedCount > 0 && (
-                    <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '16px 18px', marginTop: 8, marginBottom: 8 }}>
-                      {savedToLibrary ? (
-                        <div style={{ fontSize: 13, color: 'var(--teal)', fontWeight: 600 }}>
-                          ✓ Saved — your module library has been updated.
+                    </div>
+                    {totalThemes > 0 && (
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontSize: 22, fontWeight: 600, color: coveredCount === totalThemes ? 'var(--teal)' : 'var(--text)', lineHeight: 1.1 }}>
+                          {coveredCount}/{totalThemes}
                         </div>
-                      ) : (
-                        <>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
-                            💾 Save changes to your module library?
-                          </div>
-                          <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.55, marginBottom: 12 }}>
-                            These accepted rewrites only apply to this generation. Save them permanently so future resumes start with stronger keyword coverage.
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <button
-                              onClick={handleSaveToLibrary}
-                              disabled={savingToLibrary}
-                              style={{
-                                fontSize: 12, padding: '6px 14px', borderRadius: 7,
-                                background: 'var(--surface)',
-                                border: '1px solid var(--teal-glow)',
-                                color: 'var(--teal)',
-                                cursor: savingToLibrary ? 'default' : 'pointer',
-                                fontFamily: 'var(--font)', fontWeight: 600,
-                                display: 'inline-flex', alignItems: 'center', gap: 6,
-                                opacity: savingToLibrary ? 0.7 : 1,
-                              }}
-                            >
-                              {savingToLibrary
-                                ? <><Spinner /> Saving…</>
-                                : `Save ${acceptedCount} module${acceptedCount === 1 ? '' : 's'} to library`}
-                            </button>
-                            <span style={{ fontSize: 11, color: 'var(--text3)' }}>or skip this</span>
-                          </div>
-                        </>
-                      )}
+                        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>themes covered</div>
+                        <div style={{ width: 100, height: 5, background: 'var(--bg3)', borderRadius: 999, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${Math.round((coveredCount / totalThemes) * 100)}%`, background: 'var(--teal)', borderRadius: 999, transition: 'width 0.3s' }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Error banner */}
+                  {alignmentError && (
+                    <div style={{ background: 'oklch(0.4 0.18 10 / 0.12)', border: '1px solid var(--rose)', borderRadius: 10, padding: '16px 18px', marginBottom: 16 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--rose)', marginBottom: 4 }}>Theme analysis didn&apos;t complete</div>
+                      <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 12, lineHeight: 1.5 }}>{alignmentError}</div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => { setAlignmentError(null); handleAlign() }}>↺ Retry</button>
+                        <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('configuring')}>Skip and continue →</button>
+                      </div>
                     </div>
                   )}
 
-                  {/* Footer */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 20, gap: 12 }}>
-                    <span style={{ fontSize: 12, color: 'var(--text3)' }}>
-                      {acceptedCount} of {totalCount} suggestion{totalCount === 1 ? '' : 's'} accepted
-                    </span>
-                    <button className="btn-primary" onClick={() => setStep('configuring')}>
-                      Continue to configure →
-                    </button>
-                  </div>
+                  {/* No themes at all */}
+                  {!alignmentError && totalThemes === 0 && (
+                    <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '20px 22px' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>No themes found</div>
+                      <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 14, lineHeight: 1.5 }}>No themes were extracted from this job description. Your modules look good — continue to configure.</div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="btn-ghost" style={{ fontSize: 12 }} onClick={handleAlign}>↺ Retry</button>
+                        <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('configuring')}>Continue to configure →</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Theme cards */}
+                  {!alignmentError && totalThemes > 0 && (
+                    <>
+                      {/* Accept all shortcut */}
+                      {undecidedGaps > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                          <button
+                            className="btn-ghost"
+                            style={{ fontSize: 12 }}
+                            onClick={() => setAlignmentStates(prev => {
+                              const next = { ...prev }
+                              for (const s of alignmentSuggestions) { if (!next[s.theme]) next[s.theme] = 'accepted' }
+                              return next
+                            })}
+                          >
+                            Accept all rewrites
+                          </button>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+
+                        {/* ── Covered themes ── */}
+                        {alignmentMatched.map(t => (
+                          <div key={t} style={{ background: 'var(--surface)', border: '1px solid var(--teal-glow)', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--teal-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="var(--teal)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            </div>
+                            <span style={{ fontSize: 13, color: 'var(--text)', flex: 1 }}>{t}</span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal)', background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 999, padding: '2px 9px' }}>covered</span>
+                          </div>
+                        ))}
+
+                        {/* ── Gap themes ── */}
+                        {alignmentSuggestions.map(s => {
+                          const decision = alignmentStates[s.theme]
+                          const accepted = decision === 'accepted'
+                          const skipped = decision === 'skipped'
+
+                          if (accepted) {
+                            return (
+                              <div key={s.theme} style={{ background: 'var(--surface)', border: '1px solid var(--teal-glow)', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                                <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--teal-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="var(--teal)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                </div>
+                                <span style={{ fontSize: 13, color: 'var(--text)', flex: 1 }}>{s.theme}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>{s.module_title}</span>
+                                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal)', background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 999, padding: '2px 9px' }}>rewritten</span>
+                                  <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text3)', padding: 0, fontFamily: 'var(--font)' }} onClick={() => setAlignmentStates(prev => { const n = { ...prev }; delete n[s.theme]; return n })}>undo</button>
+                                </div>
+                              </div>
+                            )
+                          }
+
+                          if (skipped) {
+                            return (
+                              <div key={s.theme} style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, opacity: 0.6 }}>
+                                <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--bg3)', flexShrink: 0 }} />
+                                <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1, textDecoration: 'line-through' }}>{s.theme}</span>
+                                <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text3)', padding: 0, opacity: 1, fontFamily: 'var(--font)' }} onClick={() => setAlignmentStates(prev => { const n = { ...prev }; delete n[s.theme]; return n })}>undo</button>
+                              </div>
+                            )
+                          }
+
+                          // Undecided gap card
+                          return (
+                            <div key={s.theme} style={{ background: 'var(--surface)', border: `1px solid ${AMBER_BORDER}`, borderRadius: 10, padding: '16px 18px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                                <div style={{ width: 20, height: 20, borderRadius: '50%', background: AMBER_DIM, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  <span style={{ fontSize: 12, color: AMBER, fontWeight: 600, lineHeight: 1 }}>!</span>
+                                </div>
+                                <span style={{ fontSize: 13, color: 'var(--text)', flex: 1 }}>{s.theme}</span>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: AMBER, background: AMBER_DIM, border: `1px solid ${AMBER_BORDER}`, borderRadius: 999, padding: '2px 9px' }}>gap</span>
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
+                                Suggested rewrite for <strong style={{ color: 'var(--text2)', fontWeight: 500 }}>{s.module_title}</strong>
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 3 }}>Original</div>
+                              <div style={{ borderLeft: '3px solid var(--border2)', marginBottom: 12, fontSize: 12, color: 'var(--text3)', lineHeight: 1.55, background: 'var(--bg3)', padding: '7px 12px', borderRadius: '0 6px 6px 0' }}>
+                                {s.original}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--teal)', marginBottom: 3 }}>Suggested rewrite</div>
+                              <div style={{ borderLeft: '3px solid var(--teal)', marginBottom: 14, fontSize: 12, color: 'var(--text)', lineHeight: 1.55, background: 'var(--teal-dim)', padding: '7px 12px', borderRadius: '0 6px 6px 0' }}>
+                                {highlightTheme(s.suggestion, s.theme)}
+                              </div>
+                              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                                <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setAlignmentStates(prev => ({ ...prev, [s.theme]: 'skipped' }))}>Skip</button>
+                                <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setAlignmentStates(prev => ({ ...prev, [s.theme]: 'accepted' }))}>Accept rewrite</button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      {/* Save to library */}
+                      {acceptedCount > 0 && (
+                        <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '16px 18px', marginBottom: 16 }}>
+                          {savedToLibrary ? (
+                            <div style={{ fontSize: 13, color: 'var(--teal)', fontWeight: 600 }}>✓ Saved — your module library has been updated.</div>
+                          ) : (
+                            <>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Save changes to your module library?</div>
+                              <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.55, marginBottom: 12 }}>
+                                These accepted rewrites only apply to this generation. Save them permanently so future resumes start with stronger keyword coverage.
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <button
+                                  onClick={handleSaveToLibrary}
+                                  disabled={savingToLibrary}
+                                  style={{ fontSize: 12, padding: '6px 14px', borderRadius: 7, background: 'var(--surface)', border: '1px solid var(--teal-glow)', color: 'var(--teal)', cursor: savingToLibrary ? 'default' : 'pointer', fontFamily: 'var(--font)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: savingToLibrary ? 0.7 : 1 }}
+                                >
+                                  {savingToLibrary ? <><Spinner /> Saving…</> : `Save ${acceptedCount} module${acceptedCount === 1 ? '' : 's'} to library`}
+                                </button>
+                                <span style={{ fontSize: 11, color: 'var(--text3)' }}>or skip this</span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Footer */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, gap: 12 }}>
+                        <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+                          {undecidedGaps > 0
+                            ? `${undecidedGaps} gap${undecidedGaps === 1 ? '' : 's'} remaining — you can still continue`
+                            : coveredCount === totalThemes ? 'All themes covered' : 'Ready to continue'
+                          }
+                        </span>
+                        <button className="btn-primary" onClick={() => setStep('configuring')}>
+                          Continue to configure →
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>

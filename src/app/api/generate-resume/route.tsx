@@ -6,14 +6,13 @@ import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 import { canGenerate } from '@/lib/plan'
 import * as docx from 'docx'
-import { renderToBuffer, Document as PdfDoc, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
+import { renderToBuffer, Document as PdfDoc, Page, Text, View } from '@react-pdf/renderer'
 import React from 'react'
 
 export const maxDuration = 60
 
 type Contact = { name: string; email: string; phone?: string; linkedin?: string; location?: string }
 type ResumeFormat = 'classic' | 'corporate' | 'chronological' | 'combination'
-type Section = { heading: string; content: string }
 type StructuredData = {
   summary?: string
   experience?: { title: string; company: string; dates: string; bullets: string[] }[]
@@ -255,16 +254,6 @@ function buildDocx(contact: Contact, data: StructuredData, format: ResumeFormat,
   return new docx.Document({ creator: contact.name, numbering: { config: bulletConfig }, sections: [{ properties: { page: { margin: { top: twip(0.85), right: twip(0.85), bottom: twip(0.85), left: twip(0.85) } } }, children }] })
 }
 
-function structuredToSections(data: StructuredData): Section[] {
-  const sections: Section[] = []
-  if (data.summary) sections.push({ heading: 'Summary', content: data.summary })
-  for (const job of data.experience ?? []) {
-    sections.push({ heading: `${job.title} · ${job.company}`, content: [job.dates, ...job.bullets].join('\n') })
-  }
-  if (data.skills) sections.push({ heading: 'Skills', content: data.skills })
-  if (data.education) sections.push({ heading: 'Education', content: data.education })
-  return sections
-}
 
 // ─── COMBINATION DOCX BUILDER ────────────────────────────────────────────────
 
@@ -399,33 +388,260 @@ function buildDocxCombination(contact: Contact, data: CombinationData): docx.Doc
 
 // ─── PDF ──────────────────────────────────────────────────────────────────────
 
-const pdfStyles = StyleSheet.create({
-  page: { flexDirection: 'column', backgroundColor: '#FFFFFF', padding: 40, fontFamily: 'Helvetica' },
-  name: { fontSize: 20, fontWeight: 'bold', marginBottom: 4 },
-  contact: { fontSize: 9, color: '#555', marginBottom: 16 },
-  h2: { fontSize: 12, fontWeight: 'bold', borderBottomWidth: 1, borderBottomColor: '#ccc', paddingBottom: 2, marginTop: 14, marginBottom: 6 },
-  body: { fontSize: 10, lineHeight: 1.5, color: '#222', marginBottom: 8 },
-})
-
 type EducationEntry = { school: string; degree: string; field: string; year: string }
 type CoverLetterConfig = { include: boolean; tone: 'professional' | 'warm' | 'direct'; notes?: string }
 
-const ResumePDF = ({ contact, sections }: { contact: Contact; sections: Section[] }) => (
-  <PdfDoc>
-    <Page size="A4" style={pdfStyles.page}>
-      <Text style={pdfStyles.name}>{contact.name}</Text>
-      <Text style={pdfStyles.contact}>
-        {[contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')}
-      </Text>
-      {sections.map((sec, idx) => (
-        <View key={idx}>
-          <Text style={pdfStyles.h2}>{sec.heading}</Text>
-          <Text style={pdfStyles.body}>{sec.content}</Text>
+// ── Classic PDF: Times-Roman serif, small-caps section headers ──────────────
+const ResumePDFClassic = ({ contact, data }: { contact: Contact; data: StructuredData }) => {
+  const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
+  const body = { fontSize: 10, fontFamily: 'Times-Roman', lineHeight: 1.5, color: '#333333' }
+  const SectionH = ({ title }: { title: string }) => (
+    <View style={{ marginTop: 14, marginBottom: 4 }}>
+      <Text style={{ fontSize: 10, fontFamily: 'Times-Bold', color: '#111111', textTransform: 'uppercase', letterSpacing: 0.5 }}>{title}</Text>
+      <View style={{ borderBottomWidth: 0.75, borderBottomColor: '#333333', marginTop: 2 }} />
+    </View>
+  )
+  return (
+    <PdfDoc>
+      <Page size="LETTER" style={{ fontFamily: 'Times-Roman', paddingTop: 44, paddingRight: 52, paddingBottom: 52, paddingLeft: 52, backgroundColor: '#FFFFFF' }}>
+        <Text style={{ fontSize: 20, fontFamily: 'Times-Bold', textAlign: 'center', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>{contact.name}</Text>
+        <Text style={{ fontSize: 9, color: '#555555', textAlign: 'center', marginBottom: 6 }}>{contactLine}</Text>
+        <View style={{ borderBottomWidth: 1.5, borderBottomColor: '#111111', marginBottom: 14 }} />
+        {data.summary ? (
+          <View style={{ marginBottom: 10 }}>
+            <SectionH title="Summary" />
+            <Text style={{ ...body, marginTop: 4 }}>{data.summary}</Text>
+          </View>
+        ) : null}
+        {data.experience?.length ? (
+          <View style={{ marginBottom: 10 }}>
+            <SectionH title="Professional Experience" />
+            {data.experience.map((job, i) => (
+              <View key={i} style={{ marginTop: 8, marginBottom: 4 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                  <Text style={{ fontSize: 10, fontFamily: 'Times-Bold', color: '#222222' }}>{job.company}</Text>
+                  <Text style={{ fontSize: 9, fontFamily: 'Times-Italic', color: '#777777' }}>{job.dates}</Text>
+                </View>
+                <Text style={{ fontSize: 9.5, fontFamily: 'Times-Italic', color: '#444444', marginBottom: 3 }}>{job.title}</Text>
+                {job.bullets.map((b, j) => (
+                  <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
+                    <Text style={{ fontSize: 9.5, fontFamily: 'Times-Roman', color: '#555555', marginRight: 4 }}>•</Text>
+                    <Text style={{ fontSize: 9.5, fontFamily: 'Times-Roman', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {data.skills ? (
+          <View style={{ marginBottom: 10 }}>
+            <SectionH title="Skills" />
+            <Text style={{ ...body, marginTop: 4 }}>{data.skills}</Text>
+          </View>
+        ) : null}
+        {data.education ? (
+          <View style={{ marginBottom: 10 }}>
+            <SectionH title="Education" />
+            <Text style={{ ...body, marginTop: 4 }}>{data.education}</Text>
+          </View>
+        ) : null}
+      </Page>
+    </PdfDoc>
+  )
+}
+
+// ── Corporate PDF: Helvetica, black header, dark section banners ─────────────
+const ResumePDFCorporate = ({ contact, data }: { contact: Contact; data: StructuredData }) => {
+  const contactItems = [contact.phone, contact.location, contact.linkedin, contact.email].filter(Boolean).join('  |  ')
+  const body = { fontSize: 10, fontFamily: 'Helvetica', lineHeight: 1.5, color: '#333333' }
+  const SectionBanner = ({ title }: { title: string }) => (
+    <View style={{ backgroundColor: '#222222', paddingHorizontal: 8, paddingVertical: 4, marginBottom: 6 }}>
+      <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold', color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: 0.5 }}>{title}</Text>
+    </View>
+  )
+  return (
+    <PdfDoc>
+      <Page size="LETTER" style={{ fontFamily: 'Helvetica', backgroundColor: '#FFFFFF' }}>
+        <View style={{ backgroundColor: '#000000', paddingHorizontal: 36, paddingVertical: 16, alignItems: 'center' }}>
+          <Text style={{ fontSize: 22, fontFamily: 'Helvetica-Bold', color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: 1 }}>{contact.name}</Text>
         </View>
-      ))}
-    </Page>
-  </PdfDoc>
-)
+        <View style={{ backgroundColor: '#F0F0F0', paddingHorizontal: 36, paddingVertical: 5, alignItems: 'center', marginBottom: 14 }}>
+          <Text style={{ fontSize: 9, color: '#555555' }}>{contactItems}</Text>
+        </View>
+        <View style={{ paddingHorizontal: 36, paddingBottom: 36 }}>
+          {data.summary ? (
+            <View style={{ marginBottom: 12 }}>
+              <SectionBanner title="Career Objective" />
+              <Text style={body}>{data.summary}</Text>
+            </View>
+          ) : null}
+          {data.experience?.length ? (
+            <View style={{ marginBottom: 12 }}>
+              <SectionBanner title="Professional Experience" />
+              {data.experience.map((job, i) => (
+                <View key={i} style={{ marginBottom: 10 }}>
+                  <Text style={{ fontSize: 9, color: '#444444', marginBottom: 1 }}>{job.dates}  |  {job.company}</Text>
+                  <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111', marginBottom: 3 }}>{job.title}</Text>
+                  {job.bullets.map((b, j) => (
+                    <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
+                      <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>•</Text>
+                      <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {data.education ? (
+            <View style={{ marginBottom: 12 }}>
+              <SectionBanner title="Education" />
+              <Text style={body}>{data.education}</Text>
+            </View>
+          ) : null}
+          {data.skills ? (
+            <View style={{ marginBottom: 12 }}>
+              <SectionBanner title="Relevant Skills" />
+              <Text style={body}>{data.skills}</Text>
+            </View>
+          ) : null}
+        </View>
+      </Page>
+    </PdfDoc>
+  )
+}
+
+// ── Chronological PDF: rose accent, grey border section heads ───────────────
+const ResumePDFChronological = ({ contact, data }: { contact: Contact; data: StructuredData }) => {
+  const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
+  const ROSE = '#954F72', GREY = '#605E5C'
+  const body = { fontSize: 10, fontFamily: 'Helvetica', lineHeight: 1.5, color: '#333333' }
+  const SectionH = ({ title }: { title: string }) => (
+    <View style={{ marginTop: 14, marginBottom: 5 }}>
+      <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: GREY, textTransform: 'uppercase', letterSpacing: 0.5 }}>{title}</Text>
+      <View style={{ borderBottomWidth: 1, borderBottomColor: GREY, marginTop: 2 }} />
+    </View>
+  )
+  return (
+    <PdfDoc>
+      <Page size="LETTER" style={{ fontFamily: 'Helvetica', paddingTop: 40, paddingRight: 48, paddingBottom: 48, paddingLeft: 48, backgroundColor: '#FFFFFF' }}>
+        <Text style={{ fontSize: 20, fontFamily: 'Helvetica-Bold', color: ROSE, marginBottom: 3 }}>{contact.name}</Text>
+        <Text style={{ fontSize: 9, color: '#777777', marginBottom: 10 }}>{contactLine}</Text>
+        <View style={{ borderBottomWidth: 1.5, borderBottomColor: ROSE, marginBottom: 14 }} />
+        {data.summary ? (
+          <View style={{ marginBottom: 10 }}>
+            <SectionH title="Summary" />
+            <Text style={body}>{data.summary}</Text>
+          </View>
+        ) : null}
+        {data.experience?.length ? (
+          <View style={{ marginBottom: 10 }}>
+            <SectionH title="Professional Experience" />
+            {data.experience.map((job, i) => (
+              <View key={i} style={{ marginTop: 8, marginBottom: 4 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                  <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', color: '#111111' }}>{job.company}</Text>
+                  <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Oblique', color: '#888888' }}>{job.dates}</Text>
+                </View>
+                <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Oblique', color: GREY, marginBottom: 3 }}>{job.title}</Text>
+                {job.bullets.map((b, j) => (
+                  <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
+                    <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>•</Text>
+                    <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {data.skills ? (
+          <View style={{ marginBottom: 10 }}>
+            <SectionH title="Skills" />
+            <Text style={body}>{data.skills}</Text>
+          </View>
+        ) : null}
+        {data.education ? (
+          <View style={{ marginBottom: 10 }}>
+            <SectionH title="Education" />
+            <Text style={body}>{data.education}</Text>
+          </View>
+        ) : null}
+      </Page>
+    </PdfDoc>
+  )
+}
+
+// ── Combination PDF: rose/pink theme, skill sections + work experience ───────
+const ResumePDFCombination = ({ contact, data }: { contact: Contact; data: CombinationData }) => {
+  const contactItems = [contact.phone, contact.location, contact.linkedin, contact.email].filter(Boolean).join('  |  ')
+  const HEADER = '#C49098', SECTION = '#EDD5D7', DARK = '#3D2B2D'
+  const SectionBanner = ({ title }: { title: string }) => (
+    <View style={{ backgroundColor: SECTION, paddingHorizontal: 10, paddingVertical: 5, marginBottom: 8 }}>
+      <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: DARK, textTransform: 'uppercase', letterSpacing: 0.5 }}>{title}</Text>
+    </View>
+  )
+  return (
+    <PdfDoc>
+      <Page size="LETTER" style={{ fontFamily: 'Helvetica', backgroundColor: '#FFFFFF' }}>
+        <View style={{ backgroundColor: HEADER, paddingHorizontal: 48, paddingVertical: 20, alignItems: 'center' }}>
+          <Text style={{ fontSize: 22, fontFamily: 'Helvetica-Bold', color: '#FFFFFF', marginBottom: 3 }}>{contact.name}</Text>
+          <Text style={{ fontSize: 11, color: '#F0D8DA', marginBottom: data.summary ? 8 : 0 }}>{data.job_title}</Text>
+          {data.summary ? (
+            <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Oblique', color: '#F5E6E8', textAlign: 'center', lineHeight: 1.5 }}>{data.summary}</Text>
+          ) : null}
+        </View>
+        <View style={{ backgroundColor: '#F2F2F2', paddingHorizontal: 48, paddingVertical: 6, alignItems: 'center', marginBottom: 14 }}>
+          <Text style={{ fontSize: 9, color: '#555555' }}>{contactItems}</Text>
+        </View>
+        <View style={{ paddingHorizontal: 32, paddingBottom: 32 }}>
+          <SectionBanner title="Relevant Skills" />
+          {data.skill_sections.map((sec, i) => (
+            <View key={i} style={{ marginBottom: 8 }}>
+              <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: DARK, marginBottom: 3 }}>{sec.category}</Text>
+              {sec.bullets.map((b, j) => (
+                <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
+                  <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>•</Text>
+                  <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
+                </View>
+              ))}
+            </View>
+          ))}
+          <View style={{ marginTop: 10 }}>
+            <SectionBanner title="Work Experience" />
+            {data.work_experience.map((job, i) => (
+              <View key={i} style={{ marginBottom: 10 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                  <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#222222' }}>{job.title}</Text>
+                  <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Oblique', color: '#777777' }}>{job.dates}</Text>
+                </View>
+                <Text style={{ fontSize: 9.5, color: '#666666', marginBottom: 3 }}>{job.company}</Text>
+                {job.bullets.map((b, j) => (
+                  <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
+                    <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>•</Text>
+                    <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+          {data.education.length > 0 ? (
+            <View style={{ marginTop: 8 }}>
+              <SectionBanner title="Education" />
+              {data.education.map((e, i) => (
+                <Text key={i} style={{ fontSize: 10, fontFamily: 'Helvetica', color: '#333333', marginBottom: 3 }}>{e.degree} · {e.school} · {e.year}</Text>
+              ))}
+            </View>
+          ) : null}
+          {data.skills_list.length > 0 ? (
+            <View style={{ marginTop: 10 }}>
+              <SectionBanner title="Skills" />
+              <Text style={{ fontSize: 9.5, color: '#444444', lineHeight: 1.5 }}>{data.skills_list.join('  ·  ')}</Text>
+            </View>
+          ) : null}
+        </View>
+      </Page>
+    </PdfDoc>
+  )
+}
 
 // ─── HANDLER ──────────────────────────────────────────────────────────────────
 
@@ -610,7 +826,8 @@ export async function POST(req: Request) {
     // ── Combination template: separate structured prompt ──────────────────────
     let resumeHtml: string
     let docxBuffer: Buffer
-    let pdfSections: Section[] = []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let pdfBuffer: any
 
     if (format === 'combination') {
       const comboPrompt = `Assemble a tailored resume in structured JSON for: ${jd.extracted_role_type} at ${jd.extracted_company}.
@@ -659,6 +876,7 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({
 
       const comboDoc = buildDocxCombination(contact, comboData)
       docxBuffer = await docx.Packer.toBuffer(comboDoc) as Buffer
+      pdfBuffer = await renderToBuffer(<ResumePDFCombination contact={contact} data={comboData} />)
 
       // HTML preview for combination: simple representation
       const skillsHtml = comboData.skill_sections.map(sec => `
@@ -739,14 +957,15 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
 
       const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
       resumeHtml = buildResumeHtml(contact, structuredData, format)
-      pdfSections = structuredToSections(structuredData)
       const classicDoc = buildDocx(contact, structuredData, format, contactLine)
       docxBuffer = await docx.Packer.toBuffer(classicDoc) as Buffer
+      const pdfEl = format === 'corporate'
+        ? <ResumePDFCorporate contact={contact} data={structuredData} />
+        : format === 'chronological'
+        ? <ResumePDFChronological contact={contact} data={structuredData} />
+        : <ResumePDFClassic contact={contact} data={structuredData} />
+      pdfBuffer = await renderToBuffer(pdfEl)
     }
-
-    const pdfBuffer = await renderToBuffer(
-      <ResumePDF contact={contact} sections={pdfSections} />
-    )
 
     const resumeId = crypto.randomUUID()
     const docxPath = `${user.id}/${resumeId}.docx`
