@@ -145,7 +145,7 @@ export default function GeneratePage() {
   const [skillInput, setSkillInput] = useState('')
   const [posVariant, setPosVariant] = useState<'A' | 'B' | 'C' | 'D'>('A')
   const [jobLevel, setJobLevel] = useState('')
-  const [resumeFormat, setResumeFormat] = useState<'classic' | 'corporate' | 'chronological' | 'combination'>('classic')
+  const [resumeFormat, setResumeFormat] = useState<'classic' | 'tech' | 'combination'>('classic')
   const [includeCoverLetter, setIncludeCoverLetter] = useState(false)
   const [coverLetterTone, setCoverLetterTone] = useState<'professional' | 'warm' | 'direct'>('professional')
   const [coverLetterNotes, setCoverLetterNotes] = useState('')
@@ -1341,7 +1341,7 @@ export default function GeneratePage() {
             {/* Format */}
             <div className="config-section">
               <div className="config-section-title" style={{ marginBottom: 12 }}>Format</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                 {([
                   {
                     key: 'classic' as const,
@@ -1359,29 +1359,19 @@ export default function GeneratePage() {
                     ),
                   },
                   {
-                    key: 'corporate' as const,
-                    name: 'Corporate',
-                    desc: 'Black header bar, grey contact strip, bold section blocks — executive look',
+                    key: 'tech' as const,
+                    name: 'Tech',
+                    desc: 'Monospace accents, clean grid, GitHub-style section headers — built for engineers',
                     preview: (
-                      <div style={{ fontSize: 9, fontFamily: 'Calibri, sans-serif', marginTop: 8 }}>
-                        <div style={{ background: '#000', padding: '4px 6px', color: '#fff', fontWeight: 700, fontSize: 10, textAlign: 'center', letterSpacing: '0.05em', marginBottom: 2 }}>JANE DOE</div>
-                        <div style={{ background: '#F6F6F6', padding: '2px 6px', fontSize: 8, color: '#555', textAlign: 'center', marginBottom: 4 }}>email | phone | city</div>
-                        <div style={{ background: '#222', padding: '2px 5px', fontSize: 8, color: '#fff', fontWeight: 700, letterSpacing: '0.05em', marginBottom: 2 }}>PROFESSIONAL EXPERIENCE</div>
-                        <div style={{ fontSize: 8, color: '#444' }}>Jan 2022 | Stripe, San Francisco</div>
-                      </div>
-                    ),
-                  },
-                  {
-                    key: 'chronological' as const,
-                    name: 'Chronological',
-                    desc: 'Rose name accent, grey section headers with rules — clean timeline format',
-                    preview: (
-                      <div style={{ fontSize: 9, fontFamily: 'Calibri, sans-serif', marginTop: 8 }}>
-                        <div style={{ fontWeight: 700, fontSize: 11, color: '#954F72', marginBottom: 1 }}>Jane Doe</div>
-                        <div style={{ fontSize: 8, color: '#777', marginBottom: 5 }}>email · phone · city</div>
-                        <div style={{ fontWeight: 700, fontSize: 8, color: '#605E5C', letterSpacing: '0.06em', borderBottom: '1.5px solid #605E5C', paddingBottom: 1, marginBottom: 2 }}>EXPERIENCE</div>
-                        <div style={{ fontSize: 8, color: '#333', fontWeight: 700 }}>Stripe</div>
-                        <div style={{ fontSize: 8, color: '#605E5C', fontStyle: 'italic' }}>Staff Platform Engineer</div>
+                      <div style={{ fontSize: 9, lineHeight: 1.4, fontFamily: 'Calibri, sans-serif', marginTop: 8 }}>
+                        <div style={{ fontWeight: 700, fontSize: 11, color: '#111', marginBottom: 1 }}>Jane Doe</div>
+                        <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace', marginBottom: 5 }}>jane@email.com · github.com/jdoe</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: 8, color: '#1F6FEB', fontWeight: 700 }}>##</span>
+                          <span style={{ fontWeight: 700, fontSize: 8, color: '#111', letterSpacing: '0.04em' }}>EXPERIENCE</span>
+                        </div>
+                        <div style={{ fontSize: 8, color: '#333', fontWeight: 700 }}>Stripe · Senior Engineer</div>
+                        <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>2021–Present</div>
                       </div>
                     ),
                   },

@@ -12,7 +12,7 @@ import React from 'react'
 export const maxDuration = 60
 
 type Contact = { name: string; email: string; phone?: string; linkedin?: string; location?: string }
-type ResumeFormat = 'classic' | 'corporate' | 'chronological' | 'combination'
+type ResumeFormat = 'classic' | 'tech' | 'combination'
 type StructuredData = {
   summary?: string
   experience?: { title: string; company: string; dates: string; bullets: string[] }[]
@@ -52,7 +52,7 @@ function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeF
     const p = `font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0`
     const sections = [
       data.summary ? `<div style="margin-bottom:20px"><h2 style="${h2}">Summary</h2><p style="${p}">${data.summary}</p></div>` : '',
-      data.experience?.length ? `<div style="margin-bottom:20px"><h2 style="${h2}">Professional Experience</h2>${renderJobs(data.experience, { body: f, size: sz })}</div>` : '',
+      data.experience?.length ? `<div style="margin-bottom:20px"><h2 style="${h2}">Work Experience</h2>${renderJobs(data.experience, { body: f, size: sz })}</div>` : '',
       data.skills ? `<div style="margin-bottom:20px"><h2 style="${h2}">Skills</h2><p style="${p}">${data.skills}</p></div>` : '',
       data.education ? `<div style="margin-bottom:20px"><h2 style="${h2}">Education</h2><p style="${p}">${data.education}</p></div>` : '',
     ].filter(Boolean).join('')
@@ -65,63 +65,45 @@ function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeF
     </div></body></html>`
   }
 
-  // ── Corporate ──
-  if (format === 'corporate') {
-    const f = 'Calibri,Candara,sans-serif', sz = '12px'
-    const h2 = `font-family:${f};font-size:11.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#fff;background:#000;padding:5px 12px;margin:0 0 10px 0`
-    const renderCorpJobs = (jobs: NonNullable<StructuredData['experience']>) =>
+  // ── Tech ──
+  // Clean, ATS-optimised: Calibri body, Courier New for contact/dates,
+  // blue `#` prefix on section headers, standard heading names, no graphics.
+  if (format === 'tech') {
+    const f = 'Calibri,Candara,Arial,sans-serif'
+    const mono = "'Courier New',Courier,monospace"
+    const sz = '12px'
+    const BLUE = '#1F6FEB'
+    const sectionHead = (label: string) =>
+      `<div style="display:flex;align-items:center;gap:5px;margin:20px 0 8px 0;border-bottom:1px solid #e0e0e0;padding-bottom:4px">` +
+      `<span style="font-family:${mono};font-weight:700;color:${BLUE};font-size:12px;line-height:1">#</span>` +
+      `<span style="font-family:${f};font-size:11px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#111">${label}</span>` +
+      `</div>`
+    const renderTechJobs = (jobs: NonNullable<StructuredData['experience']>) =>
       jobs.map(job => `
-        <div style="margin-bottom:12px">
-          <div style="font-family:${f};font-size:11px;color:#444;margin-bottom:2px">${job.dates}</div>
-          <div style="font-family:${f};font-size:12.5px;font-weight:700;color:#111;margin-bottom:1px">${job.company}</div>
-          <div style="font-family:${f};font-size:12px;font-style:italic;color:#555;margin-bottom:4px">${job.title}</div>
-          <ul style="margin:0;padding-left:16px">${job.bullets.map(b => `<li style="font-family:${f};font-size:${sz};line-height:1.6;color:#333;margin-bottom:1px">${b}</li>`).join('')}</ul>
+        <div style="margin-bottom:13px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-family:${f};font-size:12.5px;font-weight:700;color:#111">${job.title} · ${job.company}</span>
+            <span style="font-family:${mono};font-size:10px;color:#555;white-space:nowrap;margin-left:8px">${job.dates}</span>
+          </div>
+          <ul style="margin:4px 0 0 0;padding-left:18px">${job.bullets.map(b => `<li style="font-family:${f};font-size:${sz};line-height:1.6;color:#333;margin-bottom:2px">${b}</li>`).join('')}</ul>
         </div>`).join('')
+    const contactItems = [contact.email, contact.phone, contact.linkedin, contact.location].filter(Boolean).join('  ·  ')
     const sections = [
-      data.summary ? `<div style="margin-bottom:16px"><div style="${h2}">Career Objective</div><p style="font-family:${f};font-size:${sz};line-height:1.6;color:#333;margin:0">${data.summary}</p></div>` : '',
-      data.experience?.length ? `<div style="margin-bottom:16px"><div style="${h2}">Professional Experience</div>${renderCorpJobs(data.experience)}</div>` : '',
-      data.education ? `<div style="margin-bottom:16px"><div style="${h2}">Education</div><p style="font-family:${f};font-size:${sz};line-height:1.6;color:#333;margin:0">${data.education}</p></div>` : '',
-      data.skills ? `<div style="margin-bottom:16px"><div style="${h2}">Relevant Skills</div><p style="font-family:${f};font-size:${sz};line-height:1.6;color:#333;margin:0">${data.skills}</p></div>` : '',
+      data.summary ? `${sectionHead('Summary')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0 0 0 0">${data.summary}</p>` : '',
+      data.experience?.length ? `${sectionHead('Work Experience')}${renderTechJobs(data.experience)}` : '',
+      data.skills ? `${sectionHead('Skills')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0">${data.skills}</p>` : '',
+      data.education ? `${sectionHead('Education')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0">${data.education}</p>` : '',
     ].filter(Boolean).join('')
-    return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff;font-family:${f}">
-      <div style="background:#000;padding:20px 36px 16px;text-align:center">
-        <h1 style="font-family:${f};font-size:28px;font-weight:700;color:#fff;margin:0 0 4px 0;letter-spacing:0.04em;text-transform:uppercase">${contact.name}</h1>
-      </div>
-      <div style="background:#F6F6F6;padding:7px 36px;text-align:center;font-family:${f};font-size:10.5px;color:#555;margin-bottom:18px">
-        ${[contact.phone, contact.location, contact.linkedin, contact.email].filter(Boolean).join(' | ')}
-      </div>
-      <div style="max-width:680px;margin:0 auto;padding:0 36px 40px">
-        ${sections}
-      </div>
-    </body></html>`
+    return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:40px 48px 48px;box-sizing:border-box">
+      <h1 style="font-family:${f};font-size:26px;font-weight:700;margin:0 0 4px 0;color:#111">${contact.name}</h1>
+      <p style="font-family:${mono};font-size:10.5px;color:#555;margin:0 0 16px 0">${contactItems}</p>
+      <div style="height:1px;background:#e0e0e0;margin-bottom:4px"></div>
+      ${sections}
+    </div></body></html>`
   }
 
-  // ── Chronological ──
-  const f = 'Calibri,Candara,sans-serif', sz = '12px'
-  const ROSE = '#954F72'
-  const h2 = `font-family:${f};font-size:11px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#605E5C;border-bottom:1.5px solid #605E5C;padding-bottom:3px;margin:0 0 10px 0`
-  const renderChronJobs = (jobs: NonNullable<StructuredData['experience']>) =>
-    jobs.map(job => `
-      <div style="margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <span style="font-family:${f};font-size:13px;font-weight:700;color:#111">${job.company}</span>
-          <span style="font-family:${f};font-size:10.5px;color:#888;white-space:nowrap;margin-left:8px">${job.dates}</span>
-        </div>
-        <div style="font-family:${f};font-size:11.5px;font-style:italic;color:#555;margin-bottom:4px">${job.title}</div>
-        <ul style="margin:0;padding-left:16px">${job.bullets.map(b => `<li style="font-family:${f};font-size:${sz};line-height:1.6;color:#333;margin-bottom:1px">${b}</li>`).join('')}</ul>
-      </div>`).join('')
-  const sections = [
-    data.summary ? `<div style="margin-bottom:16px"><div style="${h2}">Summary</div><p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0">${data.summary}</p></div>` : '',
-    data.experience?.length ? `<div style="margin-bottom:16px"><div style="${h2}">Professional Experience</div>${renderChronJobs(data.experience)}</div>` : '',
-    data.skills ? `<div style="margin-bottom:16px"><div style="${h2}">Skills</div><p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0">${data.skills}</p></div>` : '',
-    data.education ? `<div style="margin-bottom:16px"><div style="${h2}">Education</div><p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0">${data.education}</p></div>` : '',
-  ].filter(Boolean).join('')
-  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:40px 48px 48px;box-sizing:border-box">
-    <h1 style="font-family:${f};font-size:26px;font-weight:700;margin:0 0 3px 0;color:${ROSE}">${contact.name}</h1>
-    <p style="font-family:${f};font-size:10.5px;color:#777;margin:0 0 20px 0">${contactLine}</p>
-    <div style="height:2px;background:${ROSE};margin-bottom:20px;opacity:0.4"></div>
-    ${sections}
-  </div></body></html>`
+  // ── Fallthrough: should not be reached with valid format values ──
+  return ''
 }
 
 // ─── DOCX BUILDERS ────────────────────────────────────────────────────────────
@@ -160,7 +142,7 @@ function buildDocx(contact: Contact, data: StructuredData, format: ResumeFormat,
       new docx.Paragraph({ children: [], spacing: { after: 160 } }),
       ...(data.summary ? [sectionHead('Summary'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.summary, size: 22, font })], spacing: { after: 120, line: 276 } })] : []),
       ...(data.experience?.length ? [
-        sectionHead('Professional Experience'),
+        sectionHead('Work Experience'),
         ...data.experience.flatMap(job => [
           new docx.Paragraph({
             spacing: { before: 140, after: 40, line: 276 },
@@ -180,71 +162,39 @@ function buildDocx(contact: Contact, data: StructuredData, format: ResumeFormat,
     return new docx.Document({ creator: contact.name, numbering: { config: bulletConfig }, sections: [{ properties: { page: { margin: { top: twip(1), right: twip(1), bottom: twip(1), left: twip(1) } } }, children }] })
   }
 
-  // ── Corporate ─────────────────────────────────────────────────────────────────
-  // ATS-safe: paragraph shading replaces table-based headers (tables break Workday/Taleo parsers)
-  if (format === 'corporate') {
-    const font = 'Calibri'
-    const headerPara = () => new docx.Paragraph({
-      alignment: docx.AlignmentType.CENTER,
-      shading: { type: docx.ShadingType.CLEAR, fill: '000000', color: '000000' },
-      spacing: { before: 200, after: 200 },
-      children: [new docx.TextRun({ text: contact.name.toUpperCase(), size: 52, bold: true, color: 'FFFFFF', font })],
-    })
-    const contactPara = () => new docx.Paragraph({
-      alignment: docx.AlignmentType.CENTER,
-      shading: { type: docx.ShadingType.CLEAR, fill: 'F0F0F0', color: 'F0F0F0' },
-      spacing: { before: 0, after: 0 },
-      children: [new docx.TextRun({ text: [contact.phone, contact.location, contact.linkedin, contact.email].filter(Boolean).join('  |  '), size: 18, color: '555555', font })],
-    })
-    const sectionHead = (text: string) => new docx.Paragraph({
-      shading: { type: docx.ShadingType.CLEAR, fill: '222222', color: '222222' },
-      spacing: { before: 200, after: 80 },
-      children: [new docx.TextRun({ text: text.toUpperCase(), bold: true, size: 20, font, color: 'FFFFFF', allCaps: true })],
-    })
-    const spacer = (n = 120) => new docx.Paragraph({ spacing: { before: 0, after: n } })
-    const children = [
-      headerPara(), contactPara(), spacer(200),
-      ...(data.summary ? [sectionHead('Career Objective'), spacer(80), new docx.Paragraph({ children: [new docx.TextRun({ text: data.summary, size: 21, font })], spacing: { after: 160, line: 276 } })] : []),
-      ...(data.experience?.length ? [
-        sectionHead('Professional Experience'), spacer(80),
-        ...data.experience.flatMap(job => [
-          new docx.Paragraph({ children: [new docx.TextRun({ text: `${job.dates}  |  ${job.company}`, size: 20, font, color: '444444' })], spacing: { before: 120, after: 40 } }),
-          new docx.Paragraph({ children: [new docx.TextRun({ text: job.title, bold: true, size: 21, font })], spacing: { after: 40 } }),
-          ...job.bullets.map(b => bul(b, 21, font)),
-          spacer(80),
-        ]),
-      ] : []),
-      ...(data.education ? [sectionHead('Education'), spacer(80), new docx.Paragraph({ children: [new docx.TextRun({ text: data.education, size: 21, font })], spacing: { after: 160, line: 276 } })] : []),
-      ...(data.skills ? [sectionHead('Relevant Skills'), spacer(80), new docx.Paragraph({ children: [new docx.TextRun({ text: data.skills, size: 21, font })], spacing: { after: 120, line: 276 } })] : []),
-    ]
-    return new docx.Document({ creator: contact.name, numbering: { config: bulletConfig }, sections: [{ properties: { page: { margin: { top: twip(0.65), right: twip(0.65), bottom: twip(0.65), left: twip(0.65) } } }, children }] })
-  }
-
-  // ── Chronological ─────────────────────────────────────────────────────────────
+  // ── Tech ──────────────────────────────────────────────────────────────────────
+  // Calibri body, Courier New for contact/dates, blue "#" prefix on section heads.
+  // ATS-safe: no tables, no text boxes, standard section names.
   const font = 'Calibri'
-  const ROSE = '954F72'
-  const GREY = '605E5C'
+  const BLUE = '1F6FEB'
   const sectionHead = (text: string) => new docx.Paragraph({
-    children: [new docx.TextRun({ text: text.toUpperCase(), bold: true, size: 20, font, color: GREY, allCaps: true })],
-    spacing: { before: 240, after: 80, line: 276 },
-    border: { bottom: { color: GREY, size: 6, style: docx.BorderStyle.SINGLE, space: 3 } },
+    spacing: { before: 280, after: 80 },
+    border: { bottom: { color: 'E0E0E0', size: 4, style: docx.BorderStyle.SINGLE, space: 3 } },
+    children: [
+      new docx.TextRun({ text: '# ', bold: true, size: 20, font: 'Courier New', color: BLUE }),
+      new docx.TextRun({ text: text.toUpperCase(), bold: true, size: 20, font, color: '111111', allCaps: true }),
+    ],
   })
   const children = [
-    new docx.Paragraph({ children: [new docx.TextRun({ text: contact.name, bold: true, size: 36, font, color: ROSE })], spacing: { after: 60 } }),
-    new docx.Paragraph({ children: [new docx.TextRun({ text: contactLine, size: 18, color: '777777', font })], spacing: { after: 200 } }),
+    new docx.Paragraph({ children: [new docx.TextRun({ text: contact.name, bold: true, size: 40, font })], spacing: { after: 60 } }),
+    new docx.Paragraph({
+      children: [new docx.TextRun({ text: [contact.email, contact.phone, contact.linkedin, contact.location].filter(Boolean).join('  ·  '), size: 18, color: '555555', font: 'Courier New' })],
+      spacing: { after: 0 },
+      border: { bottom: { color: 'E0E0E0', size: 4, style: docx.BorderStyle.SINGLE, space: 6 } },
+    }),
+    new docx.Paragraph({ children: [], spacing: { after: 120 } }),
     ...(data.summary ? [sectionHead('Summary'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.summary, size: 21, font })], spacing: { after: 120, line: 276 } })] : []),
     ...(data.experience?.length ? [
-      sectionHead('Professional Experience'),
+      sectionHead('Work Experience'),
       ...data.experience.flatMap(job => [
         new docx.Paragraph({
           spacing: { before: 140, after: 30, line: 276 },
           tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
           children: [
-            new docx.TextRun({ text: job.company, bold: true, size: 22, font }),
-            new docx.TextRun({ text: '\t' + job.dates, size: 19, font, color: '777777', italics: true }),
+            new docx.TextRun({ text: `${job.title} · ${job.company}`, bold: true, size: 22, font }),
+            new docx.TextRun({ text: '\t' + job.dates, size: 18, font: 'Courier New', color: '555555' }),
           ],
         }),
-        new docx.Paragraph({ children: [new docx.TextRun({ text: job.title, size: 20, font, italics: true, color: GREY })], spacing: { after: 40 } }),
         ...job.bullets.map(b => bul(b, 21, font)),
       ]),
     ] : []),
@@ -415,7 +365,7 @@ const ResumePDFClassic = ({ contact, data }: { contact: Contact; data: Structure
         ) : null}
         {data.experience?.length ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionH title="Professional Experience" />
+            <SectionH title="Work Experience" />
             {data.experience.map((job, i) => (
               <View key={i} style={{ marginTop: 8, marginBottom: 4 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
@@ -450,83 +400,23 @@ const ResumePDFClassic = ({ contact, data }: { contact: Contact; data: Structure
   )
 }
 
-// ── Corporate PDF: Helvetica, black header, dark section banners ─────────────
-const ResumePDFCorporate = ({ contact, data }: { contact: Contact; data: StructuredData }) => {
-  const contactItems = [contact.phone, contact.location, contact.linkedin, contact.email].filter(Boolean).join('  |  ')
-  const body = { fontSize: 10, fontFamily: 'Helvetica', lineHeight: 1.5, color: '#333333' }
-  const SectionBanner = ({ title }: { title: string }) => (
-    <View style={{ backgroundColor: '#222222', paddingHorizontal: 8, paddingVertical: 4, marginBottom: 6 }}>
-      <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold', color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: 0.5 }}>{title}</Text>
-    </View>
-  )
-  return (
-    <PdfDoc>
-      <Page size="LETTER" style={{ fontFamily: 'Helvetica', backgroundColor: '#FFFFFF' }}>
-        <View style={{ backgroundColor: '#000000', paddingHorizontal: 36, paddingVertical: 16, alignItems: 'center' }}>
-          <Text style={{ fontSize: 22, fontFamily: 'Helvetica-Bold', color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: 1 }}>{contact.name}</Text>
-        </View>
-        <View style={{ backgroundColor: '#F0F0F0', paddingHorizontal: 36, paddingVertical: 5, alignItems: 'center', marginBottom: 14 }}>
-          <Text style={{ fontSize: 9, color: '#555555' }}>{contactItems}</Text>
-        </View>
-        <View style={{ paddingHorizontal: 36, paddingBottom: 36 }}>
-          {data.summary ? (
-            <View style={{ marginBottom: 12 }}>
-              <SectionBanner title="Career Objective" />
-              <Text style={body}>{data.summary}</Text>
-            </View>
-          ) : null}
-          {data.experience?.length ? (
-            <View style={{ marginBottom: 12 }}>
-              <SectionBanner title="Professional Experience" />
-              {data.experience.map((job, i) => (
-                <View key={i} style={{ marginBottom: 10 }}>
-                  <Text style={{ fontSize: 9, color: '#444444', marginBottom: 1 }}>{job.dates}  |  {job.company}</Text>
-                  <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111', marginBottom: 3 }}>{job.title}</Text>
-                  {job.bullets.map((b, j) => (
-                    <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
-                      <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>•</Text>
-                      <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
-                    </View>
-                  ))}
-                </View>
-              ))}
-            </View>
-          ) : null}
-          {data.education ? (
-            <View style={{ marginBottom: 12 }}>
-              <SectionBanner title="Education" />
-              <Text style={body}>{data.education}</Text>
-            </View>
-          ) : null}
-          {data.skills ? (
-            <View style={{ marginBottom: 12 }}>
-              <SectionBanner title="Relevant Skills" />
-              <Text style={body}>{data.skills}</Text>
-            </View>
-          ) : null}
-        </View>
-      </Page>
-    </PdfDoc>
-  )
-}
-
-// ── Chronological PDF: rose accent, grey border section heads ───────────────
-const ResumePDFChronological = ({ contact, data }: { contact: Contact; data: StructuredData }) => {
-  const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
-  const ROSE = '#954F72', GREY = '#605E5C'
+// ── Tech PDF: Helvetica body, Courier contact/dates, blue "#" section markers ──
+const ResumePDFTech = ({ contact, data }: { contact: Contact; data: StructuredData }) => {
+  const contactItems = [contact.email, contact.phone, contact.linkedin, contact.location].filter(Boolean).join('  ·  ')
+  const BLUE = '#1F6FEB'
   const body = { fontSize: 10, fontFamily: 'Helvetica', lineHeight: 1.5, color: '#333333' }
   const SectionH = ({ title }: { title: string }) => (
-    <View style={{ marginTop: 14, marginBottom: 5 }}>
-      <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: GREY, textTransform: 'uppercase', letterSpacing: 0.5 }}>{title}</Text>
-      <View style={{ borderBottomWidth: 1, borderBottomColor: GREY, marginTop: 2 }} />
+    <View style={{ marginTop: 14, marginBottom: 6, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 0.75, borderBottomColor: '#E0E0E0', paddingBottom: 3 }}>
+      <Text style={{ fontSize: 11, fontFamily: 'Courier-Bold', color: BLUE, marginRight: 4 }}>#</Text>
+      <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111', textTransform: 'uppercase', letterSpacing: 0.6 }}>{title}</Text>
     </View>
   )
   return (
     <PdfDoc>
       <Page size="LETTER" style={{ fontFamily: 'Helvetica', paddingTop: 40, paddingRight: 48, paddingBottom: 48, paddingLeft: 48, backgroundColor: '#FFFFFF' }}>
-        <Text style={{ fontSize: 20, fontFamily: 'Helvetica-Bold', color: ROSE, marginBottom: 3 }}>{contact.name}</Text>
-        <Text style={{ fontSize: 9, color: '#777777', marginBottom: 10 }}>{contactLine}</Text>
-        <View style={{ borderBottomWidth: 1.5, borderBottomColor: ROSE, marginBottom: 14 }} />
+        <Text style={{ fontSize: 20, fontFamily: 'Helvetica-Bold', color: '#111111', marginBottom: 3 }}>{contact.name}</Text>
+        <Text style={{ fontSize: 9, fontFamily: 'Courier', color: '#555555', marginBottom: 0 }}>{contactItems}</Text>
+        <View style={{ borderBottomWidth: 0.75, borderBottomColor: '#E0E0E0', marginTop: 8, marginBottom: 4 }} />
         {data.summary ? (
           <View style={{ marginBottom: 10 }}>
             <SectionH title="Summary" />
@@ -535,14 +425,13 @@ const ResumePDFChronological = ({ contact, data }: { contact: Contact; data: Str
         ) : null}
         {data.experience?.length ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionH title="Professional Experience" />
+            <SectionH title="Work Experience" />
             {data.experience.map((job, i) => (
               <View key={i} style={{ marginTop: 8, marginBottom: 4 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
-                  <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', color: '#111111' }}>{job.company}</Text>
-                  <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Oblique', color: '#888888' }}>{job.dates}</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 3 }}>
+                  <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', color: '#111111' }}>{job.title} · {job.company}</Text>
+                  <Text style={{ fontSize: 9, fontFamily: 'Courier', color: '#555555' }}>{job.dates}</Text>
                 </View>
-                <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Oblique', color: GREY, marginBottom: 3 }}>{job.title}</Text>
                 {job.bullets.map((b, j) => (
                   <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
                     <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>•</Text>
@@ -959,10 +848,8 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
       resumeHtml = buildResumeHtml(contact, structuredData, format)
       const classicDoc = buildDocx(contact, structuredData, format, contactLine)
       docxBuffer = await docx.Packer.toBuffer(classicDoc) as Buffer
-      const pdfEl = format === 'corporate'
-        ? <ResumePDFCorporate contact={contact} data={structuredData} />
-        : format === 'chronological'
-        ? <ResumePDFChronological contact={contact} data={structuredData} />
+      const pdfEl = format === 'tech'
+        ? <ResumePDFTech contact={contact} data={structuredData} />
         : <ResumePDFClassic contact={contact} data={structuredData} />
       pdfBuffer = await renderToBuffer(pdfEl)
     }
