@@ -111,12 +111,13 @@ export async function POST(req: Request) {
     if (!codeRow) return NextResponse.json({ error: 'Code not available' }, { status: 400 })
     code = codeRow.code
   } else {
-    // Auto-pick the most recently created available code (avoids stale test codes)
+    // Auto-pick the most recently created unsent, unused code
     const { data: availableCode } = await adminClient
       .from('beta_codes')
       .select('code')
       .eq('is_active', true)
       .is('used_at', null)
+      .is('sent_at', null)
       .order('created_at', { ascending: false })
       .limit(1)
       .single()
@@ -138,10 +139,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: (emailErr as Error).message }, { status: 500 })
   }
 
+  const now = new Date().toISOString()
+
+  // Mark the code as sent so it won't be auto-assigned to anyone else
+  await adminClient
+    .from('beta_codes')
+    .update({ sent_at: now, sent_to_email: betaRequest.email })
+    .eq('code', code)
+
   // Mark request as invited
   await adminClient
     .from('beta_requests')
-    .update({ status: 'invited', beta_code: code, invited_at: new Date().toISOString() })
+    .update({ status: 'invited', beta_code: code, invited_at: now })
     .eq('id', request_id)
 
   return NextResponse.json({ success: true, code })

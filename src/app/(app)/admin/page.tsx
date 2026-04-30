@@ -117,12 +117,13 @@ export default async function AdminPage({
     .select('id, email, context, marketing_opt_in, created_at, status, beta_code, invited_at')
     .order('created_at', { ascending: false })
 
-  // Count available beta codes
+  // Count available beta codes (unsent and unused)
   const { count: availableCodes } = await adminClient
     .from('beta_codes')
     .select('id', { count: 'exact', head: true })
     .eq('is_active', true)
     .is('used_at', null)
+    .is('sent_at', null)
 
   // Recent beta feedback + email lookup
   const { data: feedback } = await adminClient
