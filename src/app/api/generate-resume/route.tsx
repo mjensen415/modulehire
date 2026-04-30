@@ -626,7 +626,7 @@ export async function POST(req: Request) {
       include_summary: boolean
       cover_letter?: CoverLetterConfig
       job_level?: string
-      format?: 'classic' | 'corporate' | 'chronological' | 'combination'
+      format?: ResumeFormat
       confirmed_phrases?: string[]
       confirmed_themes?: string[]
       module_augmentations?: Record<string, string>
