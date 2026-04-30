@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 type BetaRequest = {
   id: string
@@ -24,6 +24,11 @@ export function BetaRequestsPanel({
   const [loading, setLoading] = useState<string | null>(null) // request_id being processed
   const [error, setError] = useState<Record<string, string>>({})
   const [codesLeft, setCodesLeft] = useState(availableCodes)
+
+  // Sync when parent re-renders after router.refresh() in BetaCodeGenerator
+  useEffect(() => {
+    setCodesLeft(availableCodes)
+  }, [availableCodes])
 
   const sendInvite = async (requestId: string) => {
     setLoading(requestId)

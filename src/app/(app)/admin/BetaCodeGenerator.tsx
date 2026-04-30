@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 export function BetaCodeGenerator() {
   const [count, setCount] = useState(10)
@@ -9,6 +10,7 @@ export function BetaCodeGenerator() {
   const [codes, setCodes] = useState<string[]>([])
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const router = useRouter()
 
   const generate = async () => {
     setLoading(true)
@@ -24,6 +26,7 @@ export function BetaCodeGenerator() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Generation failed')
       setCodes(data.codes)
+      router.refresh() // re-fetch server data so BetaRequestsPanel sees the new codes
     } catch (e) {
       setError((e as Error).message)
     } finally {
