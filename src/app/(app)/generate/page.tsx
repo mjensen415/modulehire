@@ -258,7 +258,7 @@ export default function GeneratePage() {
     if (draft.include_skills !== undefined) setIncludeSkills(draft.include_skills as boolean)
     if (draft.skills) setSkills(draft.skills as string[])
     if (draft.include_education !== undefined) setIncludeEducation(draft.include_education as boolean)
-    if (draft.education) setEducation(draft.education as { institution: string; degree: string; year: string }[])
+    if (draft.education) setEducation(draft.education as EducationEntry[])
     // Re-fetch ranked modules if restoring past 'confirming'
     if (draft.jd_id && ['selecting', 'aligning', 'configuring'].includes(targetStep)) {
       fetch(`/api/job-descriptions/${draft.jd_id}`)

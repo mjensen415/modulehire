@@ -227,7 +227,7 @@ export default function SignIn() {
               </button>
 
               <p className="auth-legal">
-                By continuing, you agree to our <a href="#">Terms</a> and <a href="#">Privacy Policy</a>.
+                By continuing, you agree to our <Link href="/terms">Terms</Link> and <Link href="/privacy">Privacy Policy</Link>.
               </p>
             </div>
           )}
@@ -354,7 +354,7 @@ export default function SignIn() {
               )}
 
               <p className="auth-legal" style={{ marginTop: 16 }}>
-                By continuing, you agree to our <a href="#">Terms</a> and <a href="#">Privacy Policy</a>.
+                By continuing, you agree to our <Link href="/terms">Terms</Link> and <Link href="/privacy">Privacy Policy</Link>.
               </p>
             </div>
           )}

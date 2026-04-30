@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import { PlanSelect, AdminToggleButton, PurgeButton } from './UserActions';
 import { BetaCodeGenerator } from './BetaCodeGenerator';
+import { BetaRequestsPanel } from './BetaRequestsPanel';
 
 function IconShield() {
   return (
@@ -110,6 +111,19 @@ export default async function AdminPage({
   }
 
   const totalPages = Math.ceil((userCount ?? 0) / pageSize);
+
+  // Beta requests
+  const { data: betaRequests } = await adminClient
+    .from('beta_requests')
+    .select('id, email, context, marketing_opt_in, created_at, status, beta_code, invited_at')
+    .order('created_at', { ascending: false })
+
+  // Count available beta codes
+  const { count: availableCodes } = await adminClient
+    .from('beta_codes')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_active', true)
+    .is('used_at', null)
 
   // Recent beta feedback + email lookup
   const { data: feedback } = await adminClient
@@ -272,6 +286,12 @@ export default async function AdminPage({
             </table>
           </div>
         </div>
+        {/* BETA REQUESTS */}
+        <BetaRequestsPanel
+          initialRequests={betaRequests ?? []}
+          availableCodes={availableCodes ?? 0}
+        />
+
         {/* BETA CODE GENERATOR */}
         <BetaCodeGenerator />
 
