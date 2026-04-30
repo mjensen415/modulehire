@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, KeyboardEvent, useCallback } from 'react'
+import { useState, useEffect, useRef, KeyboardEvent, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import ScoreGauge from '@/components/ScoreGauge'
 import { isAtFreeLimit } from '@/lib/plan'
@@ -176,8 +176,11 @@ export default function GeneratePage() {
   const [savedToLibrary, setSavedToLibrary] = useState(false)
   const [showOveragePrompt, setShowOveragePrompt] = useState(false)
   const [overageCheckoutLoading, setOverageCheckoutLoading] = useState(false)
+  const [hasDraft, setHasDraft] = useState(false)
+  const [draftRestored, setDraftRestored] = useState(false)
   const skillInputRef = useRef<HTMLInputElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchParams = useSearchParams()
 
   // Pre-load JD if ?jd_id= param is present (e.g. from "Regenerate" on My Resumes)
@@ -215,6 +218,115 @@ export default function GeneratePage() {
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // ── Draft: load on mount ────────────────────────────────────────────────────
+  // Only load if no ?jd_id= param (that flow takes precedence)
+  useEffect(() => {
+    if (searchParams.get('jd_id')) return
+    fetch('/api/draft-generation')
+      .then(r => r.json())
+      .then(({ draft }) => {
+        if (!draft) return
+        // Don't restore to terminal states — send back to configuring
+        const safeStep: Step = draft.step === 'done' || draft.step === 'generating' ? 'configuring' : draft.step
+        // Only show the banner on 'input' step; for deeper steps, restore silently
+        if (safeStep === 'input' || safeStep === 'analyzing') {
+          setHasDraft(true)
+          return // Show banner, don't auto-restore
+        }
+        restoreDraft(draft, safeStep)
+      })
+      .catch(() => {}) // silently ignore
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function restoreDraft(draft: Record<string, unknown>, safeStep?: Step) {
+    const targetStep: Step = (safeStep ?? (draft.step as Step))
+    if (draft.jd_text) setJdText(draft.jd_text as string)
+    if (draft.confirmed_themes) setConfirmedThemes(draft.confirmed_themes as string[])
+    if (draft.confirmed_phrases) setConfirmedPhrases(draft.confirmed_phrases as string[])
+    if (draft.selected_module_ids) setSelectedIds(draft.selected_module_ids as string[])
+    if (draft.alignment_states) setAlignmentStates(draft.alignment_states as Record<string, 'accepted' | 'skipped'>)
+    if (draft.resume_format) setResumeFormat(draft.resume_format as 'classic' | 'tech' | 'combination')
+    if (draft.job_level !== undefined) setJobLevel(draft.job_level as string)
+    if (draft.pos_variant) setPosVariant(draft.pos_variant as 'A' | 'B' | 'C' | 'D')
+    if (draft.include_summary !== undefined) setIncludeSummary(draft.include_summary as boolean)
+    if (draft.summary_override !== undefined) setSummaryOverride(draft.summary_override as string)
+    if (draft.include_cover_letter !== undefined) setIncludeCoverLetter(draft.include_cover_letter as boolean)
+    if (draft.cover_letter_tone) setCoverLetterTone(draft.cover_letter_tone as 'professional' | 'warm' | 'direct')
+    if (draft.cover_letter_notes !== undefined) setCoverLetterNotes(draft.cover_letter_notes as string)
+    if (draft.include_skills !== undefined) setIncludeSkills(draft.include_skills as boolean)
+    if (draft.skills) setSkills(draft.skills as string[])
+    if (draft.include_education !== undefined) setIncludeEducation(draft.include_education as boolean)
+    if (draft.education) setEducation(draft.education as { institution: string; degree: string; year: string }[])
+    // Re-fetch ranked modules if restoring past 'confirming'
+    if (draft.jd_id && ['selecting', 'aligning', 'configuring'].includes(targetStep)) {
+      fetch(`/api/job-descriptions/${draft.jd_id}`)
+        .then(r => r.json())
+        .then(data => {
+          if (!data.error) setJdData(data.jd)
+        })
+        .catch(() => {})
+      fetch('/api/match-modules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jd_id: draft.jd_id }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (!data.error) {
+            setRankedModules(data.ranked ?? [])
+            setUnmatchedModules(data.unmatched ?? [])
+          }
+        })
+        .catch(() => {})
+    }
+    setStep(targetStep)
+    setDraftRestored(true)
+    setHasDraft(false)
+  }
+
+  // ── Draft: save on state changes (debounced 2s) ─────────────────────────────
+  // Build a serialisable snapshot of all persisted fields
+  const draftPayload = useMemo(() => ({
+    step,
+    jd_id: jdData?.jd_id ?? null,
+    jd_text: jdText,
+    selected_module_ids: selectedIds,
+    confirmed_themes: confirmedThemes,
+    confirmed_phrases: confirmedPhrases,
+    alignment_states: alignmentStates,
+    resume_format: resumeFormat,
+    job_level: jobLevel,
+    pos_variant: posVariant,
+    include_summary: includeSummary,
+    summary_override: summaryOverride,
+    include_cover_letter: includeCoverLetter,
+    cover_letter_tone: coverLetterTone,
+    cover_letter_notes: coverLetterNotes,
+    include_skills: includeSkills,
+    skills,
+    include_education: includeEducation,
+    education,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [step, jdData, jdText, selectedIds, confirmedThemes, confirmedPhrases, alignmentStates,
+      resumeFormat, jobLevel, posVariant, includeSummary, summaryOverride, includeCoverLetter,
+      coverLetterTone, coverLetterNotes, includeSkills, skills, includeEducation, education])
+
+  useEffect(() => {
+    // Don't save ephemeral / terminal states
+    if (['input', 'analyzing', 'generating', 'done'].includes(step)) return
+    if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current)
+    draftSaveTimer.current = setTimeout(() => {
+      fetch('/api/draft-generation', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draftPayload),
+      }).catch(() => {})
+    }, 2000)
+    return () => { if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftPayload])
 
   // Pre-fill contact + skills when reaching configuring step
   useEffect(() => {
@@ -582,6 +694,8 @@ export default function GeneratePage() {
       setMatchedKeywords(data.matched_keywords ?? [])
       setMissingKeywords(data.missing_keywords ?? [])
       setAtsScore(data.ats_score ?? null)
+      fetch('/api/draft-generation', { method: 'DELETE' }).catch(() => {})
+      setDraftRestored(false)
       setStep('done')
     } catch (e) {
       setErrorMessage((e as Error).message)
@@ -590,6 +704,9 @@ export default function GeneratePage() {
   }
 
   function reset() {
+    fetch('/api/draft-generation', { method: 'DELETE' }).catch(() => {})
+    setDraftRestored(false)
+    setHasDraft(false)
     setStep('input')
     setJdText('')
     setJdUrl('')
@@ -726,6 +843,37 @@ export default function GeneratePage() {
         <div className="dash-content" style={{ maxWidth: 680, margin: '0 auto', width: '100%', padding: '40px 24px' }}>
           <div className="page-title">Generate a tailored resume</div>
           <p className="page-sub" style={{ marginBottom: 24 }}>Paste a job description or paste a URL — we&apos;ll match it to your module library and build a resume.</p>
+
+          {/* Resume draft banner */}
+          {hasDraft && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 10, padding: '12px 16px', marginBottom: 20, gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--teal)', marginBottom: 2 }}>You have an unfinished resume</div>
+                <div style={{ fontSize: 12, color: 'var(--text2)' }}>Pick up where you left off, or start fresh with a new job description.</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button
+                  className="btn-ghost"
+                  style={{ fontSize: 12 }}
+                  onClick={() => {
+                    fetch('/api/draft-generation').then(r => r.json()).then(({ draft }) => {
+                      if (draft) {
+                        const safeStep: Step = draft.step === 'done' || draft.step === 'generating' ? 'configuring' : draft.step as Step
+                        restoreDraft(draft, safeStep)
+                      }
+                    })
+                  }}
+                >
+                  Resume draft
+                </button>
+                <button
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text3)', lineHeight: 1, padding: '0 2px' }}
+                  onClick={() => { setHasDraft(false); fetch('/api/draft-generation', { method: 'DELETE' }).catch(() => {}) }}
+                  aria-label="Dismiss"
+                >×</button>
+              </div>
+            </div>
+          )}
 
           {/* Tab switcher */}
           <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid var(--border2)' }}>
