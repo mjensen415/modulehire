@@ -3,8 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import { PlanSelect, AdminToggleButton, PurgeButton } from './UserActions';
-import { BetaCodeGenerator } from './BetaCodeGenerator';
-import { BetaRequestsPanel } from './BetaRequestsPanel';
+import { BetaAdminWrapper } from './BetaAdminWrapper';
 
 function IconShield() {
   return (
@@ -286,14 +285,11 @@ export default async function AdminPage({
             </table>
           </div>
         </div>
-        {/* BETA REQUESTS */}
-        <BetaRequestsPanel
+        {/* BETA REQUESTS + CODE GENERATOR */}
+        <BetaAdminWrapper
           initialRequests={betaRequests ?? []}
-          availableCodes={availableCodes ?? 0}
+          initialAvailableCodes={availableCodes ?? 0}
         />
-
-        {/* BETA CODE GENERATOR */}
-        <BetaCodeGenerator />
 
       </div>
     </>

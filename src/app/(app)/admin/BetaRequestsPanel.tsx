@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 type BetaRequest = {
   id: string
@@ -15,20 +15,16 @@ type BetaRequest = {
 
 export function BetaRequestsPanel({
   initialRequests,
-  availableCodes,
+  codesLeft,
+  onCodeUsed,
 }: {
   initialRequests: BetaRequest[]
-  availableCodes: number
+  codesLeft: number
+  onCodeUsed: () => void
 }) {
   const [requests, setRequests] = useState<BetaRequest[]>(initialRequests)
-  const [loading, setLoading] = useState<string | null>(null) // request_id being processed
+  const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState<Record<string, string>>({})
-  const [codesLeft, setCodesLeft] = useState(availableCodes)
-
-  // Sync when parent re-renders after router.refresh() in BetaCodeGenerator
-  useEffect(() => {
-    setCodesLeft(availableCodes)
-  }, [availableCodes])
 
   const sendInvite = async (requestId: string) => {
     setLoading(requestId)
@@ -50,7 +46,7 @@ export function BetaRequestsPanel({
             : r
         )
       )
-      setCodesLeft(n => Math.max(0, n - 1))
+      onCodeUsed()
     } catch (e) {
       setError(prev => ({ ...prev, [requestId]: (e as Error).message }))
     } finally {
