@@ -52,7 +52,7 @@ function renderInviteEmail(code: string): string {
         <div style="background:#0d1224;border-radius:10px;padding:22px;text-align:center;">
           <div style="font-size:32px;font-weight:700;color:#1d9e75;letter-spacing:6px;font-family:monospace;">${code}</div>
         </div>
-        <p style="color:#3d4663;margin-top:24px;">Go to <a href="https://app.modulehire.com/signin" style="color:#1d9e75;">app.modulehire.com/signin</a>, enter your code to unlock signup, upload your resume and start building.</p>
+        <p style="color:#3d4663;margin-top:24px;">Go to <a href="https://www.modulehire.com/signin" style="color:#1d9e75;">app.modulehire.com/signin</a>, enter your code to unlock signup, upload your resume and start building.</p>
         <p style="color:#7a82a0;font-size:13px;">Have feedback? Use the widget in the bottom left corner of any page.</p>
       </td></tr>
     </table>
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
   const { data: profile } = await supabase.from('users').select('is_admin').eq('id', user.id).single()
   if (!profile?.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { request_id, code: specifiedCode } = await req.json()
+  const { request_id, code: specifiedCode, resend = false } = await req.json()
   if (!request_id) return NextResponse.json({ error: 'request_id required' }, { status: 400 })
 
   const adminClient = await createAdminClient()
@@ -79,12 +79,21 @@ export async function POST(req: Request) {
   // Load the beta request
   const { data: betaRequest, error: reqErr } = await adminClient
     .from('beta_requests')
-    .select('id, email, status')
+    .select('id, email, status, beta_code')
     .eq('id', request_id)
     .single()
 
   if (reqErr || !betaRequest) return NextResponse.json({ error: 'Request not found' }, { status: 404 })
-  if (betaRequest.status === 'invited') return NextResponse.json({ error: 'Already invited' }, { status: 409 })
+  if (betaRequest.status === 'invited' && !resend) return NextResponse.json({ error: 'Already invited' }, { status: 409 })
+
+  // On resend: deactivate the old code if it hasn't been used yet
+  if (resend && betaRequest.beta_code) {
+    await adminClient
+      .from('beta_codes')
+      .update({ is_active: false })
+      .eq('code', betaRequest.beta_code)
+      .is('used_at', null)
+  }
 
   // Resolve the beta code to use
   let code: string
@@ -102,12 +111,13 @@ export async function POST(req: Request) {
     if (!codeRow) return NextResponse.json({ error: 'Code not available' }, { status: 400 })
     code = codeRow.code
   } else {
-    // Auto-pick the next available code
+    // Auto-pick the most recently created available code (avoids stale test codes)
     const { data: availableCode } = await adminClient
       .from('beta_codes')
       .select('code')
       .eq('is_active', true)
       .is('used_at', null)
+      .order('created_at', { ascending: false })
       .limit(1)
       .single()
 

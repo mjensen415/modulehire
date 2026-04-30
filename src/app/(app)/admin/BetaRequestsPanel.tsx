@@ -26,7 +26,35 @@ export function BetaRequestsPanel({
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState<Record<string, string>>({})
 
-  const sendInvite = async (requestId: string) => {
+  // Manual add form
+  const [addEmail, setAddEmail] = useState('')
+  const [addNote, setAddNote] = useState('')
+  const [addLoading, setAddLoading] = useState(false)
+  const [addError, setAddError] = useState('')
+
+  const addManually = async () => {
+    setAddError('')
+    if (!addEmail || !addEmail.includes('@')) return setAddError('Valid email required')
+    setAddLoading(true)
+    try {
+      const res = await fetch('/api/admin/beta-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: addEmail.trim(), context: addNote.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Failed to add')
+      setRequests(prev => [data.request, ...prev])
+      setAddEmail('')
+      setAddNote('')
+    } catch (e) {
+      setAddError((e as Error).message)
+    } finally {
+      setAddLoading(false)
+    }
+  }
+
+  const sendInvite = async (requestId: string, resend = false) => {
     setLoading(requestId)
     setError(prev => ({ ...prev, [requestId]: '' }))
 
@@ -34,7 +62,7 @@ export function BetaRequestsPanel({
       const res = await fetch('/api/admin/send-beta-invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ request_id: requestId }),
+        body: JSON.stringify({ request_id: requestId, resend }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Failed to send invite')
@@ -78,6 +106,43 @@ export function BetaRequestsPanel({
             {codesLeft} codes available
           </span>
         </div>
+      </div>
+
+      {/* Manual add form */}
+      <div style={{ padding: '12px 20px 16px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email</div>
+          <input
+            type="email"
+            placeholder="user@example.com"
+            value={addEmail}
+            onChange={e => { setAddEmail(e.target.value); setAddError('') }}
+            onKeyDown={e => e.key === 'Enter' && addManually()}
+            style={{ width: 220, padding: '6px 10px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 6, color: 'var(--text)', fontSize: 13 }}
+          />
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Note <span style={{ fontWeight: 400, textTransform: 'none' }}>(optional)</span></div>
+          <input
+            type="text"
+            placeholder="e.g. Friend referral"
+            value={addNote}
+            onChange={e => setAddNote(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addManually()}
+            style={{ width: 200, padding: '6px 10px', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 6, color: 'var(--text)', fontSize: 13 }}
+          />
+        </div>
+        <button
+          onClick={addManually}
+          disabled={addLoading}
+          className="btn-primary"
+          style={{ fontSize: 13, padding: '7px 16px' }}
+        >
+          {addLoading ? 'Adding…' : '+ Add to list'}
+        </button>
+        {addError && (
+          <span style={{ fontSize: 12, color: 'var(--red, #dc2626)', alignSelf: 'center' }}>{addError}</span>
+        )}
       </div>
 
       {codesLeft === 0 && (
@@ -133,14 +198,28 @@ export function BetaRequestsPanel({
                   {r.beta_code ?? '—'}
                 </td>
                 <td>
-                  {r.status === 'invited' ? (
-                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-                      {r.invited_at
-                        ? new Date(r.invited_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                        : 'Sent'}
-                    </span>
-                  ) : (
-                    <div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {r.status === 'invited' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 11, color: 'var(--text3)' }}>
+                          {r.invited_at
+                            ? new Date(r.invited_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                            : 'Sent'}
+                        </span>
+                        <button
+                          onClick={() => sendInvite(r.id, true)}
+                          disabled={loading === r.id || codesLeft === 0}
+                          style={{
+                            fontSize: 11, padding: '3px 10px', cursor: 'pointer',
+                            background: 'var(--bg2)', border: '1px solid var(--border2)',
+                            borderRadius: 5, color: 'var(--text2)',
+                            opacity: codesLeft === 0 ? 0.4 : 1,
+                          }}
+                        >
+                          {loading === r.id ? 'Sending…' : 'Resend'}
+                        </button>
+                      </div>
+                    ) : (
                       <button
                         onClick={() => sendInvite(r.id)}
                         disabled={loading === r.id || codesLeft === 0}
@@ -149,13 +228,13 @@ export function BetaRequestsPanel({
                       >
                         {loading === r.id ? 'Sending…' : 'Send invite'}
                       </button>
-                      {error[r.id] && (
-                        <div style={{ fontSize: 11, color: 'var(--red, #dc2626)', marginTop: 4 }}>
-                          {error[r.id]}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    )}
+                    {error[r.id] && (
+                      <div style={{ fontSize: 11, color: 'var(--red, #dc2626)' }}>
+                        {error[r.id]}
+                      </div>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
