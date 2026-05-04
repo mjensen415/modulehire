@@ -172,19 +172,37 @@ create trigger users_updated_at
   before update on public.users
   for each row execute function public.set_updated_at();
 
--- Auto-create user row on signup
+-- Auto-create user row on signup. Wrapped in exception handlers so OAuth
+-- (Google/LinkedIn) signups don't fail with "Database error saving new user"
+-- if the email already exists in public.users (e.g. prior email/password
+-- signup) or any other trigger-side issue occurs.
 create or replace function public.handle_new_user()
-returns trigger as $$
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
 begin
-  insert into public.users (id, email, name)
-  values (
-    new.id,
-    new.email,
-    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1))
-  );
+  begin
+    insert into public.users (id, email, name)
+    values (
+      new.id,
+      new.email,
+      coalesce(
+        new.raw_user_meta_data->>'full_name',
+        new.raw_user_meta_data->>'name',
+        split_part(coalesce(new.email, ''), '@', 1)
+      )
+    )
+    on conflict (id) do nothing;
+  exception when unique_violation then
+    null;
+  when others then
+    null;
+  end;
   return new;
 end;
-$$ language plpgsql security definer;
+$$;
 
 create trigger on_auth_user_created
   after insert on auth.users
