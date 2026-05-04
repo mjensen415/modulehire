@@ -1,8 +1,26 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 
+// Basic in-memory rate limiter (per-instance)
+const rateLimit = new Map<string, { count: number, timestamp: number }>()
+
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get('x-forwarded-for') || 'unknown'
+    const now = Date.now()
+    const windowMs = 60 * 1000 // 1 minute
+    const limit = 5 // 5 requests per minute
+
+    const current = rateLimit.get(ip)
+    if (current && (now - current.timestamp < windowMs)) {
+      if (current.count >= limit) {
+        return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 })
+      }
+      current.count++
+    } else {
+      rateLimit.set(ip, { count: 1, timestamp: now })
+    }
+
     const { email, context, marketing_opt_in } = await req.json()
 
     if (!email || !email.includes('@')) {
