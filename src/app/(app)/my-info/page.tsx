@@ -8,6 +8,7 @@ type Profile = {
   phone: string
   linkedin_url: string
   location: string
+  summary: string
 }
 
 export default function MyInfoPage() {
@@ -16,6 +17,7 @@ export default function MyInfoPage() {
   const [phone, setPhone] = useState('')
   const [linkedin, setLinkedin] = useState('')
   const [location, setLocation] = useState('')
+  const [summary, setSummary] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -30,6 +32,7 @@ export default function MyInfoPage() {
         setPhone(data.phone ?? '')
         setLinkedin(data.linkedin_url ?? '')
         setLocation(data.location ?? '')
+        setSummary(data.summary ?? '')
       })
       .catch(() => setError('Failed to load profile'))
       .finally(() => setLoading(false))
@@ -42,7 +45,7 @@ export default function MyInfoPage() {
       const res = await fetch('/api/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, linkedin_url: linkedin, location }),
+        body: JSON.stringify({ name, phone, linkedin_url: linkedin, location, summary }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Save failed')
@@ -56,8 +59,8 @@ export default function MyInfoPage() {
     }
   }
 
-  const filled = [name, phone, linkedin, location].filter(Boolean).length
-  const total = 4
+  const filled = [name, phone, linkedin, location, summary].filter(Boolean).length
+  const total = 5
 
   return (
     <>
@@ -184,6 +187,24 @@ export default function MyInfoPage() {
                 onChange={e => setLocation(e.target.value)}
                 placeholder="San Francisco, CA"
               />
+            </div>
+
+            {/* Summary */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 6, letterSpacing: '0.01em' }}>
+                Summary
+              </label>
+              <textarea
+                className="mod-edit-input"
+                style={{ width: '100%', minHeight: 110, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+                value={summary}
+                onChange={e => setSummary(e.target.value)}
+                placeholder="2-4 sentences about who you are and the kind of work you do. Auto-extracted from your most recent resume — edit any time."
+                maxLength={2000}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                Used as the opening paragraph of generated resumes. You can override it per-job in the generate flow.
+              </div>
             </div>
 
             {error && (

@@ -6,6 +6,7 @@ const ALLOWED_PATCH_FIELDS: Record<string, number> = {
   phone: 30,
   linkedin_url: 500,
   location: 200,
+  summary: 2000,
 }
 
 export async function GET() {
@@ -16,7 +17,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('users')
-      .select('name, email, phone, linkedin_url, location, plan')
+      .select('name, email, phone, linkedin_url, location, summary, plan')
       .eq('id', user.id)
       .single()
 
@@ -28,6 +29,7 @@ export async function GET() {
       phone: data.phone ?? '',
       linkedin_url: data.linkedin_url ?? '',
       location: data.location ?? '',
+      summary: data.summary ?? '',
       plan: data.plan ?? 'free',
     })
   } catch (error) {
@@ -62,7 +64,7 @@ export async function PATCH(req: Request) {
       .from('users')
       .update(update)
       .eq('id', user.id)
-      .select('name, email, phone, linkedin_url, location, plan')
+      .select('name, email, phone, linkedin_url, location, summary, plan')
       .single()
 
     if (error) throw error

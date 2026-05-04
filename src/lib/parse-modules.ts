@@ -32,6 +32,21 @@ const toArray = (v: unknown): string[] => {
   return []
 }
 
+// Strip parentheticals and split ONLY on commas. Slashes and "and"/"&" are
+// preserved because they often appear inside legitimate single-employer names
+// ("Microsoft / Yammer", "Smith & Wesson") or dual titles. The model is told
+// to never emit a comma-separated list, so this is a safety net only.
+function splitCompanyField(raw: unknown): string[] {
+  const s = String(raw ?? '').trim()
+  if (!s) return []
+  const stripped = s.replace(/\s*\([^)]*\)/g, '').trim()
+  const parts = stripped
+    .split(/\s*,\s*/)
+    .map(p => p.trim())
+    .filter(Boolean)
+  return parts.length > 0 ? parts : [stripped]
+}
+
 export async function parseModules(
   supabase: SupabaseClient,
   userId: string,
@@ -43,6 +58,15 @@ export async function parseModules(
 RULES:
 - Create one module per skill domain per job (NOT one module per job)
 - A 4-year role should produce multiple modules: each major domain separately
+- "source_company" MUST NOT be a comma-separated list of companies. If the resume groups multiple
+  distinct employers under one date range, emit one module per employer.
+  Slash-joined names like "Microsoft / Yammer" are allowed when they describe a single employer
+  (e.g. an acquired company under a parent). Acquired-by parentheticals like "(acquired by X)"
+  should be stripped — keep only the original employer name.
+- "source_role_title" should be exactly the title as written. Slash-joined dual titles are fine.
+- DO NOT emit a module for the resume's top-level Summary, Profile, Objective, or About section.
+  That content belongs on the user's profile, not in the module library — the caller extracts it
+  separately. Skip it entirely.
 - Output MUST be a raw JSON array. Start with [ and end with ]. No other text.
 
 Each module object must have exactly these keys:
@@ -83,12 +107,28 @@ JSON array:`
 
   // jsonrepair handles: trailing commas, missing quotes, truncated output, unescaped chars
   const repairedJson = jsonrepair(rawJson)
-  const modulesData: Record<string, unknown>[] = JSON.parse(repairedJson)
+  const rawModulesData: Record<string, unknown>[] = JSON.parse(repairedJson)
+
+  // Safety net: even with a strict prompt, the model occasionally emits
+  // "CompanyA, CompanyB" in source_company. Clone the module per company so
+  // each row has exactly one source_company and downstream job_experience
+  // upserts produce clean rows.
+  const modulesData: Record<string, unknown>[] = []
+  for (const m of rawModulesData) {
+    const companies = splitCompanyField(m.source_company)
+    if (companies.length <= 1) {
+      modulesData.push({ ...m, source_company: companies[0] ?? null })
+    } else {
+      for (const c of companies) {
+        modulesData.push({ ...m, source_company: c })
+      }
+    }
+  }
 
   const modulesToInsert = modulesData.map(m => ({
+    ...m,
     user_id: userId,
     source_resume_id: resumeId,
-    ...m,
     role_types:    toArray(m.role_types),
     themes:        toArray(m.themes),
     company_stage: toArray(m.company_stage),
@@ -189,33 +229,36 @@ JSON array:`
     jobSyncError = (err as Error).message
   }
 
-  // Extract contact info from the top of the resume (small, fast second call)
+  // Extract contact info + summary from the top of the resume (small fast call)
   let contact: {
     full_name: string | null
     email: string | null
     phone: string | null
     linkedin_url: string | null
     location: string | null
-  } = { full_name: null, email: null, phone: null, linkedin_url: null, location: null }
+    summary: string | null
+  } = { full_name: null, email: null, phone: null, linkedin_url: null, location: null, summary: null }
 
   try {
-    const contactPrompt = `Extract contact information from this resume.
+    const contactPrompt = `Extract contact information and the candidate's summary/objective/profile section from this resume.
 Return JSON only:
 {
   "full_name": "...",
   "email": "...",
   "phone": "...",
   "linkedin_url": "...",
-  "location": "..."
+  "location": "...",
+  "summary": "..."
 }
-Use null for any field not found.
+For "summary": include the verbatim Summary / Profile / Objective / About paragraph(s) at the top of the resume if present (typically 2-4 sentences). If there is no such section, return null. Do NOT fabricate a summary.
+Use null for any other field not found.
 
 Resume:
-${rawText.slice(0, 2000)}
+${rawText.slice(0, 3000)}
 
 JSON:`
 
-    const contactRaw = await aiComplete([{ role: 'user', content: contactPrompt }], 256)
+    const contactRaw = await aiComplete([{ role: 'user', content: contactPrompt }], 600)
     const stripped = contactRaw.replace(/```json/g, '').replace(/```/g, '').trim()
     const jsonStart = stripped.indexOf('{')
     const jsonEnd = stripped.lastIndexOf('}')
@@ -227,6 +270,9 @@ JSON:`
         phone: parsed.phone ?? null,
         linkedin_url: parsed.linkedin_url ?? null,
         location: parsed.location ?? null,
+        summary: typeof parsed.summary === 'string' && parsed.summary.trim().length > 0
+          ? parsed.summary.trim()
+          : null,
       }
     }
   } catch {

@@ -53,7 +53,7 @@ export async function POST(req: Request) {
       // Fetch existing profile to decide: auto-apply (empty profile) or let the client prompt
       const { data: existing } = await adminSb
         .from('users')
-        .select('name, email')
+        .select('name, email, summary')
         .eq('id', user.id)
         .single()
 
@@ -73,6 +73,16 @@ export async function POST(req: Request) {
           .upsert({ id: user.id, ...profileUpdate })
         if (upsertErr) console.error('Profile upsert failed:', upsertErr)
         else profileUpdated = true
+      }
+
+      // Summary: only auto-populate when the user has none saved. After that
+      // the saved summary stays put — they edit it on My Info or replace via
+      // the JD-aligned suggestion in the generate flow.
+      if (contact.summary && !existing?.summary) {
+        const { error: sumErr } = await adminSb
+          .from('users')
+          .upsert({ id: user.id, summary: contact.summary })
+        if (sumErr) console.error('Summary upsert failed:', sumErr)
       }
     }
 

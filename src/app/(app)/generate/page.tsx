@@ -137,7 +137,14 @@ export default function GeneratePage() {
   const [showUnmatched, setShowUnmatched] = useState(false)
   const [contact, setContact] = useState<Contact>({ name: '', email: '', phone: '', linkedin: '', location: '' })
   const [summaryOverride, setSummaryOverride] = useState('')
+  const [savedSummary, setSavedSummary] = useState('')
   const [includeSummary, setIncludeSummary] = useState(true)
+  const [suggestedSummary, setSuggestedSummary] = useState('')
+  const [suggestedThemes, setSuggestedThemes] = useState<string[]>([])
+  const [suggestingSummary, setSuggestingSummary] = useState(false)
+  const [suggestError, setSuggestError] = useState('')
+  const [savingSummaryDefault, setSavingSummaryDefault] = useState(false)
+  const [savedSummaryDefault, setSavedSummaryDefault] = useState(false)
   const [education, setEducation] = useState<EducationEntry[]>([])
   const [includeEducation, setIncludeEducation] = useState(false)
   const [skills, setSkills] = useState<string[]>([])
@@ -332,7 +339,7 @@ export default function GeneratePage() {
   useEffect(() => {
     if (step !== 'configuring') return
 
-    // Pre-fill contact from saved profile
+    // Pre-fill contact + summary from saved profile
     fetch('/api/me').then(r => r.json()).then(profile => {
       if (!profile.error) {
         setContact(c => ({
@@ -342,6 +349,10 @@ export default function GeneratePage() {
           linkedin: c.linkedin || profile.linkedin_url || '',
           location: c.location || profile.location || '',
         }))
+        if (profile.summary) {
+          setSavedSummary(profile.summary)
+          setSummaryOverride(prev => prev || profile.summary)
+        }
       }
     }).catch(() => {})
 
@@ -624,6 +635,55 @@ export default function GeneratePage() {
       setErrorMessage('Could not start checkout.')
     } finally {
       setOverageCheckoutLoading(false)
+    }
+  }
+
+  async function handleSuggestSummary() {
+    if (!jdData?.jd_id) return
+    setSuggestingSummary(true)
+    setSuggestError('')
+    try {
+      const res = await fetch('/api/suggest-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jd_id: jdData.jd_id,
+          current_summary: savedSummary || summaryOverride,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Failed to suggest')
+      setSuggestedSummary(data.suggested ?? '')
+      setSuggestedThemes(Array.isArray(data.themes_used) ? data.themes_used : [])
+    } catch (e) {
+      setSuggestError((e as Error).message)
+    } finally {
+      setSuggestingSummary(false)
+    }
+  }
+
+  function applySuggestion() {
+    if (!suggestedSummary) return
+    setSummaryOverride(suggestedSummary)
+  }
+
+  async function saveSuggestionAsDefault() {
+    if (!suggestedSummary) return
+    setSavingSummaryDefault(true)
+    try {
+      const res = await fetch('/api/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ summary: suggestedSummary }),
+      })
+      if (res.ok) {
+        setSavedSummary(suggestedSummary)
+        setSummaryOverride(suggestedSummary)
+        setSavedSummaryDefault(true)
+        setTimeout(() => setSavedSummaryDefault(false), 2500)
+      }
+    } finally {
+      setSavingSummaryDefault(false)
     }
   }
 
@@ -1170,14 +1230,19 @@ export default function GeneratePage() {
             )}
           </div>
 
-          {/* Right: positioning variant */}
+          {/* Right: career narrative variant */}
           <div className="col-right">
-            <div className="pos-label">Positioning</div>
+            <div
+              className="pos-label"
+              title="Pick the angle the AI should lead with when framing your resume. These are generation strategies — they don't add new content."
+            >
+              Career Narrative
+            </div>
             {([
-              { letter: 'A', name: 'Community impact' },
-              { letter: 'B', name: 'Leadership & scale' },
+              { letter: 'A', name: 'Impact-led' },
+              { letter: 'B', name: 'Scale-led' },
               { letter: 'C', name: 'Cross-functional' },
-              { letter: 'D', name: 'Technical depth' },
+              { letter: 'D', name: 'Technical-depth-led' },
             ] as const).map(v => (
               <div
                 key={v.letter}
@@ -1597,15 +1662,101 @@ export default function GeneratePage() {
                 <button className={`mod-toggle ${includeSummary ? '' : 'off'}`} onClick={() => setIncludeSummary(v => !v)} aria-label="Toggle summary" />
               </div>
               {includeSummary && (
-                <div className="mod-edit-row" style={{ marginTop: 12 }}>
-                  <label style={{ color: 'var(--text3)', fontSize: 12, marginBottom: 6, display: 'block' }}>Leave blank to let AI generate from your modules</label>
-                  <textarea
-                    className="mod-edit-textarea"
-                    rows={4}
-                    value={summaryOverride}
-                    onChange={e => setSummaryOverride(e.target.value)}
-                    placeholder="Or write your own summary to use verbatim…"
-                  />
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ color: 'var(--text3)', fontSize: 12, marginBottom: 6, display: 'block' }}>
+                    Pre-filled from your saved profile summary. Edit for this resume only, clear it to let the AI generate one, or update it permanently in My Info.
+                  </label>
+
+                  {/* Side-by-side: Saved (left) vs Suggested (right) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'stretch' }}>
+                    {/* LEFT: editable current summary */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                        {savedSummary && summaryOverride === savedSummary ? 'Your saved summary' : 'For this resume'}
+                      </div>
+                      <textarea
+                        className="mod-edit-textarea"
+                        rows={6}
+                        value={summaryOverride}
+                        onChange={e => setSummaryOverride(e.target.value)}
+                        placeholder="2-4 sentences about who you are and the kind of work you do…"
+                        style={{ minHeight: 130 }}
+                      />
+                    </div>
+
+                    {/* RIGHT: suggested */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                          Tailored to this JD
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleSuggestSummary}
+                          disabled={!jdData?.jd_id || suggestingSummary}
+                          style={{
+                            background: 'transparent',
+                            border: '1px solid var(--teal)',
+                            color: 'var(--teal)',
+                            fontSize: 11,
+                            padding: '3px 10px',
+                            borderRadius: 4,
+                            cursor: jdData?.jd_id && !suggestingSummary ? 'pointer' : 'not-allowed',
+                            opacity: jdData?.jd_id && !suggestingSummary ? 1 : 0.5,
+                          }}
+                        >
+                          {suggestingSummary ? 'Generating…' : suggestedSummary ? 'Regenerate' : 'Suggest'}
+                        </button>
+                      </div>
+                      <div
+                        style={{
+                          minHeight: 130,
+                          background: 'var(--bg3)',
+                          border: '1px solid var(--border2)',
+                          borderRadius: 6,
+                          padding: '10px 12px',
+                          fontSize: 13,
+                          lineHeight: 1.5,
+                          color: suggestedSummary ? 'var(--text)' : 'var(--text3)',
+                          fontStyle: suggestedSummary ? 'normal' : 'italic',
+                          whiteSpace: 'pre-wrap',
+                        }}
+                      >
+                        {suggestedSummary || (suggestError ? `Error: ${suggestError}` : 'Click Suggest to generate a summary tuned to this JD.')}
+                      </div>
+
+                      {suggestedSummary && suggestedThemes.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                          <div style={{ fontSize: 10, color: 'var(--text3)', alignSelf: 'center', marginRight: 4 }}>Pulled in:</div>
+                          {suggestedThemes.map(t => (
+                            <span key={t} style={{ fontSize: 10, padding: '2px 6px', background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', color: 'var(--teal)', borderRadius: 3 }}>
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {suggestedSummary && (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                          <button
+                            type="button"
+                            onClick={applySuggestion}
+                            style={{ background: 'var(--teal)', border: 'none', color: 'var(--bg)', fontSize: 11, padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}
+                          >
+                            Use this →
+                          </button>
+                          <button
+                            type="button"
+                            onClick={saveSuggestionAsDefault}
+                            disabled={savingSummaryDefault}
+                            style={{ background: 'transparent', border: '1px solid var(--border2)', color: 'var(--text2)', fontSize: 11, padding: '4px 10px', borderRadius: 4, cursor: savingSummaryDefault ? 'not-allowed' : 'pointer' }}
+                          >
+                            {savingSummaryDefault ? 'Saving…' : savedSummaryDefault ? 'Saved as default ✓' : 'Save as my default'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -1712,15 +1863,18 @@ export default function GeneratePage() {
               )}
             </div>
 
-            {/* Positioning variant */}
+            {/* Career narrative variant */}
             <div className="config-section">
-              <div className="config-section-title" style={{ marginBottom: 12 }}>Positioning variant</div>
+              <div className="config-section-title" style={{ marginBottom: 4 }}>Career Narrative</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>
+                Generation strategies — they shape how the AI frames your existing modules, not new content.
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
                 {([
-                  { letter: 'A', name: 'Community impact', desc: 'Lead with grassroots momentum and community growth' },
-                  { letter: 'B', name: 'Leadership & scale', desc: 'Lead with team building and organizational scale' },
+                  { letter: 'A', name: 'Impact-led', desc: 'Lead with grassroots momentum and community growth' },
+                  { letter: 'B', name: 'Scale-led', desc: 'Lead with team building and organizational scale' },
                   { letter: 'C', name: 'Cross-functional', desc: 'Lead with stakeholder alignment and influence' },
-                  { letter: 'D', name: 'Technical depth', desc: 'Lead with product partnership and technical knowledge' },
+                  { letter: 'D', name: 'Technical-depth-led', desc: 'Lead with product partnership and technical knowledge' },
                 ] as const).map(v => (
                   <label key={v.letter} style={{ display: 'flex', gap: 10, padding: '12px 14px', background: posVariant === v.letter ? 'var(--teal-dim)' : 'var(--surface)', border: `1px solid ${posVariant === v.letter ? 'var(--teal-glow)' : 'var(--border2)'}`, borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s' }}>
                     <input type="radio" name="variant" value={v.letter} checked={posVariant === v.letter} onChange={() => setPosVariant(v.letter)} style={{ marginTop: 2, accentColor: 'var(--teal)' }} />
