@@ -21,6 +21,7 @@ type JDData = {
   jd_id: string
   extracted_company: string | null
   extracted_role_type: string | null
+  extracted_job_title: string | null
   extracted_themes: string[]
   extracted_phrases: string[]
   extracted_seniority: string | null
@@ -151,6 +152,8 @@ export default function GeneratePage() {
   const [includeSkills, setIncludeSkills] = useState(true)
   const [skillInput, setSkillInput] = useState('')
   const [posVariant, setPosVariant] = useState<'A' | 'B' | 'C' | 'D'>('A')
+  const [jobTitle, setJobTitle] = useState('')
+  const [jobTitleSaving, setJobTitleSaving] = useState(false)
   const [jobLevel, setJobLevel] = useState('')
   const [resumeFormat, setResumeFormat] = useState<'classic' | 'tech' | 'combination'>('classic')
   const [includeCoverLetter, setIncludeCoverLetter] = useState(false)
@@ -356,6 +359,23 @@ export default function GeneratePage() {
       }
     }).catch(() => {})
 
+    // Pre-fill education from saved profile entries (only if user hasn't
+    // already added/edited rows in this session).
+    fetch('/api/education').then(r => r.json()).then(data => {
+      if (Array.isArray(data?.education) && data.education.length > 0) {
+        setEducation(prev => {
+          if (prev.length > 0) return prev
+          return data.education.map((e: { school?: string; degree?: string; field?: string; year?: string }) => ({
+            school: e.school ?? '',
+            degree: e.degree ?? '',
+            field:  e.field  ?? '',
+            year:   e.year   ?? '',
+          }))
+        })
+        setIncludeEducation(prev => prev || true)
+      }
+    }).catch(() => {})
+
     // Auto-detect job level from extracted seniority
     const seniorityMap: Record<string, string> = {
       ic: 'Associate',
@@ -368,6 +388,12 @@ export default function GeneratePage() {
     if (jdData?.extracted_seniority) {
       const mapped = seniorityMap[jdData.extracted_seniority]
       if (mapped) setJobLevel(prev => prev || mapped)
+    }
+
+    // Pre-fill the editable Job Title from the extracted value (don't clobber
+    // a user edit already in the field).
+    if (jdData?.extracted_job_title) {
+      setJobTitle(prev => prev || jdData.extracted_job_title || '')
     }
 
     // Auto-populate skills from selected modules
@@ -635,6 +661,25 @@ export default function GeneratePage() {
       setErrorMessage('Could not start checkout.')
     } finally {
       setOverageCheckoutLoading(false)
+    }
+  }
+
+  async function saveJobTitle() {
+    if (!jdData?.jd_id) return
+    const trimmed = jobTitle.trim()
+    if (trimmed === (jdData.extracted_job_title ?? '')) return
+    setJobTitleSaving(true)
+    try {
+      const res = await fetch(`/api/job-descriptions/${jdData.jd_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extracted_job_title: trimmed }),
+      })
+      if (res.ok) {
+        setJdData(d => d ? { ...d, extracted_job_title: trimmed } : d)
+      }
+    } finally {
+      setJobTitleSaving(false)
     }
   }
 
@@ -1550,6 +1595,26 @@ export default function GeneratePage() {
                 </div>
               )
             })()}
+
+            {/* Job Title — what the resume gets saved as */}
+            <div className="config-section">
+              <div className="config-section-title" style={{ marginBottom: 4 }}>Job Title</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>
+                Used as the saved resume name. Pre-filled from the JD; edit if it&apos;s wrong.
+              </div>
+              <input
+                className="mod-edit-input"
+                style={{ width: '100%' }}
+                value={jobTitle}
+                onChange={e => setJobTitle(e.target.value)}
+                onBlur={saveJobTitle}
+                placeholder={jdData?.extracted_job_title || 'e.g. Head of People'}
+                maxLength={200}
+              />
+              {jobTitleSaving && (
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Saving…</div>
+              )}
+            </div>
 
             {/* Format */}
             <div className="config-section">

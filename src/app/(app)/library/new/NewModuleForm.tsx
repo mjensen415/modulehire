@@ -104,14 +104,26 @@ export default function NewModuleForm() {
               <option value="supporting">Supporting — context, use selectively</option>
             </select>
           </div>
-          <div className="mod-edit-row">
+          <div
+            className="mod-edit-row"
+            title={
+              fields.type === 'positioning'
+                ? 'Career Narrative: modules that frame who you are and how you position yourself for a role — summaries, leadership philosophy, career narrative.'
+                : undefined
+            }
+          >
             <label>Type</label>
             <select className="mod-edit-select" value={fields.type} onChange={e => set('type', e.target.value)}>
               <option value="experience">Experience</option>
               <option value="skill">Skill</option>
               <option value="story">Story</option>
-              <option value="positioning">Positioning</option>
+              <option value="positioning">Career Narrative</option>
             </select>
+            {fields.type === 'positioning' && (
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                Modules that frame who you are and how you position yourself for a role — summaries, leadership philosophy, career narrative.
+              </div>
+            )}
           </div>
         </div>
 

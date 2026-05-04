@@ -57,6 +57,7 @@ export async function POST(req: Request) {
 Required keys:
 {
   "extracted_company": "company name or empty string if not found",
+  "extracted_job_title": "the literal job title as written in the JD (e.g. 'Head of People', 'Senior Software Engineer'). Empty string if no clear title is present.",
   "extracted_role_type": "best match from: vp-community, head-of-community, director-community, senior-manager-community, community-manager, developer-relations, developer-advocacy, developer-community-manager, community-marketing, community-ops, community-enablement, content-strategy, ic-community, software-engineer, product-manager, designer, data-scientist, marketing-manager, sales, operations, finance, hr, other",
   "extracted_themes": ["5-8 short skill or competency themes that this role requires — use plain English phrases like 'cross-functional collaboration', 'data analysis', 'team leadership', 'product strategy', 'customer success', 'technical writing', 'go-to-market', 'stakeholder management'. Choose themes that reflect the actual requirements of THIS specific job description, not a predefined list."],
   "extracted_seniority": "one of: ic, manager, senior-manager, director, vp, c-suite",
@@ -87,6 +88,9 @@ JSON:`
       .update({
         extracted_company: extracted.extracted_company,
         extracted_role_type: extracted.extracted_role_type,
+        extracted_job_title: typeof extracted.extracted_job_title === 'string'
+          ? extracted.extracted_job_title.trim().slice(0, 200)
+          : null,
         extracted_themes: extracted.extracted_themes,
         extracted_seniority: extracted.extracted_seniority,
         extracted_phrases: extracted.extracted_phrases,
@@ -100,6 +104,7 @@ JSON:`
       jd_id: updated.id,
       extracted_company: updated.extracted_company,
       extracted_role_type: updated.extracted_role_type,
+      extracted_job_title: updated.extracted_job_title,
       extracted_themes: updated.extracted_themes,
       extracted_seniority: updated.extracted_seniority,
       extracted_phrases: updated.extracted_phrases,

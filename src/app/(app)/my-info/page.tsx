@@ -11,6 +11,8 @@ type Profile = {
   summary: string
 }
 
+type EducationEntry = { school: string; degree: string; field: string; year: string }
+
 export default function MyInfoPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [name, setName] = useState('')
@@ -18,21 +20,32 @@ export default function MyInfoPage() {
   const [linkedin, setLinkedin] = useState('')
   const [location, setLocation] = useState('')
   const [summary, setSummary] = useState('')
+  const [education, setEducation] = useState<EducationEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    fetch('/api/me')
-      .then(r => r.json())
-      .then((data: Profile) => {
-        setProfile(data)
-        setName(data.name ?? '')
-        setPhone(data.phone ?? '')
-        setLinkedin(data.linkedin_url ?? '')
-        setLocation(data.location ?? '')
-        setSummary(data.summary ?? '')
+    Promise.all([
+      fetch('/api/me').then(r => r.json()),
+      fetch('/api/education').then(r => r.json()),
+    ])
+      .then(([profileData, eduData]: [Profile, { education?: EducationEntry[] }]) => {
+        setProfile(profileData)
+        setName(profileData.name ?? '')
+        setPhone(profileData.phone ?? '')
+        setLinkedin(profileData.linkedin_url ?? '')
+        setLocation(profileData.location ?? '')
+        setSummary(profileData.summary ?? '')
+        setEducation(
+          (eduData.education ?? []).map(e => ({
+            school: e.school ?? '',
+            degree: e.degree ?? '',
+            field:  e.field  ?? '',
+            year:   e.year   ?? '',
+          }))
+        )
       })
       .catch(() => setError('Failed to load profile'))
       .finally(() => setLoading(false))
@@ -42,14 +55,33 @@ export default function MyInfoPage() {
     setSaving(true)
     setError('')
     try {
-      const res = await fetch('/api/me', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, linkedin_url: linkedin, location, summary }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Save failed')
-      setProfile(p => p ? { ...p, ...data } : data)
+      const [profileRes, eduRes] = await Promise.all([
+        fetch('/api/me', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, phone, linkedin_url: linkedin, location, summary }),
+        }),
+        fetch('/api/education', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ education }),
+        }),
+      ])
+      const profileData = await profileRes.json()
+      const eduData = await eduRes.json()
+      if (!profileRes.ok) throw new Error(profileData.error ?? 'Save failed')
+      if (!eduRes.ok) throw new Error(eduData.error ?? 'Education save failed')
+      setProfile(p => p ? { ...p, ...profileData } : profileData)
+      if (Array.isArray(eduData.education)) {
+        setEducation(
+          eduData.education.map((e: EducationEntry) => ({
+            school: e.school ?? '',
+            degree: e.degree ?? '',
+            field:  e.field  ?? '',
+            year:   e.year   ?? '',
+          }))
+        )
+      }
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
     } catch (e) {
@@ -57,6 +89,16 @@ export default function MyInfoPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  function updateEducation(idx: number, patch: Partial<EducationEntry>) {
+    setEducation(es => es.map((e, i) => i === idx ? { ...e, ...patch } : e))
+  }
+  function addEducation() {
+    setEducation(es => [...es, { school: '', degree: '', field: '', year: '' }])
+  }
+  function removeEducation(idx: number) {
+    setEducation(es => es.filter((_, i) => i !== idx))
   }
 
   const filled = [name, phone, linkedin, location, summary].filter(Boolean).length
@@ -204,6 +246,104 @@ export default function MyInfoPage() {
               />
               <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
                 Used as the opening paragraph of generated resumes. You can override it per-job in the generate flow.
+              </div>
+            </div>
+
+            {/* Education */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 6, letterSpacing: '0.01em' }}>
+                Education
+              </label>
+              {education.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8, fontStyle: 'italic' }}>
+                  No education entries yet. Auto-extracted on resume upload, or add one below.
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {education.map((e, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      border: '1px solid var(--border2)',
+                      borderRadius: 6,
+                      padding: 10,
+                      background: 'var(--bg3)',
+                    }}
+                  >
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2, letterSpacing: '0.04em', textTransform: 'uppercase' }}>School</div>
+                        <input
+                          className="mod-edit-input"
+                          style={{ width: '100%' }}
+                          value={e.school}
+                          onChange={ev => updateEducation(i, { school: ev.target.value })}
+                          placeholder="Stanford University"
+                        />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Degree</div>
+                        <input
+                          className="mod-edit-input"
+                          style={{ width: '100%' }}
+                          value={e.degree}
+                          onChange={ev => updateEducation(i, { degree: ev.target.value })}
+                          placeholder="B.A."
+                        />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Field</div>
+                        <input
+                          className="mod-edit-input"
+                          style={{ width: '100%' }}
+                          value={e.field}
+                          onChange={ev => updateEducation(i, { field: ev.target.value })}
+                          placeholder="Computer Science"
+                        />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Year</div>
+                        <input
+                          className="mod-edit-input"
+                          style={{ width: '100%' }}
+                          value={e.year}
+                          onChange={ev => updateEducation(i, { year: ev.target.value })}
+                          placeholder="2018"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeEducation(i)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--rose)',
+                        fontSize: 11,
+                        marginTop: 8,
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addEducation}
+                  style={{
+                    background: 'transparent',
+                    border: '1px dashed var(--border2)',
+                    color: 'var(--text2)',
+                    fontSize: 12,
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                  }}
+                >
+                  + Add education
+                </button>
               </div>
             </div>
 

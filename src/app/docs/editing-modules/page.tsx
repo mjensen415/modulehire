@@ -26,7 +26,7 @@ export default function EditingModules() {
         <div className="callout-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="8" cy="8" r="6" /><path d="M8 5v3M8 11h.01" /></svg>
         </div>
-        <div className="callout-text"><strong>Length guide:</strong> Most modules work best at 60–120 words. Short enough to be skimmed, long enough to show depth. Positioning modules can run a little longer — up to 150 words.</div>
+        <div className="callout-text"><strong>Length guide:</strong> Most modules work best at 60–120 words. Short enough to be skimmed, long enough to show depth. Career narrative modules can run a little longer — up to 150 words.</div>
       </div>
 
       <h2>Splitting a module</h2>

@@ -185,8 +185,8 @@ export default function Modules() {
             <div className="type-icon rose">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M10 2c0 0-6 3-6 9a6 6 0 0012 0c0-6-6-9-6-9z" /></svg>
             </div>
-            <div className="type-name">Positioning</div>
-            <p className="type-desc">Your professional identity framing, with variants for different role types. Controls how you're introduced at the top of every generated resume — Community-First vs. Builder vs. Operator.</p>
+            <div className="type-name">Career Narrative</div>
+            <p className="type-desc">How you frame your professional identity, with variants for different role types. Controls how you&apos;re introduced at the top of every generated resume — Community-First vs. Builder vs. Operator.</p>
           </div>
         </div>
       </section>
@@ -200,7 +200,7 @@ export default function Modules() {
           <div className="filter-bar">
             <select className="filter-select"><option>Source Job</option><option>Fiverr 2018–2023</option><option>GitLab 2015–2018</option></select>
             <select className="filter-select"><option>Theme</option><option>community-building</option><option>developer-relations</option></select>
-            <select className="filter-select"><option>Type</option><option>Experience</option><option>Skill</option><option>Story</option><option>Positioning</option></select>
+            <select className="filter-select"><option>Type</option><option>Experience</option><option>Skill</option><option>Story</option><option>Career Narrative</option></select>
             <div className="filter-spacer"></div>
           </div>
           <div className="library-grid">

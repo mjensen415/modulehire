@@ -11,7 +11,7 @@ export default function ModuleTypes() {
         <span style={{ color: 'var(--text2)' }}>Module types</span>
       </div>
       <h1>Module types</h1>
-      <p className="docs-lead">Every module has a type that determines how it's used in the output resume. There are four types: experience, skill, story, and positioning.</p>
+      <p className="docs-lead">Every module has a type that determines how it's used in the output resume. There are four types: experience, skill, story, and career narrative.</p>
 
       <h2>Experience</h2>
       <p>The most common type. An experience module describes work you did within a specific skill domain at a specific company — what you built, ran, grew, or fixed. It reads as professional history and appears in the experience section of the generated resume.</p>
@@ -32,15 +32,15 @@ export default function ModuleTypes() {
       <p>A story module is a high-impact narrative about a specific outcome — a turnaround, a zero-to-one launch, a crisis managed well. It's more qualitative than an experience module and is written to demonstrate judgment and impact rather than list responsibilities.</p>
       <p>Story modules are especially useful for senior roles where the hiring manager wants to understand how you think and operate, not just what your job description was. They appear inline with experience, typically after the relevant experience module for the same company.</p>
 
-      <h2>Positioning</h2>
-      <p>A positioning module is your opening statement — the summary paragraph that appears at the top of the resume. Unlike the other types, you typically have just one or two of these, each representing a different career narrative angle.</p>
-      <p>Example: one positioning module framing you as a community builder who bridges technical and non-technical audiences; another framing you as a go-to-market operator who uses community as a growth channel. The matching engine selects whichever positioning best fits the role.</p>
+      <h2>Career Narrative</h2>
+      <p>A career narrative module is your opening statement — the summary paragraph that appears at the top of the resume. Unlike the other types, you typically have just one or two of these, each representing a different framing angle: how you position your personal brand, value prop, and professional identity.</p>
+      <p>Example: one career narrative module framing you as a community builder who bridges technical and non-technical audiences; another framing you as a go-to-market operator who uses community as a growth channel. The matching engine selects whichever narrative best fits the role.</p>
 
       <div className="callout amber">
         <div className="callout-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M8 2L1 14h14L8 2zM8 7v3M8 12h.01" /></svg>
         </div>
-        <div className="callout-text"><strong>Positioning modules and weight:</strong> Set your positioning modules as <strong>anchor</strong> weight if you always want one included, or <strong>strong</strong> if you want the engine to choose one only when it's a good fit. Having zero positioning modules is fine — the resume will open with your first experience section instead.</div>
+        <div className="callout-text"><strong>Career narrative modules and weight:</strong> Set them as <strong>anchor</strong> weight if you always want one included, or <strong>strong</strong> if you want the engine to choose one only when it's a good fit. Having zero career narrative modules is fine — the resume will open with your first experience section instead.</div>
       </div>
 
       <h2>Changing a module's type</h2>

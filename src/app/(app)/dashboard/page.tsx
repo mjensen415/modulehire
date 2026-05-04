@@ -85,7 +85,7 @@ function getModuleDomain(m: ModuleRecord): string {
     if (t.includes('partner')) return 'Partnerships';
     if (t.includes('brand')) return 'Brand';
   }
-  if (m.type === 'positioning') return 'Positioning';
+  if (m.type === 'positioning') return 'Career Narrative';
   if (m.type === 'skill') return 'Skill';
   return 'Experience';
 }

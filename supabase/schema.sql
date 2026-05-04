@@ -72,6 +72,7 @@ create table public.job_descriptions (
   -- Extracted by AI
   extracted_company text,
   extracted_role_type text,
+  extracted_job_title text,                       -- literal title (e.g. "Head of People")
   extracted_themes text[] not null default '{}',
   extracted_seniority text,
   extracted_phrases text[] not null default '{}', -- exact phrases to mirror
@@ -97,6 +98,20 @@ create table public.generated_resumes (
   created_at timestamptz not null default now()
 );
 
+-- Education entries on the user profile (auto-populated by the parser,
+-- editable on My Info, used as the default in the generate flow).
+create table public.education (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  school text not null default '',
+  degree text not null default '',
+  field text not null default '',
+  year text not null default '',
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- Indexes
 create index idx_modules_user_id on public.modules(user_id);
 create index idx_modules_type on public.modules(type);
@@ -107,6 +122,7 @@ create index idx_resumes_deleted_at on public.resumes(deleted_at);
 create index idx_generated_resumes_user_id on public.generated_resumes(user_id);
 create index idx_job_descriptions_user_id on public.job_descriptions(user_id);
 create index idx_generated_resumes_expires_at on public.generated_resumes(expires_at) where is_temp = true;
+create index idx_education_user_id on public.education(user_id);
 
 -- Enable RLS on all tables
 alter table public.users enable row level security;
@@ -114,6 +130,13 @@ alter table public.resumes enable row level security;
 alter table public.modules enable row level security;
 alter table public.job_descriptions enable row level security;
 alter table public.generated_resumes enable row level security;
+alter table public.education enable row level security;
+
+-- Education: user owns their entries
+create policy "education_own_select" on public.education for select using (auth.uid() = user_id);
+create policy "education_own_insert" on public.education for insert with check (auth.uid() = user_id);
+create policy "education_own_update" on public.education for update using (auth.uid() = user_id);
+create policy "education_own_delete" on public.education for delete using (auth.uid() = user_id);
 
 -- Users: own row or admin
 create policy "users_own_row" on public.users

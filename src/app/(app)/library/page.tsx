@@ -25,7 +25,7 @@ function moduleColor(m: Module) {
 
 function moduleDomain(m: Module) {
   const r = m.type
-  if (r === 'positioning') return 'Positioning'
+  if (r === 'positioning') return 'Career Narrative'
   if (r === 'skill') return 'Skill'
   const themes = m.themes ?? []
   if (themes.some(t => t.includes('community') || t.includes('devrel'))) return 'DevRel'

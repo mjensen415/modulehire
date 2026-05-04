@@ -48,7 +48,7 @@ export default function Docs() {
         <div className="step-block-num">4</div>
         <div className="step-block-body">
           <h3>Review module selection</h3>
-          <p>The module selection screen shows your library ranked by match score. Toggle modules in or out of the stack. Choose a positioning variant that fits the role, and lock any anchor modules you always want included.</p>
+          <p>The module selection screen shows your library ranked by match score. Toggle modules in or out of the stack. Choose a career narrative variant that fits the role, and lock any anchor modules you always want included.</p>
         </div>
       </div>
 
@@ -69,7 +69,7 @@ export default function Docs() {
 
       <h2>What gets generated</h2>
       <p>The output resume includes a header with your name and contact info (pulled from the source resume), followed by sections for each selected module. Sections are ordered by match score — highest-scoring modules appear first.</p>
-      <p>The positioning module (if selected) sets the opening summary paragraph. Without one, the resume opens directly with experience.</p>
+      <p>The career narrative module (if selected) sets the opening summary paragraph. Without one, the resume opens directly with experience.</p>
 
       <div className="note-box">
         <div className="note-label">Coming soon</div>

@@ -229,7 +229,8 @@ JSON array:`
     jobSyncError = (err as Error).message
   }
 
-  // Extract contact info + summary from the top of the resume (small fast call)
+  // Extract contact info + summary + education from the resume (small fast call)
+  type EducationEntry = { school: string; degree: string; field: string; year: string }
   let contact: {
     full_name: string | null
     email: string | null
@@ -237,10 +238,11 @@ JSON array:`
     linkedin_url: string | null
     location: string | null
     summary: string | null
-  } = { full_name: null, email: null, phone: null, linkedin_url: null, location: null, summary: null }
+    education: EducationEntry[]
+  } = { full_name: null, email: null, phone: null, linkedin_url: null, location: null, summary: null, education: [] }
 
   try {
-    const contactPrompt = `Extract contact information and the candidate's summary/objective/profile section from this resume.
+    const contactPrompt = `Extract contact information, the candidate's summary section, and the education section from this resume.
 Return JSON only:
 {
   "full_name": "...",
@@ -248,22 +250,47 @@ Return JSON only:
   "phone": "...",
   "linkedin_url": "...",
   "location": "...",
-  "summary": "..."
+  "summary": "...",
+  "education": [
+    { "school": "...", "degree": "...", "field": "...", "year": "..." }
+  ]
 }
 For "summary": include the verbatim Summary / Profile / Objective / About paragraph(s) at the top of the resume if present (typically 2-4 sentences). If there is no such section, return null. Do NOT fabricate a summary.
+For "education":
+  - Return an array (empty array [] if no education section).
+  - "school" is the institution name (e.g. "Stanford University").
+  - "degree" is the degree name (e.g. "B.A.", "MBA", "Ph.D."). Empty string if none stated.
+  - "field" is the major / area of study (e.g. "Computer Science"). Empty string if none stated.
+  - "year" is the graduation year or year range as written (e.g. "2018", "2014-2018"). Empty string if none stated.
+  - Do NOT fabricate entries. Only include entries actually present in the resume.
 Use null for any other field not found.
 
 Resume:
-${rawText.slice(0, 3000)}
+${rawText.slice(0, 4000)}
 
 JSON:`
 
-    const contactRaw = await aiComplete([{ role: 'user', content: contactPrompt }], 600)
+    const contactRaw = await aiComplete([{ role: 'user', content: contactPrompt }], 1000)
     const stripped = contactRaw.replace(/```json/g, '').replace(/```/g, '').trim()
     const jsonStart = stripped.indexOf('{')
     const jsonEnd = stripped.lastIndexOf('}')
     if (jsonStart !== -1 && jsonEnd !== -1) {
       const parsed = JSON.parse(jsonrepair(stripped.slice(jsonStart, jsonEnd + 1)))
+      const educationRaw = Array.isArray(parsed.education) ? parsed.education : []
+      const education: EducationEntry[] = educationRaw
+        .map((e: unknown): EducationEntry | null => {
+          if (!e || typeof e !== 'object') return null
+          const r = e as Record<string, unknown>
+          const school = typeof r.school === 'string' ? r.school.trim() : ''
+          const degree = typeof r.degree === 'string' ? r.degree.trim() : ''
+          const field  = typeof r.field  === 'string' ? r.field.trim()  : ''
+          const year   = typeof r.year   === 'string' ? r.year.trim()   : ''
+          if (!school && !degree && !field && !year) return null
+          return { school, degree, field, year }
+        })
+        .filter((e: EducationEntry | null): e is EducationEntry => e !== null)
+        .slice(0, 20)
+
       contact = {
         full_name: parsed.full_name ?? null,
         email: parsed.email ?? null,
@@ -273,6 +300,7 @@ JSON:`
         summary: typeof parsed.summary === 'string' && parsed.summary.trim().length > 0
           ? parsed.summary.trim()
           : null,
+        education,
       }
     }
   } catch {

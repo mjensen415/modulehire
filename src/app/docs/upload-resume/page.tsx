@@ -45,7 +45,7 @@ export default function UploadResume() {
         <div className="step-block-num">3</div>
         <div className="step-block-body">
           <h3>Tagging and classification</h3>
-          <p>Each module is automatically tagged with a type (experience, skill, story, or positioning), a weight (anchor, strong, or supporting), and a set of themes used during matching. You can review and adjust all of these in the module editor.</p>
+          <p>Each module is automatically tagged with a type (experience, skill, story, or career narrative), a weight (anchor, strong, or supporting), and a set of themes used during matching. You can review and adjust all of these in the module editor.</p>
         </div>
       </div>
 

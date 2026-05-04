@@ -362,7 +362,7 @@ export default function ModuleReview() {
             <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>By type</div>
             {(['experience', 'skill', 'story', 'positioning'] as const).map(t => (
               <div key={t} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
-                <span style={{ color: 'var(--text2)' }}>{t}</span>
+                <span style={{ color: 'var(--text2)' }}>{t === 'positioning' ? 'career narrative' : t}</span>
                 <span style={{ color: 'var(--text)', fontWeight: 700, fontFamily: 'var(--mono)' }}>{typeCounts[t] ?? 0}</span>
               </div>
             ))}
@@ -391,7 +391,7 @@ export default function ModuleReview() {
             {active.length >= 15
               ? `Strong library — ${active.length} modules across ${companies.length} companies.`
               : active.length >= 8
-              ? `Good start — ${active.length} modules. Consider adding positioning or skill modules.`
+              ? `Good start — ${active.length} modules. Consider adding career narrative or skill modules.`
               : `${active.length} modules so far. Most resumes produce 10–20.`}
           </div>
         </div>

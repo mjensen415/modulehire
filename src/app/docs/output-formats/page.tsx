@@ -30,7 +30,7 @@ export default function OutputFormats() {
       <h2>What's included in the output</h2>
       <p>The generated resume contains:</p>
       <p><strong>Header</strong> — Your name, current or most recent job title, and contact information pulled from the source resume. Review this — the parser sometimes misses email or phone if they were formatted unusually.</p>
-      <p><strong>Summary</strong> — If a positioning module was included in the stack, it appears here as a 2–3 sentence opening. Otherwise this section is omitted.</p>
+      <p><strong>Summary</strong> — If a career narrative module was included in the stack, it appears here as a 2–3 sentence opening. Otherwise this section is omitted.</p>
       <p><strong>Experience sections</strong> — One section per module, ordered by match score. Each section includes the module title as a heading, followed by the module content. The source company and dates appear as a subheading.</p>
       <p><strong>Skills section</strong> — Populated from any skill-type modules in the stack.</p>
       <p><strong>Education</strong> — Included if the source resume contained education information that was parsed into a module.</p>

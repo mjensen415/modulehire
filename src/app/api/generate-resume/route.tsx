@@ -708,7 +708,11 @@ export async function POST(req: Request) {
 
     const compactInstruction = ''
 
-    const roleTitle = jd.extracted_role_type ?? 'Resume'
+    // Prefer the literal job title (e.g. "Head of People") over the role-type
+    // category slug ("vp-community"). Fall back to role_type → "Resume".
+    const roleTitle = (jd.extracted_job_title && String(jd.extracted_job_title).trim())
+      || jd.extracted_role_type
+      || 'Resume'
     const resumeTitle = `${roleTitle} - ${contact.name}`
     const docxFilename = `${resumeTitle}.docx`
 

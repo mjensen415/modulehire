@@ -84,6 +84,27 @@ export async function POST(req: Request) {
           .upsert({ id: user.id, summary: contact.summary })
         if (sumErr) console.error('Summary upsert failed:', sumErr)
       }
+
+      // Education: only auto-populate on the first upload (when there are no
+      // existing entries). After that we don't touch the user's saved list.
+      if (Array.isArray(contact.education) && contact.education.length > 0) {
+        const { count: existingEduCount } = await adminSb
+          .from('education')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+        if ((existingEduCount ?? 0) === 0) {
+          const rows = contact.education.map((e, i) => ({
+            user_id: user.id,
+            school: e.school,
+            degree: e.degree,
+            field:  e.field,
+            year:   e.year,
+            sort_order: i,
+          }))
+          const { error: eduErr } = await adminSb.from('education').insert(rows)
+          if (eduErr) console.error('Education insert failed:', eduErr)
+        }
+      }
     }
 
     await supabase.from('usage_events').insert({ user_id: user.id, action: 'upload_resume' })

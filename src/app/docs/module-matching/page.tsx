@@ -33,14 +33,14 @@ export default function ModuleMatching() {
       <p><strong>Check the JD extraction.</strong> If the extracted themes don't match what the role is actually about, the scores will be off across the board. Go back to the JD review screen and correct the themes before re-running.</p>
       <p><strong>Adjust weight.</strong> If a module is consistently left out of stacks where it belongs, raise it from supporting to strong, or from strong to anchor.</p>
 
-      <h2>Positioning variant</h2>
-      <p>After reviewing the stack, you'll choose a positioning variant — A, B, or C. These correspond to different opening summary frames for the resume. Variant A leads with scope and scale. Variant B leads with methodology and approach. Variant C leads with domain expertise. Choose whichever angle best fits the specific role and company.</p>
+      <h2>Career narrative variant</h2>
+      <p>After reviewing the stack, you&apos;ll choose a career narrative variant — A, B, C, or D. These correspond to different opening summary frames for the resume: impact-led, scale-led, cross-functional, or technical-depth-led. Choose whichever angle best fits the specific role and company.</p>
 
       <div className="callout amber">
         <div className="callout-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M8 2L1 14h14L8 2zM8 7v3M8 12h.01" /></svg>
         </div>
-        <div className="callout-text"><strong>No positioning module?</strong> If your library has no positioning modules, the variant selector has no effect and the resume opens directly with the first experience section. Add a positioning module to your library to unlock this feature.</div>
+        <div className="callout-text"><strong>No career narrative module?</strong> If your library has no career narrative modules, the variant selector has no effect and the resume opens directly with the first experience section. Add one to your library to unlock this feature.</div>
       </div>
 
       <h2>Re-running matching</h2>
