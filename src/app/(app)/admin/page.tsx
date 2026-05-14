@@ -94,14 +94,13 @@ export default async function AdminPage({
     moduleCountMap[m.user_id] = (moduleCountMap[m.user_id] ?? 0) + 1;
   }
 
-  // Per-user resume counts this month
+  // Per-user resume counts (all-time)
   const { data: resumeCounts } = userIds.length > 0
     ? await adminClient
         .from('usage_events')
         .select('user_id')
         .in('user_id', userIds)
         .eq('action', 'generate_resume')
-        .gte('created_at', monthStart.toISOString())
     : { data: [] as Array<{ user_id: string }> };
 
   const resumeCountMap: Record<string, number> = {};
@@ -189,7 +188,7 @@ export default async function AdminPage({
                   <th>Plan</th>
                   <th>Admin</th>
                   <th>Modules</th>
-                  <th>Resumes/mo</th>
+                  <th>Resumes</th>
                   <th>Joined</th>
                   <th>Actions</th>
                 </tr>
