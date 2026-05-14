@@ -1875,7 +1875,21 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
 
   /* PRICING CARDS */
   .pricing-section { padding: 20px 40px 100px; }
-  .pricing-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; max-width: 1240px; margin: 0 auto; align-items: start; }
+  .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 1100px; margin: 0 auto; align-items: start; }
+  .price-card-free {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 2rem;
+    margin: 0 auto 16px;
+    max-width: 1100px;
+  }
+  .free-card-left { min-width: 200px; flex-shrink: 0; }
+  .free-card-divider { width: 1px; align-self: stretch; background: var(--border); }
+  .free-features-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; flex: 1; margin-bottom: 0; }
+  .feature-dot-muted { background: var(--text3) !important; opacity: 0.4; }
+  .toggle-active { font-size: 12px; padding: 4px 12px; border-radius: 20px; border: none; background: var(--teal); color: #fff; cursor: pointer; font-family: var(--font); }
+  .toggle-inactive { font-size: 12px; padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text2); cursor: pointer; font-family: var(--font); }
   .price-card { background: var(--surface); border: 1px solid var(--border2); border-radius: 14px; padding: 36px 32px; position: relative; }
   .price-card.starter { border-color: oklch(0.65 0.20 195 / 0.35); }
   .price-card.pro { border-color: var(--teal-glow); box-shadow: 0 0 0 1px var(--teal-glow), 0 24px 64px oklch(0.65 0.20 195 / 0.15); }
@@ -1913,9 +1927,6 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
   .footer-links a:hover { color: var(--text2); }
   .footer-copy { font-size: 12px; color: var(--text3); font-family: var(--mono); }
 
-  @media (max-width: 1100px) {
-    .pricing-grid { grid-template-columns: repeat(2, 1fr); max-width: 720px; }
-  }
   @media (max-width: 900px) {
     nav { padding: 0 20px; }
     .nav-links { display: none; }
@@ -1925,6 +1936,9 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
   }
   @media (max-width: 768px) {
     .pricing-grid { grid-template-columns: 1fr !important; max-width: 420px; }
+    .price-card-free { flex-direction: column; align-items: stretch; gap: 16px; }
+    .free-card-divider { display: none; }
+    .free-features-grid { grid-template-columns: 1fr; }
   }
 
 /* =========================================

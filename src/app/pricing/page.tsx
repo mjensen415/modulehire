@@ -16,42 +16,47 @@ function Spinner() {
 }
 
 export default function Pricing() {
-  const [loading, setLoading] = useState<Record<string, boolean>>({})
-  const [proInterval, setProInterval] = useState<'monthly' | 'annual'>('monthly')
+  const [upgrading, setUpgrading] = useState<Record<string, boolean>>({})
+  const [interval, setInterval] = useState<'monthly' | 'annual'>('monthly')
 
-  async function postCheckout(key: string, body: Record<string, unknown>) {
-    setLoading(prev => ({ ...prev, [key]: true }))
+  async function handleUpgrade(plan: 'pro', intervalArg: 'monthly' | 'annual') {
+    const key = `${plan}-${intervalArg}`
+    setUpgrading(prev => ({ ...prev, [key]: true }))
     try {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ plan, interval: intervalArg }),
       })
-      if (res.status === 401) {
-        window.location.href = '/signin?next=/pricing'
-        return
-      }
+      if (res.status === 401) { window.location.href = '/signin?next=/pricing'; return }
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Something went wrong')
       if (data.url) window.location.href = data.url
     } catch (e) {
       alert((e as Error).message ?? 'Could not start checkout.')
     } finally {
-      setLoading(prev => ({ ...prev, [key]: false }))
+      setUpgrading(prev => ({ ...prev, [key]: false }))
     }
   }
 
-  function handleOneTime(product: 'single' | 'pack') {
-    return postCheckout(`product-${product}`, { product })
+  async function handleOneTime(product: 'single' | 'pack') {
+    setUpgrading(prev => ({ ...prev, [product]: true }))
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product }),
+      })
+      if (res.status === 401) { window.location.href = '/signin?next=/pricing'; return }
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Something went wrong')
+      if (data.url) window.location.href = data.url
+    } catch (e) {
+      alert((e as Error).message ?? 'Could not start checkout.')
+    } finally {
+      setUpgrading(prev => ({ ...prev, [product]: false }))
+    }
   }
-
-  function handleUpgrade(plan: 'pro', interval: 'monthly' | 'annual') {
-    return postCheckout(`${plan}-${interval}`, { plan, interval })
-  }
-
-  const singleLoading = !!loading['product-single']
-  const packLoading = !!loading['product-pack']
-  const proLoading = !!loading[`pro-${proInterval}`]
 
   return (
     <>
@@ -65,32 +70,42 @@ export default function Pricing() {
       </section>
 
       <section className="pricing-section">
-        <div className="pricing-grid">
 
-          {/* FREE */}
-          <div className="price-card">
+        {/* FREE — full width horizontal banner */}
+        <div className="price-card price-card-free">
+          <div className="free-card-left">
             <div className="plan-name">Free</div>
             <div className="plan-price">
               <span className="price-amount">$0</span>
               <span className="price-period">/ forever</span>
             </div>
-            <div className="price-alt">Upload and preview — no credit card required</div>
-            <ul className="features-list">
-              <li><span className="feature-dot"></span>Upload 1 resume</li>
-              <li><span className="feature-dot"></span>Auto-parsed module library (up to 20 modules)</li>
-              <li><span className="feature-dot"></span>Full resume builder experience</li>
-              <li><span className="feature-dot"></span>Preview your generated resume</li>
-              <li><span className="feature-dot"></span>Download from $9 per resume</li>
-            </ul>
-            <Link href="/signin" className="btn-secondary" style={{ textDecoration: 'none' }}>Get started free</Link>
+            <div className="price-alt">No credit card required</div>
+            <Link href="/signin" className="btn-secondary" style={{ textDecoration: 'none', display: 'inline-block', marginTop: 12 }}>
+              Get started free
+            </Link>
           </div>
+          <div className="free-card-divider" />
+          <ul className="features-list free-features-grid">
+            <li><span className="feature-dot"></span>Upload 1 resume</li>
+            <li><span className="feature-dot"></span>Auto-parsed module library</li>
+            <li><span className="feature-dot"></span>Up to 20 modules</li>
+            <li><span className="feature-dot"></span>Full resume builder experience</li>
+            <li><span className="feature-dot"></span>Preview your generated resume</li>
+            <li><span className="feature-dot feature-dot-muted"></span>
+              <span style={{ color: 'var(--text3)' }}>Download from $9 per resume</span>
+            </li>
+          </ul>
+        </div>
 
-          {/* SINGLE RESUME */}
+        {/* PAID — 3 column grid */}
+        <div className="pricing-grid">
+
+          {/* SINGLE */}
           <div className="price-card">
-            <div className="plan-name">Single Resume</div>
+            <div className="plan-name">Single resume</div>
             <div className="plan-price">
               <span className="price-amount">$9</span>
-              <span className="price-period">one-time</span>
+              <span className="price-period"> one-time</span>
             </div>
             <div className="price-alt">One credit, no subscription</div>
             <ul className="features-list">
@@ -103,20 +118,20 @@ export default function Pricing() {
               type="button"
               className="btn-secondary"
               onClick={() => handleOneTime('single')}
-              disabled={singleLoading}
-              style={{ cursor: singleLoading ? 'default' : 'pointer', opacity: singleLoading ? 0.7 : 1 }}
+              disabled={!!upgrading['single']}
+              style={{ cursor: upgrading['single'] ? 'default' : 'pointer', opacity: upgrading['single'] ? 0.7 : 1 }}
             >
-              {singleLoading ? <><Spinner />Starting checkout…</> : 'Buy one resume'}
+              {upgrading['single'] ? <><Spinner />Starting checkout…</> : 'Buy one resume'}
             </button>
           </div>
 
           {/* 5-PACK */}
           <div className="price-card">
-            <div className="popular-badge">Best value</div>
-            <div className="plan-name">5-Pack</div>
+            <div className="popular-badge" style={{ background: 'var(--teal)', color: '#fff' }}>Best value</div>
+            <div className="plan-name">5-pack</div>
             <div className="plan-price">
               <span className="price-amount">$29</span>
-              <span className="price-period">one-time</span>
+              <span className="price-period"> one-time</span>
             </div>
             <div className="price-alt">~$5.80 per resume</div>
             <ul className="features-list">
@@ -130,10 +145,10 @@ export default function Pricing() {
               type="button"
               className="btn-secondary"
               onClick={() => handleOneTime('pack')}
-              disabled={packLoading}
-              style={{ cursor: packLoading ? 'default' : 'pointer', opacity: packLoading ? 0.7 : 1 }}
+              disabled={!!upgrading['pack']}
+              style={{ cursor: upgrading['pack'] ? 'default' : 'pointer', opacity: upgrading['pack'] ? 0.7 : 1 }}
             >
-              {packLoading ? <><Spinner />Starting checkout…</> : 'Buy 5-pack'}
+              {upgrading['pack'] ? <><Spinner />Starting checkout…</> : 'Buy 5-pack'}
             </button>
           </div>
 
@@ -141,28 +156,24 @@ export default function Pricing() {
           <div className="price-card pro">
             <div className="popular-badge">Most popular</div>
             <div className="plan-name">Pro</div>
-            <div className="plan-price">
-              <span className="price-amount">{proInterval === 'monthly' ? '$19' : '$99'}</span>
-              <span className="price-period">{proInterval === 'monthly' ? '/ month' : '/ year'}</span>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+              <button
+                type="button"
+                onClick={() => setInterval('monthly')}
+                className={interval === 'monthly' ? 'toggle-active' : 'toggle-inactive'}
+              >Monthly</button>
+              <button
+                type="button"
+                onClick={() => setInterval('annual')}
+                className={interval === 'annual' ? 'toggle-active' : 'toggle-inactive'}
+              >Annual <span style={{ color: 'var(--teal)', marginLeft: 2 }}>save $29</span></button>
             </div>
-            <div className="price-alt" style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-start' }}>
-              <button
-                type="button"
-                onClick={() => setProInterval('monthly')}
-                className={proInterval === 'monthly' ? 'btn-primary' : 'btn-ghost'}
-                style={{ fontSize: 11, padding: '3px 8px', width: 'auto', display: 'inline-block' }}
-              >
-                Monthly
-              </button>
-              <button
-                type="button"
-                onClick={() => setProInterval('annual')}
-                className={proInterval === 'annual' ? 'btn-primary' : 'btn-ghost'}
-                style={{ fontSize: 11, padding: '3px 8px', width: 'auto', display: 'inline-block' }}
-              >
-                Annual
-              </button>
-              {proInterval === 'annual' && <strong style={{ marginLeft: 4, fontSize: 11 }}>save $29</strong>}
+            <div className="plan-price">
+              <span className="price-amount">{interval === 'monthly' ? '$19' : '$99'}</span>
+              <span className="price-period">{interval === 'monthly' ? '/ month' : '/ year'}</span>
+            </div>
+            <div className="price-alt">
+              {interval === 'monthly' ? '$99/year billed annually' : '~$8.25/month'}
             </div>
             <ul className="features-list">
               <li><span className="feature-dot"></span>Unlimited tailored resumes</li>
@@ -176,11 +187,11 @@ export default function Pricing() {
             <button
               type="button"
               className="btn-primary"
-              onClick={() => handleUpgrade('pro', proInterval)}
-              disabled={proLoading}
-              style={{ cursor: proLoading ? 'default' : 'pointer', opacity: proLoading ? 0.7 : 1 }}
+              onClick={() => handleUpgrade('pro', interval)}
+              disabled={!!upgrading[`pro-${interval}`]}
+              style={{ cursor: upgrading[`pro-${interval}`] ? 'default' : 'pointer', opacity: upgrading[`pro-${interval}`] ? 0.7 : 1 }}
             >
-              {proLoading ? <><Spinner />Starting checkout…</> : 'Start Pro'}
+              {upgrading[`pro-${interval}`] ? <><Spinner />Starting checkout…</> : 'Start Pro'}
             </button>
           </div>
 
@@ -189,11 +200,10 @@ export default function Pricing() {
 
       <section className="faq-section">
         <h2 className="section-headline">Questions about pricing</h2>
-        <FaqItem question="Do resume credits expire?" answer="No — credits from single and pack purchases never expire. Use them whenever you're ready." />
-        <FaqItem question="Can I mix credits and a subscription?" answer="Yes. If you have credits and upgrade to Pro, your credits stay in your account." />
+        <FaqItem question="Do credits expire?" answer="No. Credits from single and 5-pack purchases never expire. Use them whenever you're ready." />
+        <FaqItem question="Can I preview before I pay?" answer="Yes — upload your resume, build your module library, and generate a full preview for free. You only pay when you're ready to download." />
+        <FaqItem question="Can I mix credits and a subscription?" answer="Yes. Any unused credits stay in your account if you subscribe to Pro." />
         <FaqItem question="Can I upgrade or downgrade later?" answer="Yes — any time. Your module library is fully preserved when you change plans. All modules, edits, and settings carry over automatically." />
-        <FaqItem question="What happens to my files if I downgrade?" answer="Files are archived for 30 days after a downgrade. You can re-download any previously generated resumes during that window. After 30 days, stored files are removed — but your modules always remain." />
-        <FaqItem question="Is there a team plan?" answer="Coming soon — join the waitlist and we'll let you know when team accounts are available. Team plans will include shared module libraries and manager visibility into team output." />
         <FaqItem question="Do you offer refunds?" answer="If you're not satisfied within the first 7 days of a paid plan, we'll refund you — no questions asked. Email support@modulehire.com." />
       </section>
 
