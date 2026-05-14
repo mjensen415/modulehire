@@ -304,6 +304,15 @@ export default function Upload() {
   const isParsing = stage !== 'idle' && stage !== 'error'
   const isProcessing = stage === 'uploading' || stage === 'extracting' || stage === 'parsing'
 
+  // Always reset to idle on mount — handles browser Back button restoring cached
+  // page state (Next.js App Router). Without this, stage can be 'done' on return,
+  // hiding the upload zone and preventing a second upload until full page reload.
+  useEffect(() => {
+    setStage('idle')
+    setErrorMessage('')
+    setModuleCount(0)
+  }, [])
+
   function validateFile(file: File): string | null {
     const ok = file.type === 'application/pdf' ||
       file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
@@ -314,6 +323,9 @@ export default function Upload() {
   }
 
   async function handleFile(file: File) {
+    // Reset file input so the same file can trigger onChange again on next attempt
+    if (fileInputRef.current) fileInputRef.current.value = ''
+
     const err = validateFile(file)
     if (err) { setErrorMessage(err); setStage('error'); return }
 
