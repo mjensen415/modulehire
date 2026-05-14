@@ -65,28 +65,27 @@ export default function Pricing() {
       </section>
 
       <section className="pricing-section">
-        {/* ROW 1 — Free */}
-        <div className="pricing-grid" style={{ marginBottom: 24 }}>
+        <div className="pricing-grid">
+
+          {/* FREE */}
           <div className="price-card">
             <div className="plan-name">Free</div>
             <div className="plan-price">
               <span className="price-amount">$0</span>
               <span className="price-period">/ forever</span>
             </div>
-            <div className="price-alt">No credit card required</div>
+            <div className="price-alt">Upload and preview — no credit card required</div>
             <ul className="features-list">
-              <li><span className="feature-dot"></span>1 resume upload</li>
-              <li><span className="feature-dot"></span>Up to 20 modules in your library</li>
-              <li><span className="feature-dot"></span>2 tailored resumes per month</li>
-              <li><span className="feature-dot"></span>DOCX + PDF download</li>
-              <li><span className="feature-dot"></span>Paste JD input</li>
+              <li><span className="feature-dot"></span>Upload 1 resume</li>
+              <li><span className="feature-dot"></span>Auto-parsed module library (up to 20 modules)</li>
+              <li><span className="feature-dot"></span>Full resume builder experience</li>
+              <li><span className="feature-dot"></span>Preview your generated resume</li>
+              <li><span className="feature-dot"></span>Download from $9 per resume</li>
             </ul>
             <Link href="/signin" className="btn-secondary" style={{ textDecoration: 'none' }}>Get started free</Link>
           </div>
-        </div>
 
-        {/* ROW 2 — One-time purchases */}
-        <div className="pricing-grid" style={{ marginBottom: 24 }}>
+          {/* SINGLE RESUME */}
           <div className="price-card">
             <div className="plan-name">Single Resume</div>
             <div className="plan-price">
@@ -95,7 +94,7 @@ export default function Pricing() {
             </div>
             <div className="price-alt">One credit, no subscription</div>
             <ul className="features-list">
-              <li><span className="feature-dot"></span>1 tailored resume</li>
+              <li><span className="feature-dot"></span>1 tailored resume download</li>
               <li><span className="feature-dot"></span>All 6 formats (PDF + DOCX)</li>
               <li><span className="feature-dot"></span>Credits never expire</li>
               <li><span className="feature-dot"></span>Full ATS optimization</li>
@@ -111,6 +110,7 @@ export default function Pricing() {
             </button>
           </div>
 
+          {/* 5-PACK */}
           <div className="price-card">
             <div className="popular-badge">Best value</div>
             <div className="plan-name">5-Pack</div>
@@ -120,7 +120,7 @@ export default function Pricing() {
             </div>
             <div className="price-alt">~$5.80 per resume</div>
             <ul className="features-list">
-              <li><span className="feature-dot"></span>5 tailored resumes</li>
+              <li><span className="feature-dot"></span>5 tailored resume downloads</li>
               <li><span className="feature-dot"></span>All 6 formats (PDF + DOCX)</li>
               <li><span className="feature-dot"></span>Credits never expire</li>
               <li><span className="feature-dot"></span>Full ATS optimization</li>
@@ -136,23 +136,21 @@ export default function Pricing() {
               {packLoading ? <><Spinner />Starting checkout…</> : 'Buy 5-pack'}
             </button>
           </div>
-        </div>
 
-        {/* ROW 3 — Pro subscription */}
-        <div className="pricing-grid">
-          <div className="price-card pro" style={{ gridColumn: '1 / -1' }}>
+          {/* PRO */}
+          <div className="price-card pro">
             <div className="popular-badge">Most popular</div>
             <div className="plan-name">Pro</div>
             <div className="plan-price">
               <span className="price-amount">{proInterval === 'monthly' ? '$19' : '$99'}</span>
               <span className="price-period">{proInterval === 'monthly' ? '/ month' : '/ year'}</span>
             </div>
-            <div className="price-alt" style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+            <div className="price-alt" style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-start' }}>
               <button
                 type="button"
                 onClick={() => setProInterval('monthly')}
                 className={proInterval === 'monthly' ? 'btn-primary' : 'btn-ghost'}
-                style={{ fontSize: 12, padding: '4px 10px' }}
+                style={{ fontSize: 11, padding: '3px 8px', width: 'auto', display: 'inline-block' }}
               >
                 Monthly
               </button>
@@ -160,10 +158,11 @@ export default function Pricing() {
                 type="button"
                 onClick={() => setProInterval('annual')}
                 className={proInterval === 'annual' ? 'btn-primary' : 'btn-ghost'}
-                style={{ fontSize: 12, padding: '4px 10px' }}
+                style={{ fontSize: 11, padding: '3px 8px', width: 'auto', display: 'inline-block' }}
               >
-                Annual <strong style={{ marginLeft: 4 }}>save $29</strong>
+                Annual
               </button>
+              {proInterval === 'annual' && <strong style={{ marginLeft: 4, fontSize: 11 }}>save $29</strong>}
             </div>
             <ul className="features-list">
               <li><span className="feature-dot"></span>Unlimited tailored resumes</li>
@@ -184,6 +183,7 @@ export default function Pricing() {
               {proLoading ? <><Spinner />Starting checkout…</> : 'Start Pro'}
             </button>
           </div>
+
         </div>
       </section>
 

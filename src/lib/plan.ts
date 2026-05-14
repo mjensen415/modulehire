@@ -1,11 +1,14 @@
-export const FREE_LIMIT = 2
+export const FREE_LIMIT = 0  // free users get no free downloads
 
-// A user can generate if: they're pro, OR they have resume_credits > 0,
-// OR they're free and under the monthly limit.
-export function canGenerate(plan: string, monthlyCount: number, resumeCredits = 0): boolean {
+// Generation is always allowed — free users get a preview
+export function canGenerate(): boolean {
+  return true
+}
+
+// Download requires credits or pro subscription
+export function canDownload(plan: string, resumeCredits = 0): boolean {
   if (plan === 'pro') return true
-  if (resumeCredits > 0) return true
-  return monthlyCount < FREE_LIMIT
+  return resumeCredits > 0
 }
 
 export function moduleLimit(plan: string): number {

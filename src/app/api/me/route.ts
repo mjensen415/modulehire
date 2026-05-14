@@ -17,7 +17,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('users')
-      .select('name, email, phone, linkedin_url, location, summary, plan')
+      .select('name, email, phone, linkedin_url, location, summary, plan, resume_credits')
       .eq('id', user.id)
       .single()
 
@@ -31,6 +31,7 @@ export async function GET() {
       location: data.location ?? '',
       summary: data.summary ?? '',
       plan: data.plan ?? 'free',
+      resume_credits: data.resume_credits ?? 0,
     })
   } catch (error) {
     console.error('[api/me]', error)

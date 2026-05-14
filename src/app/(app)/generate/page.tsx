@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, KeyboardEvent, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import ScoreGauge from '@/components/ScoreGauge'
-import { canGenerate } from '@/lib/plan'
+import { canDownload } from '@/lib/plan'
+import PaywallModal from '@/components/PaywallModal'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -199,6 +200,9 @@ export default function GeneratePage() {
   const [savedToLibrary, setSavedToLibrary] = useState(false)
   const [showOveragePrompt, setShowOveragePrompt] = useState(false)
   const [overageCheckoutLoading, setOverageCheckoutLoading] = useState(false)
+  const [showPaywall, setShowPaywall] = useState(false)
+  const [userPlan, setUserPlan] = useState<string>('free')
+  const [resumeCredits, setResumeCredits] = useState(0)
   const [hasDraft, setHasDraft] = useState(false)
   const [draftRestored, setDraftRestored] = useState(false)
   // Building step UI state
@@ -215,6 +219,18 @@ export default function GeneratePage() {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchParams = useSearchParams()
+
+  // Load plan + credits on mount so download gating is ready before reaching done.
+  useEffect(() => {
+    fetch('/api/me')
+      .then(r => r.json())
+      .then(profile => {
+        if (profile.error) return
+        if (profile.plan) setUserPlan(profile.plan)
+        if (typeof profile.resume_credits === 'number') setResumeCredits(profile.resume_credits)
+      })
+      .catch(() => {})
+  }, [])
 
   // Pre-load JD if ?jd_id= param is present (e.g. from "Regenerate" on My Resumes)
   useEffect(() => {
@@ -460,6 +476,8 @@ export default function GeneratePage() {
           setSavedSummary(profile.summary)
           setSummaryOverride(prev => prev || profile.summary)
         }
+        if (profile.plan) setUserPlan(profile.plan)
+        if (typeof profile.resume_credits === 'number') setResumeCredits(profile.resume_credits)
       }
     }).catch(() => {})
 
@@ -927,20 +945,7 @@ export default function GeneratePage() {
     setErrorMessage('')
     setShowOveragePrompt(false)
 
-    // Gate free users at their monthly limit before kicking off generation
-    try {
-      const usageRes = await fetch('/api/usage')
-      if (usageRes.ok) {
-        const usage = await usageRes.json() as { count: number; overage_credits: number; resume_credits: number; plan: string }
-        if (!canGenerate(usage.plan, usage.count, usage.resume_credits)) {
-          setShowOveragePrompt(true)
-          return
-        }
-      }
-    } catch {
-      // Non-fatal — fall through and let the server enforce limits
-    }
-
+    // Generation is always allowed — free users get a preview, download is gated separately.
     setStep('generating')
     try {
       const orderedIds = rankedModules
@@ -1109,7 +1114,12 @@ export default function GeneratePage() {
                     minWidth: 160, overflow: 'hidden',
                   }}>
                     <button
-                      onClick={e => { e.stopPropagation(); downloadFile(generatedUrls.docx_url, generatedUrls.docx_filename); setShowDownloadMenu(false) }}
+                      onClick={e => {
+                        e.stopPropagation()
+                        setShowDownloadMenu(false)
+                        if (!canDownload(userPlan, resumeCredits)) { setShowPaywall(true); return }
+                        downloadFile(generatedUrls.docx_url, generatedUrls.docx_filename)
+                      }}
                       style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text)', fontFamily: 'var(--font)' }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg3)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'none')}
@@ -1117,7 +1127,12 @@ export default function GeneratePage() {
                       📄 Word (.docx)
                     </button>
                     <button
-                      onClick={e => { e.stopPropagation(); downloadFile(generatedUrls.pdf_url, generatedUrls.docx_filename.replace('.docx', '.pdf')); setShowDownloadMenu(false) }}
+                      onClick={e => {
+                        e.stopPropagation()
+                        setShowDownloadMenu(false)
+                        if (!canDownload(userPlan, resumeCredits)) { setShowPaywall(true); return }
+                        downloadFile(generatedUrls.pdf_url, generatedUrls.docx_filename.replace('.docx', '.pdf'))
+                      }}
                       style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text)', fontFamily: 'var(--font)' }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg3)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'none')}
@@ -2375,8 +2390,45 @@ export default function GeneratePage() {
         const VISIBLE_KW = 5
         const displayScore = atsScore ?? (totalKw > 0 ? Math.round((matchedKw.length / totalKw) * 100) : 0)
 
+        const downloadAllowed = canDownload(userPlan, resumeCredits)
+
         return (
           <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
+            <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+              {!downloadAllowed && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  background: 'var(--teal-dim, var(--surface))',
+                  border: '1px solid var(--teal-glow, var(--border2))',
+                  borderRadius: 10,
+                  padding: '12px 16px',
+                  marginBottom: 18,
+                }}>
+                  <div style={{ fontSize: 13, color: 'var(--text)' }}>
+                    Your resume preview is ready. Purchase to download.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowPaywall(true)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--teal, #14b8a6)',
+                      fontWeight: 600,
+                      fontSize: 13,
+                      cursor: 'pointer',
+                      padding: 0,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Unlock download →
+                  </button>
+                </div>
+              )}
+            </div>
             <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', maxWidth: 1100, margin: '0 auto' }}>
 
               {/* ── LEFT: preview + downloads ── */}
@@ -2517,6 +2569,8 @@ export default function GeneratePage() {
           </div>
         )
       })()}
+
+      <PaywallModal open={showPaywall} onClose={() => setShowPaywall(false)} />
     </div>
   )
 }

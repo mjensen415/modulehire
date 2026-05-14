@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
-import { canGenerate, FREE_LIMIT } from '@/lib/plan'
+// canGenerate removed — generation is always allowed; download is gated client-side via canDownload.
 import * as docx from 'docx'
 import { renderToBuffer, Document as PdfDoc, Page, Text, View } from '@react-pdf/renderer'
 import React from 'react'
@@ -999,15 +999,10 @@ export async function POST(req: Request) {
     const profileRow = profileRes.data as { plan?: string; resume_credits?: number } | null
 
     const plan = (profileRow?.plan ?? 'free') as string
-    const count = usageRow?.count ?? 0
     const resumeCredits = profileRow?.resume_credits ?? 0
+    void usageRow
 
-    if (!canGenerate(plan, count, resumeCredits)) {
-      return NextResponse.json(
-        { error: 'Generation limit reached.', code: 'LIMIT_REACHED', plan, count },
-        { status: 403 }
-      )
-    }
+    // Generation is always allowed — free users get a preview, paid users get downloads.
 
     const {
       module_ids,
@@ -1444,8 +1439,9 @@ Rules:
 
     await supabase.from('usage_events').insert({ user_id: user.id, action: 'generate_resume' })
 
-    // Consume one resume credit if the user is past the free monthly limit and not pro.
-    if (plan !== 'pro' && count >= FREE_LIMIT && resumeCredits > 0) {
+    // Consume one resume credit per generation for non-pro users with credits.
+    // Free users with 0 credits still generate (preview only) — download is gated client-side.
+    if (plan !== 'pro' && resumeCredits > 0) {
       const { error: creditError } = await supabase.rpc('increment_resume_credits', {
         p_user_id: user.id,
         p_amount: -1,
