@@ -22,24 +22,28 @@ type SizeConfig = {
   stroke: number
   fontSize: number
   labelSize: number
-  dotR: number
+  tickLen: number
 }
 
 const SIZES: Record<string, SizeConfig> = {
-  sm: { svgW: 80,  svgH: 50,  cx: 40,  cy: 44,  r: 30,  stroke: 5,  fontSize: 14, labelSize: 7,  dotR: 4 },
-  md: { svgW: 160, svgH: 100, cx: 80,  cy: 88,  r: 62,  stroke: 10, fontSize: 28, labelSize: 10, dotR: 7 },
-  lg: { svgW: 220, svgH: 130, cx: 110, cy: 118, r: 86,  stroke: 12, fontSize: 38, labelSize: 12, dotR: 9 },
+  sm: { svgW: 80,  svgH: 50,  cx: 40,  cy: 44,  r: 30,  stroke: 5,  fontSize: 14, labelSize: 7,  tickLen: 5 },
+  md: { svgW: 160, svgH: 100, cx: 80,  cy: 88,  r: 62,  stroke: 10, fontSize: 28, labelSize: 10, tickLen: 9 },
+  lg: { svgW: 220, svgH: 130, cx: 110, cy: 118, r: 86,  stroke: 12, fontSize: 38, labelSize: 12, tickLen: 12 },
 }
 
+// Updated thresholds based on ATS research:
+// 75+ = likely to get interview (Jobscan research)
+// Fair <60 · Good 60–74 · Strong 75–84 · Excellent 85+
 function scoreLabel(score: number) {
-  if (score >= 80) return 'Excellent'
+  if (score >= 85) return 'Excellent'
+  if (score >= 75) return 'Strong'
   if (score >= 60) return 'Good'
   return 'Fair'
 }
 
 function scoreColor(score: number) {
-  // Interpolate: red(0) → orange(50) → yellow(70) → teal(100)
-  if (score >= 80) return '#2dd4bf'
+  if (score >= 85) return '#2dd4bf'
+  if (score >= 75) return '#4ade80'
   if (score >= 60) return '#eab308'
   if (score >= 40) return '#f97316'
   return '#ef4444'
@@ -50,22 +54,24 @@ export default function ScoreGauge({ score, size = 'md', showLabel = true }: Sco
   const clampedScore = Math.max(0, Math.min(100, Math.round(score)))
 
   // Arc math — semicircle from left (180°) to right (0°)
-  // Full arc circumference for a half-circle = π × r
   const arcLength = Math.PI * s.r
-  // How much of the arc to fill (score 0 = none, 100 = all)
   const fillLength = (clampedScore / 100) * arcLength
-  // Gap = rest of arc
-  // strokeDasharray = "fill gap" on the arc path
 
   // Arc path: M (cx-r, cy) A r r 0 0 1 (cx+r, cy)
   const arcPath = `M ${s.cx - s.r} ${s.cy} A ${s.r} ${s.r} 0 0 1 ${s.cx + s.r} ${s.cy}`
 
-  // Dot position at the score angle
+  // Tick position at the score angle
   // angle 0 = right (score 100), angle π = left (score 0)
-  // angle = (1 - score/100) × π
-  const dotAngle = (1 - clampedScore / 100) * Math.PI
-  const dotX = s.cx + s.r * Math.cos(Math.PI - dotAngle)
-  const dotY = s.cy - s.r * Math.sin(Math.PI - dotAngle)
+  const tickAngle = (1 - clampedScore / 100) * Math.PI
+  const tickCos = Math.cos(Math.PI - tickAngle)
+  const tickSin = Math.sin(Math.PI - tickAngle)
+  // Inner and outer points of the tick line
+  const innerR = s.r - s.stroke / 2 - 1
+  const outerR = s.r + s.stroke / 2 + 2
+  const tickX1 = s.cx + innerR * tickCos
+  const tickY1 = s.cy - innerR * tickSin
+  const tickX2 = s.cx + outerR * tickCos
+  const tickY2 = s.cy - outerR * tickSin
 
   const color = scoreColor(clampedScore)
   const label = scoreLabel(clampedScore)
@@ -85,40 +91,42 @@ export default function ScoreGauge({ score, size = 'md', showLabel = true }: Sco
           <stop offset="0%"   stopColor="#ef4444" />
           <stop offset="35%"  stopColor="#f97316" />
           <stop offset="60%"  stopColor="#eab308" />
+          <stop offset="80%"  stopColor="#4ade80" />
           <stop offset="100%" stopColor="#2dd4bf" />
         </linearGradient>
       </defs>
 
-      {/* Track */}
+      {/* Track — butt linecap so rounded fill doesn't bleed past the ends */}
       <path
         d={arcPath}
         fill="none"
         stroke="var(--bg3, #1e293b)"
         strokeWidth={s.stroke}
-        strokeLinecap="round"
+        strokeLinecap="butt"
       />
 
-      {/* Gradient fill — only up to score position */}
+      {/* Gradient fill — from left up to score position */}
       {clampedScore > 0 && (
         <path
           d={arcPath}
           fill="none"
           stroke={`url(#${gradId})`}
           strokeWidth={s.stroke}
-          strokeLinecap="round"
+          strokeLinecap="butt"
           strokeDasharray={`${fillLength} ${arcLength}`}
-          // Offset so fill starts from the left (score=0 side)
           strokeDashoffset={0}
-          // The path goes left→right, so dasharray fills from left = low→high score ✓
         />
       )}
 
-      {/* White dot at score position */}
+      {/* Tick mark at score position — short perpendicular line in score color */}
       {clampedScore > 0 && clampedScore < 100 && (
-        <>
-          <circle cx={dotX} cy={dotY} r={s.dotR + 1.5} fill="var(--bg, #0f1117)" />
-          <circle cx={dotX} cy={dotY} r={s.dotR} fill="#fff" />
-        </>
+        <line
+          x1={tickX1} y1={tickY1}
+          x2={tickX2} y2={tickY2}
+          stroke="#fff"
+          strokeWidth={2}
+          strokeLinecap="round"
+        />
       )}
 
       {/* Score number */}
@@ -158,7 +166,6 @@ export default function ScoreGauge({ score, size = 'md', showLabel = true }: Sco
 
 // ─── ScoreChip ─────────────────────────────────────────────────────────────────
 // Compact inline score badge for lists/tables.
-// Shows: colored circle + number
 
 export function ScoreChip({ score }: { score: number | null | undefined }) {
   if (score == null) return null

@@ -168,7 +168,7 @@ export default function GeneratePage() {
   const [jobTitle, setJobTitle] = useState('')
   const [jobTitleSaving, setJobTitleSaving] = useState(false)
   const [jobLevel, setJobLevel] = useState('')
-  const [resumeFormat, setResumeFormat] = useState<'classic' | 'tech' | 'combination'>('classic')
+  const [resumeFormat, setResumeFormat] = useState<'classic' | 'tech' | 'combination' | 'executive' | 'minimal' | 'two-column'>('classic')
   const [includeCoverLetter, setIncludeCoverLetter] = useState(false)
   const [coverLetterTone, setCoverLetterTone] = useState<'professional' | 'warm' | 'direct'>('professional')
   const [coverLetterNotes, setCoverLetterNotes] = useState('')
@@ -375,6 +375,40 @@ export default function GeneratePage() {
     }
     return Array.from(groups.values())
   }, [rankedModules])
+
+  // ── Building step: live missing phrases (client-side "Consider Adding") ─────
+  const missingPhrases = useMemo(() => {
+    const phrases = confirmedPhrases.length > 0 ? confirmedPhrases : (jdData?.extracted_phrases ?? [])
+    if (phrases.length === 0) return []
+    // Aggregate effective content of all selected modules
+    const selectedContent = rankedModules
+      .filter(m => selectedIds.includes(m.module_id))
+      .map(m => (moduleContentOverrides[m.module_id] ?? m.content).toLowerCase())
+      .join(' ')
+    return phrases.filter(p => !selectedContent.includes(p.toLowerCase()))
+  }, [confirmedPhrases, jdData?.extracted_phrases, rankedModules, selectedIds, moduleContentOverrides])
+
+  // ── Job title coverage check ─────────────────────────────────────────────────
+  const jobTitleCovered = useMemo(() => {
+    const title = jdData?.extracted_job_title
+    if (!title) return true // nothing to check
+    const selectedContent = rankedModules
+      .filter(m => selectedIds.includes(m.module_id))
+      .map(m => (moduleContentOverrides[m.module_id] ?? m.content).toLowerCase())
+      .join(' ')
+    return selectedContent.includes(title.toLowerCase())
+  }, [jdData?.extracted_job_title, rankedModules, selectedIds, moduleContentOverrides])
+
+  // ── Estimated ATS score ───────────────────────────────────────────────────────
+  const estimatedAtsScore = useMemo(() => {
+    const phrases = confirmedPhrases.length > 0 ? confirmedPhrases : (jdData?.extracted_phrases ?? [])
+    if (phrases.length === 0) return null
+    const covered = phrases.length - missingPhrases.length
+    // Weight job title: +5 bonus points if covered, deduct if not
+    const titleBonus = jdData?.extracted_job_title ? (jobTitleCovered ? 5 : -5) : 0
+    const base = Math.round((covered / phrases.length) * 100)
+    return Math.max(0, Math.min(100, base + titleBonus))
+  }, [confirmedPhrases, jdData?.extracted_phrases, jdData?.extracted_job_title, missingPhrases.length, jobTitleCovered])
 
   // ── Building step: live theme coverage ─────────────────────────────────────
   const coveredThemes = useMemo(() => {
@@ -1301,8 +1335,76 @@ export default function GeneratePage() {
               </div>
             )}
 
+            {/* Estimated ATS score */}
+            {estimatedAtsScore !== null && (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Est. ATS score</div>
+                  <div style={{
+                    fontSize: 12, fontWeight: 700,
+                    color: estimatedAtsScore >= 85 ? 'var(--teal)' : estimatedAtsScore >= 75 ? '#4ade80' : estimatedAtsScore >= 60 ? '#eab308' : '#ef4444',
+                  }}>
+                    {estimatedAtsScore}
+                  </div>
+                </div>
+                <div style={{ height: 4, background: 'var(--bg3)', borderRadius: 999, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${estimatedAtsScore}%`,
+                    background: estimatedAtsScore >= 85 ? 'var(--teal)' : estimatedAtsScore >= 75 ? '#4ade80' : estimatedAtsScore >= 60 ? '#eab308' : '#ef4444',
+                    borderRadius: 999,
+                    transition: 'width 0.3s',
+                  }} />
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>
+                  {estimatedAtsScore >= 75 ? '✓ Above interview threshold' : 'Cover more phrases to reach 75+'}
+                </div>
+              </div>
+            )}
+
+            {/* Job title coverage check */}
+            {jdData?.extracted_job_title && (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Job title match</div>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '6px 10px', borderRadius: 7,
+                  background: jobTitleCovered ? 'var(--teal-dim)' : 'oklch(0.4 0.13 60 / 0.1)',
+                  border: `1px solid ${jobTitleCovered ? 'var(--teal-glow)' : 'oklch(0.65 0.14 60 / 0.4)'}`,
+                }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: jobTitleCovered ? 'var(--teal)' : 'oklch(0.75 0.16 60)', flex: 1, lineHeight: 1.3 }}>
+                    {jdData.extracted_job_title}
+                  </span>
+                  <span style={{ fontSize: 13, flexShrink: 0 }}>{jobTitleCovered ? '✓' : '!'}</span>
+                </div>
+                {!jobTitleCovered && (
+                  <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 5, lineHeight: 1.4 }}>
+                    Resumes with the job title get 10× more interviews. Add it to a module or your summary.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Consider adding — missing phrases */}
+            {missingPhrases.length > 0 && (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Consider adding</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                  {missingPhrases.map(p => (
+                    <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 0', borderBottom: '1px solid var(--border2)' }}>
+                      <div style={{ width: 6, height: 6, borderRadius: 999, border: '1.5px solid oklch(0.65 0.14 60 / 0.6)', flexShrink: 0 }} />
+                      <span style={{ fontSize: 11, color: 'var(--text2)', flex: 1, lineHeight: 1.3 }}>{p}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 6, lineHeight: 1.4 }}>
+                  Edit a module to weave these in — coverage updates live.
+                </div>
+              </div>
+            )}
+
             {/* Key phrases */}
-            {confirmedPhrases.length > 0 && (
+            {confirmedPhrases.length > 0 && missingPhrases.length === 0 && (
               <div style={{ marginBottom: 18 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Key phrases</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -1795,44 +1897,136 @@ export default function GeneratePage() {
                   {
                     key: 'classic' as const,
                     name: 'Classic',
-                    desc: 'Centered header, small-caps sections, Times New Roman — traditional ATS-safe',
+                    desc: 'Centered header · small-caps sections · Times New Roman',
+                    atsWarning: false,
                     preview: (
-                      <div style={{ fontSize: 9, lineHeight: 1.4, fontFamily: "'Times New Roman', serif", marginTop: 8 }}>
-                        <div style={{ textAlign: 'center', marginBottom: 4 }}>
-                          <div style={{ fontWeight: 700, fontSize: 10, letterSpacing: '0.05em', color: '#111' }}>JANE DOE</div>
-                          <div style={{ fontSize: 8, color: '#777' }}>email · phone · location</div>
+                      <div style={{ border: '0.5px solid #e5e7eb', borderRadius: 5, overflow: 'hidden', background: '#fff', marginTop: 8 }}>
+                        <div style={{ textAlign: 'center', padding: '7px 8px 5px', borderBottom: '0.5px solid #e5e7eb' }}>
+                          <div style={{ fontWeight: 700, fontSize: 9, letterSpacing: '0.05em', color: '#111', fontFamily: 'Georgia, serif' }}>JANE DOE</div>
+                          <div style={{ fontSize: 7, color: '#888', fontFamily: 'Georgia, serif', fontStyle: 'italic', marginTop: 1 }}>Senior Product Manager</div>
+                          <div style={{ fontSize: 6.5, color: '#aaa', marginTop: 1 }}>email · phone · location</div>
                         </div>
-                        <div style={{ fontWeight: 700, borderBottom: '1.5px solid #111', paddingBottom: 1, marginBottom: 2, fontSize: 8, letterSpacing: '0.06em', fontVariant: 'small-caps' }}>EXPERIENCE</div>
-                        <div style={{ fontSize: 8, color: '#333' }}>Led team of 12 across 3 regions…</div>
+                        <div style={{ padding: '5px 8px' }}>
+                          <div style={{ fontSize: 7, fontWeight: 700, fontVariant: 'small-caps', letterSpacing: '0.08em', color: '#222', borderBottom: '0.5px solid #555', paddingBottom: 1, marginBottom: 3 }}>Experience</div>
+                          <div style={{ height: 3, borderRadius: 1, background: '#d1d5db', marginBottom: 2, width: '88%' }} />
+                          <div style={{ height: 3, borderRadius: 1, background: '#e5e7eb', marginBottom: 2, width: '75%' }} />
+                          <div style={{ height: 3, borderRadius: 1, background: '#e5e7eb', width: '82%' }} />
+                        </div>
                       </div>
                     ),
                   },
                   {
                     key: 'tech' as const,
                     name: 'Tech',
-                    desc: 'Monospace accents, clean grid, GitHub-style section headers — built for engineers',
+                    desc: 'Monospace accents · GitHub-style headers · engineers',
+                    atsWarning: false,
                     preview: (
-                      <div style={{ fontSize: 9, lineHeight: 1.4, fontFamily: 'Calibri, sans-serif', marginTop: 8 }}>
-                        <div style={{ fontWeight: 700, fontSize: 11, color: '#111', marginBottom: 1 }}>Jane Doe</div>
-                        <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace', marginBottom: 5 }}>jane@email.com · github.com/jdoe</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
-                          <span style={{ fontFamily: 'monospace', fontSize: 8, color: '#1F6FEB', fontWeight: 700 }}>##</span>
-                          <span style={{ fontWeight: 700, fontSize: 8, color: '#111', letterSpacing: '0.04em' }}>EXPERIENCE</span>
+                      <div style={{ border: '0.5px solid #e5e7eb', borderRadius: 5, overflow: 'hidden', background: '#fff', marginTop: 8 }}>
+                        <div style={{ padding: '7px 8px 5px', borderBottom: '0.5px solid #e5e7eb' }}>
+                          <div style={{ fontWeight: 700, fontSize: 9.5, color: '#111', marginBottom: 1 }}>Jane Doe</div>
+                          <div style={{ fontSize: 7, color: '#1d9e75', fontFamily: 'monospace', marginBottom: 1 }}>Senior Software Engineer</div>
+                          <div style={{ fontSize: 6.5, color: '#aaa', fontFamily: 'monospace' }}>jane@email.com · github.com/jdoe</div>
                         </div>
-                        <div style={{ fontSize: 8, color: '#333', fontWeight: 700 }}>Stripe · Senior Engineer</div>
-                        <div style={{ fontSize: 8, color: '#555', fontFamily: 'monospace' }}>2021–Present</div>
+                        <div style={{ padding: '5px 8px' }}>
+                          <div style={{ fontSize: 7, fontFamily: 'monospace', color: '#1d9e75', fontWeight: 700, marginBottom: 3 }}>## Experience</div>
+                          <div style={{ height: 3, borderRadius: 1, background: '#d1d5db', marginBottom: 2, width: '85%' }} />
+                          <div style={{ height: 3, borderRadius: 1, background: '#e5e7eb', marginBottom: 2, width: '72%' }} />
+                          <div style={{ height: 3, borderRadius: 1, background: '#e5e7eb', width: '80%' }} />
+                        </div>
                       </div>
                     ),
                   },
                   {
                     key: 'combination' as const,
                     name: 'Combination',
-                    desc: 'Mauve header, skills-first layout — modules as categories, then work history',
+                    desc: 'Mauve header · skills-first · then work history',
+                    atsWarning: false,
                     preview: (
-                      <div style={{ fontSize: 9, lineHeight: 1.4, fontFamily: 'Calibri, sans-serif', marginTop: 8 }}>
-                        <div style={{ background: '#C49098', padding: '4px 6px', color: '#fff', fontWeight: 700, fontSize: 10, textAlign: 'center', marginBottom: 2 }}>Jane Doe</div>
-                        <div style={{ background: '#EDD5D7', padding: '2px 5px', fontSize: 8, color: '#3D2B2D', fontWeight: 700, marginBottom: 2 }}>RELEVANT SKILLS</div>
-                        <div style={{ fontSize: 8, color: '#555', paddingLeft: 4 }}>Community Strategy · DevRel · Leadership…</div>
+                      <div style={{ border: '0.5px solid #e5e7eb', borderRadius: 5, overflow: 'hidden', background: '#fff', marginTop: 8 }}>
+                        <div style={{ background: '#C49098', padding: '6px 8px', textAlign: 'center' }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: '#fff' }}>Jane Doe</div>
+                          <div style={{ fontSize: 6.5, color: '#F0D8DA', marginTop: 1 }}>Head of Community</div>
+                        </div>
+                        <div style={{ background: '#EDD5D7', padding: '2px 8px' }}>
+                          <div style={{ fontSize: 6.5, fontWeight: 700, color: '#7A4A4E', letterSpacing: '0.06em' }}>RELEVANT SKILLS</div>
+                        </div>
+                        <div style={{ padding: '4px 8px' }}>
+                          <div style={{ height: 3, borderRadius: 1, background: '#e5cdd0', marginBottom: 2, width: '82%' }} />
+                          <div style={{ height: 3, borderRadius: 1, background: '#eedfe1', width: '65%' }} />
+                          <div style={{ background: '#EDD5D7', padding: '2px 0', margin: '4px -8px', paddingLeft: 8 }}>
+                            <div style={{ fontSize: 6.5, fontWeight: 700, color: '#7A4A4E', letterSpacing: '0.06em' }}>WORK EXPERIENCE</div>
+                          </div>
+                          <div style={{ height: 3, borderRadius: 1, background: '#d1d5db', marginTop: 3, width: '78%' }} />
+                        </div>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'executive' as const,
+                    name: 'Executive',
+                    desc: 'Dark header · ruled sections · VP and C-suite',
+                    atsWarning: false,
+                    preview: (
+                      <div style={{ border: '0.5px solid #e5e7eb', borderRadius: 5, overflow: 'hidden', background: '#fff', marginTop: 8 }}>
+                        <div style={{ background: '#1e293b', padding: '8px 9px 6px' }}>
+                          <div style={{ fontSize: 9.5, fontWeight: 700, color: '#fff', letterSpacing: '0.01em' }}>Jane Doe</div>
+                          <div style={{ fontSize: 7, color: '#94a3b8', marginTop: 1 }}>Chief People Officer</div>
+                          <div style={{ fontSize: 6.5, color: '#475569', marginTop: 1 }}>email · phone · linkedin</div>
+                        </div>
+                        <div style={{ padding: '5px 9px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                            <div style={{ width: 10, height: 0.5, background: '#1e293b', flexShrink: 0 }} />
+                            <div style={{ fontSize: 6.5, fontWeight: 700, letterSpacing: '0.08em', color: '#1e293b', textTransform: 'uppercase' }}>Experience</div>
+                            <div style={{ flex: 1, height: 0.5, background: '#e5e7eb' }} />
+                          </div>
+                          <div style={{ height: 3, borderRadius: 1, background: '#d1d5db', marginBottom: 2, width: '88%' }} />
+                          <div style={{ height: 3, borderRadius: 1, background: '#e5e7eb', marginBottom: 2, width: '74%' }} />
+                          <div style={{ height: 3, borderRadius: 1, background: '#e5e7eb', width: '82%' }} />
+                        </div>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'minimal' as const,
+                    name: 'Minimal',
+                    desc: 'Maximum whitespace · no decoration · design & creative',
+                    atsWarning: false,
+                    preview: (
+                      <div style={{ border: '0.5px solid #e5e7eb', borderRadius: 5, overflow: 'hidden', background: '#fff', marginTop: 8 }}>
+                        <div style={{ padding: '9px 9px 6px' }}>
+                          <div style={{ fontSize: 10, fontWeight: 500, color: '#111', letterSpacing: '-0.02em' }}>Jane Doe</div>
+                          <div style={{ fontSize: 6.5, color: '#aaa', marginTop: 2, letterSpacing: '0.01em' }}>Product Designer · SF</div>
+                          <div style={{ height: 0.5, background: '#e5e7eb', margin: '6px 0' }} />
+                          <div style={{ fontSize: 6.5, color: '#ccc', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 3 }}>Experience</div>
+                          <div style={{ height: 3, borderRadius: 1, background: '#e5e7eb', marginBottom: 2, width: '85%' }} />
+                          <div style={{ height: 3, borderRadius: 1, background: '#f0f0f0', marginBottom: 2, width: '72%' }} />
+                          <div style={{ height: 3, borderRadius: 1, background: '#f0f0f0', width: '80%' }} />
+                        </div>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'two-column' as const,
+                    name: 'Two-column',
+                    desc: 'Sidebar layout · PDF only · best for direct email or portfolio link',
+                    atsWarning: true,
+                    preview: (
+                      <div style={{ border: '0.5px solid #e5e7eb', borderRadius: 5, overflow: 'hidden', background: '#fff', marginTop: 8, display: 'flex', height: 80 }}>
+                        <div style={{ width: '34%', background: '#f8fafc', borderRight: '0.5px solid #e5e7eb', padding: '6px 5px', flexShrink: 0 }}>
+                          <div style={{ fontSize: 7.5, fontWeight: 700, color: '#111', marginBottom: 1 }}>Jane Doe</div>
+                          <div style={{ fontSize: 6, color: '#aaa', marginBottom: 5 }}>Product Lead</div>
+                          <div style={{ fontSize: 6, fontWeight: 700, color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Skills</div>
+                          <div style={{ height: 2.5, borderRadius: 1, background: '#cbd5e1', marginBottom: 2, width: '80%' }} />
+                          <div style={{ height: 2.5, borderRadius: 1, background: '#e2e8f0', marginBottom: 2, width: '60%' }} />
+                        </div>
+                        <div style={{ flex: 1, padding: '6px 6px' }}>
+                          <div style={{ fontSize: 6, fontWeight: 700, color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Experience</div>
+                          <div style={{ height: 2.5, borderRadius: 1, background: '#d1d5db', marginBottom: 2, width: '90%' }} />
+                          <div style={{ height: 2.5, borderRadius: 1, background: '#e5e7eb', marginBottom: 2, width: '78%' }} />
+                          <div style={{ height: 2.5, borderRadius: 1, background: '#e5e7eb', marginBottom: 5, width: '85%' }} />
+                          <div style={{ height: 2.5, borderRadius: 1, background: '#d1d5db', marginBottom: 2, width: '82%' }} />
+                          <div style={{ height: 2.5, borderRadius: 1, background: '#e5e7eb', width: '70%' }} />
+                        </div>
                       </div>
                     ),
                   },
@@ -1844,7 +2038,7 @@ export default function GeneratePage() {
                       flexDirection: 'column',
                       padding: '12px 14px',
                       background: resumeFormat === f.key ? 'var(--teal-dim)' : 'var(--surface)',
-                      border: `1px solid ${resumeFormat === f.key ? 'var(--teal-glow)' : 'var(--border2)'}`,
+                      border: `1px solid ${resumeFormat === f.key ? 'var(--teal-glow)' : f.atsWarning ? 'oklch(0.65 0.14 60 / 0.4)' : 'var(--border2)'}`,
                       borderRadius: 8,
                       cursor: 'pointer',
                       transition: 'all 0.15s',
@@ -1853,7 +2047,12 @@ export default function GeneratePage() {
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <input type="radio" name="format" value={f.key} checked={resumeFormat === f.key} onChange={() => setResumeFormat(f.key)} style={{ accentColor: 'var(--teal)', flexShrink: 0 }} />
-                      <div style={{ fontWeight: 600, fontSize: 13, color: resumeFormat === f.key ? 'var(--teal)' : 'var(--text)' }}>{f.name}</div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: resumeFormat === f.key ? 'var(--teal)' : 'var(--text)', flex: 1 }}>{f.name}</div>
+                      {f.atsWarning && (
+                        <span style={{ fontSize: 9, fontWeight: 700, color: 'oklch(0.75 0.16 60)', background: 'oklch(0.4 0.13 60 / 0.12)', border: '1px solid oklch(0.65 0.14 60 / 0.4)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>
+                          PDF only
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4, lineHeight: 1.4 }}>{f.desc}</div>
                     {f.preview}
@@ -2271,17 +2470,15 @@ export default function GeneratePage() {
                   </div>
                 )}
 
-                {/* Missing keywords */}
+                {/* Missing keywords — post-generation */}
                 {missingKw.length > 0 && (
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10, padding: '16px 18px' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>Consider adding</div>
-                    <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10, lineHeight: 1.5 }}>These JD keywords weren&apos;t found in your resume:</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>Still missing</div>
+                    <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10, lineHeight: 1.5 }}>These JD keywords weren&apos;t found in your generated resume. Regenerate after editing your modules to include them:</div>
                     {missingKw.slice(0, showAllKeywords ? undefined : VISIBLE_KW).map(k => (
-                      <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border2)' }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)' }}>{k}</span>
-                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                          <circle cx="9" cy="9" r="8" stroke="var(--border2)" strokeWidth="1.5" fill="var(--bg3)"/>
-                        </svg>
+                      <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border2)' }}>
+                        <div style={{ width: 6, height: 6, borderRadius: 999, border: '1.5px solid oklch(0.65 0.14 60 / 0.6)', flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>{k}</span>
                       </div>
                     ))}
                     {missingKw.length > VISIBLE_KW && (

@@ -12,8 +12,9 @@ import React from 'react'
 export const maxDuration = 60
 
 type Contact = { name: string; email: string; phone?: string; linkedin?: string; location?: string }
-type ResumeFormat = 'classic' | 'tech' | 'combination'
+type ResumeFormat = 'classic' | 'tech' | 'combination' | 'executive' | 'minimal' | 'two-column'
 type StructuredData = {
+  job_title?: string
   summary?: string
   experience?: { title: string; company: string; dates: string; bullets: string[] }[]
   skills?: string
@@ -61,7 +62,8 @@ function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeF
     ].filter(Boolean).join('')
     return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:44px 52px 52px;box-sizing:border-box">
       <div style="text-align:center;padding-bottom:16px;border-bottom:2px solid #111;margin-bottom:20px">
-        <h1 style="font-family:${f};font-size:26px;font-weight:700;margin:0 0 5px 0;color:#111;letter-spacing:0.02em;text-transform:uppercase">${contact.name}</h1>
+        <h1 style="font-family:${f};font-size:26px;font-weight:700;margin:0 0 3px 0;color:#111;letter-spacing:0.02em;text-transform:uppercase">${contact.name}</h1>
+        ${data.job_title ? `<p style="font-family:${f};font-size:12px;color:#666;margin:0 0 4px 0;font-style:italic">${data.job_title}</p>` : ''}
         <p style="font-family:${f};font-size:10.5px;color:#555;margin:0;letter-spacing:0.03em">${contactLine}</p>
       </div>
       ${sections}
@@ -99,11 +101,68 @@ function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeF
       data.awards ? `${sectionHead('Awards &amp; Certifications')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0">${data.awards}</p>` : '',
     ].filter(Boolean).join('')
     return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:40px 48px 48px;box-sizing:border-box">
-      <h1 style="font-family:${f};font-size:26px;font-weight:700;margin:0 0 4px 0;color:#111">${contact.name}</h1>
+      <h1 style="font-family:${f};font-size:26px;font-weight:700;margin:0 0 3px 0;color:#111">${contact.name}</h1>
+      ${data.job_title ? `<p style="font-family:${mono};font-size:11px;color:#1d9e75;margin:0 0 3px 0">${data.job_title}</p>` : ''}
       <p style="font-family:${mono};font-size:10.5px;color:#555;margin:0 0 16px 0">${contactItems}</p>
       <div style="height:1px;background:#e0e0e0;margin-bottom:4px"></div>
       ${sections}
     </div></body></html>`
+  }
+
+  // ── Executive ──
+  if (format === 'executive') {
+    const f = "'Calibri','Candara',Arial,sans-serif", sz = '12px'
+    const sectionHead = (label: string) =>
+      `<div style="display:flex;align-items:center;gap:8px;margin:18px 0 8px 0">` +
+      `<div style="width:20px;height:1px;background:#1e293b;flex-shrink:0"></div>` +
+      `<span style="font-family:${f};font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#1e293b;white-space:nowrap">${label}</span>` +
+      `<div style="flex:1;height:1px;background:#e5e7eb"></div></div>`
+    const sections = [
+      data.summary ? `${sectionHead('Summary')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0">${data.summary}</p>` : '',
+      data.experience?.length ? `${sectionHead('Experience')}${renderJobs(data.experience, { body: f, size: sz })}` : '',
+      data.skills ? `${sectionHead('Skills')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0">${data.skills}</p>` : '',
+      data.education ? `${sectionHead('Education')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0">${data.education}</p>` : '',
+      data.awards ? `${sectionHead('Awards &amp; Certifications')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0">${data.awards}</p>` : '',
+    ].filter(Boolean).join('')
+    return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:0 0 48px;box-sizing:border-box">
+    <div style="background:#1e293b;padding:28px 48px 22px">
+      <h1 style="font-family:${f};font-size:28px;font-weight:700;margin:0 0 4px 0;color:#fff;letter-spacing:0.01em">${contact.name}</h1>
+      ${data.job_title ? `<p style="font-family:${f};font-size:13px;color:#94a3b8;margin:0 0 6px 0">${data.job_title}</p>` : ''}
+      <p style="font-family:${f};font-size:10.5px;color:#64748b;margin:0">${contactLine}</p>
+    </div>
+    <div style="padding:8px 48px 0">${sections}</div>
+  </div></body></html>`
+  }
+
+  // ── Minimal ──
+  if (format === 'minimal') {
+    const f = "'Helvetica Neue',Helvetica,Arial,sans-serif", sz = '12px'
+    const sectionHead = (label: string) =>
+      `<div style="font-family:${f};font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#aaa;margin:22px 0 6px 0;padding-bottom:4px;border-bottom:0.5px solid #f0f0f0">${label}</div>`
+    const renderMinimalJobs = (jobs: NonNullable<StructuredData['experience']>) =>
+      jobs.map(job => `
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-family:${f};font-size:12.5px;font-weight:500;color:#111">${job.company}</span>
+          <span style="font-family:${f};font-size:10px;color:#aaa;white-space:nowrap;margin-left:8px">${job.dates}</span>
+        </div>
+        <div style="font-family:${f};font-size:11px;color:#666;margin-bottom:4px">${job.title}</div>
+        <ul style="margin:4px 0 0 0;padding-left:16px">${job.bullets.map(b => `<li style="font-family:${f};font-size:${sz};line-height:1.65;color:#444;margin-bottom:1px">${b}</li>`).join('')}</ul>
+      </div>`).join('')
+    const sections = [
+      data.summary ? `${sectionHead('Summary')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#444;margin:0">${data.summary}</p>` : '',
+      data.experience?.length ? `${sectionHead('Experience')}${renderMinimalJobs(data.experience)}` : '',
+      data.skills ? `${sectionHead('Skills')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#444;margin:0">${data.skills}</p>` : '',
+      data.education ? `${sectionHead('Education')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#444;margin:0">${data.education}</p>` : '',
+      data.awards ? `${sectionHead('Awards &amp; Certifications')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#444;margin:0">${data.awards}</p>` : '',
+    ].filter(Boolean).join('')
+    return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:48px 52px 52px;box-sizing:border-box">
+    <h1 style="font-family:${f};font-size:26px;font-weight:400;margin:0 0 4px 0;color:#111;letter-spacing:-0.02em">${contact.name}</h1>
+    ${data.job_title ? `<p style="font-family:${f};font-size:12px;color:#888;margin:0 0 4px 0;letter-spacing:0.01em">${data.job_title}</p>` : ''}
+    <p style="font-family:${f};font-size:10.5px;color:#aaa;margin:0 0 16px 0">${contactLine}</p>
+    <div style="height:0.5px;background:#e5e7eb;margin-bottom:4px"></div>
+    ${sections}
+  </div></body></html>`
   }
 
   // ── Fallthrough: should not be reached with valid format values ──
@@ -208,6 +267,109 @@ function buildDocx(contact: Contact, data: StructuredData, format: ResumeFormat,
     ...(data.awards ? [sectionHead('Awards & Certifications'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.awards, size: 21, font })], spacing: { after: 100, line: 276 } })] : []),
   ]
   return new docx.Document({ creator: contact.name, numbering: { config: bulletConfig }, sections: [{ properties: { page: { margin: { top: twip(0.85), right: twip(0.85), bottom: twip(0.85), left: twip(0.85) } } }, children }] })
+}
+
+function buildDocxExecutiveOrMinimal(contact: Contact, data: StructuredData, format: 'executive' | 'minimal', contactLine: string): docx.Document {
+  const twip = (inches: number) => Math.round(inches * 1440)
+  const bulletRef = 'body-bullets'
+  const bulletConfig = [{ reference: bulletRef, levels: [{ level: 0, format: docx.LevelFormat.BULLET, text: '•', alignment: docx.AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 220 } } } }] }]
+  const bul = (text: string, size: number, font: string) => new docx.Paragraph({
+    numbering: { reference: bulletRef, level: 0 },
+    spacing: { before: 40, after: 40, line: 276 },
+    children: [new docx.TextRun({ text, size, font })],
+  })
+
+  if (format === 'executive') {
+    const font = 'Calibri'
+    const sectionHead = (text: string) => new docx.Paragraph({
+      children: [
+        new docx.TextRun({ text: '— ', size: 20, font, color: '1e293b' }),
+        new docx.TextRun({ text: text.toUpperCase(), bold: true, size: 20, font, color: '1e293b', characterSpacing: 80 }),
+      ],
+      spacing: { before: 240, after: 80, line: 276 },
+      border: { bottom: { color: 'e5e7eb', size: 4, style: docx.BorderStyle.SINGLE, space: 3 } },
+    })
+    const children = [
+      new docx.Paragraph({
+        shading: { type: docx.ShadingType.CLEAR, fill: '1e293b', color: '1e293b' },
+        spacing: { before: 0, after: 60 },
+        children: [new docx.TextRun({ text: contact.name, bold: true, size: 44, font, color: 'FFFFFF' })],
+      }),
+      ...(data.job_title ? [new docx.Paragraph({
+        shading: { type: docx.ShadingType.CLEAR, fill: '1e293b', color: '1e293b' },
+        spacing: { before: 0, after: 60 },
+        children: [new docx.TextRun({ text: data.job_title, size: 22, font, color: '94a3b8' })],
+      })] : []),
+      new docx.Paragraph({
+        shading: { type: docx.ShadingType.CLEAR, fill: '1e293b', color: '1e293b' },
+        spacing: { before: 0, after: 240 },
+        children: [new docx.TextRun({ text: contactLine, size: 18, font, color: '64748b' })],
+      }),
+      ...(data.summary ? [sectionHead('Summary'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.summary, size: 22, font })], spacing: { after: 120, line: 276 } })] : []),
+      ...(data.experience?.length ? [
+        sectionHead('Experience'),
+        ...data.experience.flatMap(job => [
+          new docx.Paragraph({
+            tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+            spacing: { before: 140, after: 40 },
+            children: [
+              new docx.TextRun({ text: `${job.title} · ${job.company}`, bold: true, size: 22, font }),
+              new docx.TextRun({ text: `\t${job.dates}`, size: 18, font, color: '888888', italics: true }),
+            ],
+          }),
+          ...job.bullets.map(b => bul(b, 22, font)),
+        ]),
+      ] : []),
+      ...(data.skills ? [sectionHead('Skills'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.skills, size: 22, font })], spacing: { after: 120, line: 276 } })] : []),
+      ...(data.education ? [sectionHead('Education'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.education, size: 22, font })], spacing: { after: 120, line: 276 } })] : []),
+      ...(data.awards ? [sectionHead('Awards & Certifications'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.awards, size: 22, font })], spacing: { after: 120, line: 276 } })] : []),
+    ]
+    return new docx.Document({ creator: contact.name, numbering: { config: bulletConfig }, sections: [{ properties: { page: { margin: { top: twip(0), right: twip(0.85), bottom: twip(0.85), left: twip(0.85) } } }, children }] })
+  }
+
+  // minimal
+  const font = 'Calibri'
+  const sectionHead = (text: string) => new docx.Paragraph({
+    children: [new docx.TextRun({ text: text.toUpperCase(), size: 16, font, color: 'aaaaaa', characterSpacing: 100 })],
+    spacing: { before: 280, after: 60, line: 276 },
+    border: { bottom: { color: 'f0f0f0', size: 4, style: docx.BorderStyle.SINGLE, space: 3 } },
+  })
+  const children = [
+    new docx.Paragraph({
+      spacing: { after: 60 },
+      children: [new docx.TextRun({ text: contact.name, size: 44, font, color: '111111' })],
+    }),
+    ...(data.job_title ? [new docx.Paragraph({
+      spacing: { after: 40 },
+      children: [new docx.TextRun({ text: data.job_title, size: 20, font, color: '888888' })],
+    })] : []),
+    new docx.Paragraph({
+      spacing: { after: 0 },
+      border: { bottom: { color: 'e5e7eb', size: 4, style: docx.BorderStyle.SINGLE, space: 6 } },
+      children: [new docx.TextRun({ text: contactLine, size: 18, font, color: 'aaaaaa' })],
+    }),
+    new docx.Paragraph({ children: [], spacing: { after: 100 } }),
+    ...(data.summary ? [sectionHead('Summary'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.summary, size: 22, font, color: '444444' })], spacing: { after: 120, line: 276 } })] : []),
+    ...(data.experience?.length ? [
+      sectionHead('Experience'),
+      ...data.experience.flatMap(job => [
+        new docx.Paragraph({
+          tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+          spacing: { before: 120, after: 20 },
+          children: [
+            new docx.TextRun({ text: job.company, bold: true, size: 22, font }),
+            new docx.TextRun({ text: `\t${job.dates}`, size: 18, font, color: 'aaaaaa' }),
+          ],
+        }),
+        new docx.Paragraph({ spacing: { before: 0, after: 40 }, children: [new docx.TextRun({ text: job.title, size: 20, font, color: '666666', italics: true })] }),
+        ...job.bullets.map(b => bul(b, 21, font)),
+      ]),
+    ] : []),
+    ...(data.skills ? [sectionHead('Skills'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.skills, size: 21, font, color: '444444' })], spacing: { after: 100, line: 276 } })] : []),
+    ...(data.education ? [sectionHead('Education'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.education, size: 21, font, color: '444444' })], spacing: { after: 100, line: 276 } })] : []),
+    ...(data.awards ? [sectionHead('Awards & Certifications'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.awards, size: 21, font, color: '444444' })], spacing: { after: 100, line: 276 } })] : []),
+  ]
+  return new docx.Document({ creator: contact.name, numbering: { config: bulletConfig }, sections: [{ properties: { page: { margin: { top: twip(1), right: twip(1), bottom: twip(1), left: twip(1) } } }, children }] })
 }
 
 
@@ -564,6 +726,225 @@ const ResumePDFCombination = ({ contact, data }: { contact: Contact; data: Combi
   )
 }
 
+// ── Executive PDF ──────────────────────────────────────────────────────────────
+const ResumePDFExecutive = ({ contact, data }: { contact: Contact; data: StructuredData }) => {
+  const contactItems = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join('  ·  ')
+  const body = { fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.5 }
+  const SectionHead = ({ title }: { title: string }) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, marginTop: 14 }}>
+      <View style={{ width: 16, height: 0.5, backgroundColor: '#1e293b', marginRight: 6 }} />
+      <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#1e293b', textTransform: 'uppercase', letterSpacing: 1 }}>{title}</Text>
+      <View style={{ flex: 1, height: 0.5, backgroundColor: '#e5e7eb', marginLeft: 6 }} />
+    </View>
+  )
+  return (
+    <PdfDoc>
+      <Page size="LETTER" style={{ fontFamily: 'Helvetica', backgroundColor: '#FFFFFF' }}>
+        <View style={{ backgroundColor: '#1e293b', paddingHorizontal: 48, paddingVertical: 22 }}>
+          <Text style={{ fontSize: 22, fontFamily: 'Helvetica-Bold', color: '#FFFFFF', marginBottom: 4 }}>{contact.name}</Text>
+          {data.job_title ? <Text style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>{data.job_title}</Text> : null}
+          <Text style={{ fontSize: 9, color: '#64748b' }}>{contactItems}</Text>
+        </View>
+        <View style={{ paddingHorizontal: 48, paddingBottom: 32 }}>
+          {data.summary ? (
+            <View>
+              <SectionHead title="Summary" />
+              <Text style={body}>{data.summary}</Text>
+            </View>
+          ) : null}
+          {data.experience?.length ? (
+            <View>
+              <SectionHead title="Experience" />
+              {data.experience.map((job, i) => (
+                <View key={i} style={{ marginBottom: 9 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                    <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111', flex: 1 }}>{job.title} · {job.company}</Text>
+                    <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Oblique', color: '#888888' }}>{job.dates}</Text>
+                  </View>
+                  {job.bullets.map((b, j) => (
+                    <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
+                      <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>•</Text>
+                      <Text style={{ ...body, flex: 1 }}>{b}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {data.skills ? (
+            <View style={{ marginBottom: 10 }}>
+              <SectionHead title="Skills" />
+              <Text style={body}>{data.skills}</Text>
+            </View>
+          ) : null}
+          {data.education ? (
+            <View style={{ marginBottom: 10 }}>
+              <SectionHead title="Education" />
+              <Text style={body}>{data.education}</Text>
+            </View>
+          ) : null}
+          {data.awards ? (
+            <View style={{ marginBottom: 10 }}>
+              <SectionHead title="Awards & Certifications" />
+              <Text style={body}>{data.awards}</Text>
+            </View>
+          ) : null}
+        </View>
+      </Page>
+    </PdfDoc>
+  )
+}
+
+// ── Minimal PDF ─────────────────────────────────────────────────────────────────
+const ResumePDFMinimal = ({ contact, data }: { contact: Contact; data: StructuredData }) => {
+  const contactItems = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join('  ·  ')
+  const body = { fontSize: 9.5, fontFamily: 'Helvetica', color: '#444444', lineHeight: 1.6 }
+  const SectionHead = ({ title }: { title: string }) => (
+    <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0', marginBottom: 5, marginTop: 16, paddingBottom: 3 }}>
+      <Text style={{ fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#aaaaaa', textTransform: 'uppercase', letterSpacing: 1.5 }}>{title}</Text>
+    </View>
+  )
+  return (
+    <PdfDoc>
+      <Page size="LETTER" style={{ fontFamily: 'Helvetica', backgroundColor: '#FFFFFF', paddingHorizontal: 48, paddingVertical: 44 }}>
+        <Text style={{ fontSize: 22, color: '#111111', marginBottom: 3, letterSpacing: -0.3 }}>{contact.name}</Text>
+        {data.job_title ? <Text style={{ fontSize: 11, color: '#888888', marginBottom: 3 }}>{data.job_title}</Text> : null}
+        <Text style={{ fontSize: 9, color: '#aaaaaa', marginBottom: 14 }}>{contactItems}</Text>
+        <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#e5e7eb', marginBottom: 4 }} />
+        {data.summary ? (
+          <View>
+            <SectionHead title="Summary" />
+            <Text style={body}>{data.summary}</Text>
+          </View>
+        ) : null}
+        {data.experience?.length ? (
+          <View>
+            <SectionHead title="Experience" />
+            {data.experience.map((job, i) => (
+              <View key={i} style={{ marginBottom: 10 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                  <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111' }}>{job.company}</Text>
+                  <Text style={{ fontSize: 9, color: '#aaaaaa' }}>{job.dates}</Text>
+                </View>
+                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Oblique', color: '#666666', marginBottom: 3 }}>{job.title}</Text>
+                {job.bullets.map((b, j) => (
+                  <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
+                    <Text style={{ fontSize: 9.5, color: '#aaaaaa', marginRight: 4 }}>–</Text>
+                    <Text style={{ ...body, flex: 1 }}>{b}</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {data.skills ? (
+          <View style={{ marginBottom: 10 }}>
+            <SectionHead title="Skills" />
+            <Text style={body}>{data.skills}</Text>
+          </View>
+        ) : null}
+        {data.education ? (
+          <View style={{ marginBottom: 10 }}>
+            <SectionHead title="Education" />
+            <Text style={body}>{data.education}</Text>
+          </View>
+        ) : null}
+        {data.awards ? (
+          <View style={{ marginBottom: 10 }}>
+            <SectionHead title="Awards & Certifications" />
+            <Text style={body}>{data.awards}</Text>
+          </View>
+        ) : null}
+      </Page>
+    </PdfDoc>
+  )
+}
+
+// ── Two-column PDF ──────────────────────────────────────────────────────────────
+const ResumePDFTwoColumn = ({ contact, data }: { contact: Contact; data: StructuredData }) => {
+  const SIDEBAR = '#f8fafc', ACCENT = '#1d9e75'
+  const body = { fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.5 }
+  const sideBody = { fontSize: 9, fontFamily: 'Helvetica', color: '#555555', lineHeight: 1.5 }
+  const SideHead = ({ title }: { title: string }) => (
+    <View style={{ marginBottom: 4, marginTop: 12 }}>
+      <Text style={{ fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#555555', textTransform: 'uppercase', letterSpacing: 1 }}>{title}</Text>
+      <View style={{ height: 0.5, backgroundColor: '#cbd5e1', marginTop: 3 }} />
+    </View>
+  )
+  const MainHead = ({ title }: { title: string }) => (
+    <View style={{ marginBottom: 5, marginTop: 12 }}>
+      <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#555555', textTransform: 'uppercase', letterSpacing: 1 }}>{title}</Text>
+      <View style={{ height: 0.5, backgroundColor: '#e5e7eb', marginTop: 3 }} />
+    </View>
+  )
+  const initials = contact.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('')
+  return (
+    <PdfDoc>
+      <Page size="LETTER" style={{ fontFamily: 'Helvetica', backgroundColor: '#FFFFFF', flexDirection: 'row' }}>
+        {/* Sidebar */}
+        <View style={{ width: 180, backgroundColor: SIDEBAR, paddingHorizontal: 16, paddingVertical: 28, borderRightWidth: 0.5, borderRightColor: '#e5e7eb' }}>
+          <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: ACCENT + '30', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+            <Text style={{ fontSize: 14, fontFamily: 'Helvetica-Bold', color: ACCENT }}>{initials}</Text>
+          </View>
+          <Text style={{ fontSize: 12, fontFamily: 'Helvetica-Bold', color: '#111111', marginBottom: 2 }}>{contact.name}</Text>
+          {data.job_title ? <Text style={{ fontSize: 9, color: '#666666', marginBottom: 6 }}>{data.job_title}</Text> : null}
+          {contact.email ? <Text style={{ ...sideBody, marginBottom: 1 }}>{contact.email}</Text> : null}
+          {contact.phone ? <Text style={{ ...sideBody, marginBottom: 1 }}>{contact.phone}</Text> : null}
+          {contact.location ? <Text style={{ ...sideBody, marginBottom: 1 }}>{contact.location}</Text> : null}
+          {contact.linkedin ? <Text style={{ ...sideBody, marginBottom: 6 }}>{contact.linkedin}</Text> : null}
+          {data.skills ? (
+            <View>
+              <SideHead title="Skills" />
+              <Text style={sideBody}>{data.skills}</Text>
+            </View>
+          ) : null}
+          {data.education ? (
+            <View>
+              <SideHead title="Education" />
+              <Text style={sideBody}>{data.education}</Text>
+            </View>
+          ) : null}
+          {data.awards ? (
+            <View>
+              <SideHead title="Awards" />
+              <Text style={sideBody}>{data.awards}</Text>
+            </View>
+          ) : null}
+        </View>
+        {/* Main column */}
+        <View style={{ flex: 1, paddingHorizontal: 24, paddingVertical: 28 }}>
+          {data.summary ? (
+            <View style={{ marginBottom: 8 }}>
+              <MainHead title="Summary" />
+              <Text style={body}>{data.summary}</Text>
+            </View>
+          ) : null}
+          {data.experience?.length ? (
+            <View>
+              <MainHead title="Experience" />
+              {data.experience.map((job, i) => (
+                <View key={i} style={{ marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                    <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111', flex: 1 }}>{job.title}</Text>
+                    <Text style={{ fontSize: 9, color: '#888888', fontFamily: 'Helvetica-Oblique' }}>{job.dates}</Text>
+                  </View>
+                  <Text style={{ fontSize: 9.5, color: '#666666', marginBottom: 3 }}>{job.company}</Text>
+                  {job.bullets.map((b, j) => (
+                    <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
+                      <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>•</Text>
+                      <Text style={{ ...body, flex: 1 }}>{b}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      </Page>
+    </PdfDoc>
+  )
+}
+
 // ─── HANDLER ──────────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
@@ -881,6 +1262,7 @@ ${compactInstruction}
 
 Respond with ONLY this JSON structure — no markdown, no explanation:
 {
+  "job_title": "the exact job title from the job description",
   "summary": "3-4 sentence professional summary",
   "experience": [
     { "title": "Job Title", "company": "Company Name", "dates": "Jan 2020 – Present", "bullets": ["Led team of 8 across 3 regions, delivering 40% growth.", "Built ambassador program reaching 1,200 members in 6 months."] }
@@ -902,6 +1284,7 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
       const resumeData: StructuredData = JSON.parse(cleanJson)
 
       const structuredData: StructuredData = {
+        job_title: resumeData.job_title,
         summary: include_summary ? resumeData.summary : undefined,
         experience: resumeData.experience,
         skills: include_skills_section ? resumeData.skills : undefined,
@@ -911,10 +1294,21 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
 
       const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
       resumeHtml = buildResumeHtml(contact, structuredData, format)
-      const classicDoc = buildDocx(contact, structuredData, format, contactLine)
-      docxBuffer = await docx.Packer.toBuffer(classicDoc) as Buffer
-      const pdfEl = format === 'tech'
-        ? <ResumePDFTech contact={contact} data={structuredData} />
+      // Two-column is PDF-only — use a lightweight placeholder DOCX
+      if (format === 'two-column') {
+        const placeholderDoc = buildDocx(contact, structuredData, 'classic', contactLine)
+        docxBuffer = await docx.Packer.toBuffer(placeholderDoc) as Buffer
+      } else if (format === 'executive' || format === 'minimal') {
+        const formatDoc = buildDocxExecutiveOrMinimal(contact, structuredData, format, contactLine)
+        docxBuffer = await docx.Packer.toBuffer(formatDoc) as Buffer
+      } else {
+        const formatDoc = buildDocx(contact, structuredData, format, contactLine)
+        docxBuffer = await docx.Packer.toBuffer(formatDoc) as Buffer
+      }
+      const pdfEl = format === 'tech' ? <ResumePDFTech contact={contact} data={structuredData} />
+        : format === 'executive' ? <ResumePDFExecutive contact={contact} data={structuredData} />
+        : format === 'minimal' ? <ResumePDFMinimal contact={contact} data={structuredData} />
+        : format === 'two-column' ? <ResumePDFTwoColumn contact={contact} data={structuredData} />
         : <ResumePDFClassic contact={contact} data={structuredData} />
       pdfBuffer = await renderToBuffer(pdfEl)
     }
