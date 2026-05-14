@@ -52,24 +52,33 @@ RULES:
 - Do not invent specific facts (companies, metrics, titles) the candidate hasn't stated.
 - If a saved summary is provided, keep its core voice; rewrite only to align with this role.
 
-Return JSON ONLY in this exact shape (no commentary, no markdown):
+Return only raw JSON with no markdown, no code fences, and no explanation. The very first character of your response must be { and the very last character must be }.
+
+Required shape:
 {
   "suggested": "the 3-4 sentence summary",
   "themes_used": ["theme1", "theme2"]
 }`
 
     const raw = await aiComplete([{ role: 'user', content: prompt }], 400)
-    const stripped = raw.replace(/```json/g, '').replace(/```/g, '').trim()
+    const stripped = raw
+      .replace(/```json\n?/g, '')
+      .replace(/```\n?/g, '')
+      .trim()
     const start = stripped.indexOf('{')
     const end = stripped.lastIndexOf('}')
     if (start === -1 || end === -1) {
+      console.error('[suggest-summary] No JSON object found. Raw response:', raw)
       return NextResponse.json({ error: 'AI did not return JSON' }, { status: 502 })
     }
 
     let parsed: { suggested?: unknown; themes_used?: unknown }
     try {
       parsed = JSON.parse(jsonrepair(stripped.slice(start, end + 1)))
-    } catch {
+    } catch (parseErr) {
+      console.error('[suggest-summary] JSON.parse failed:', parseErr)
+      console.error('[suggest-summary] Raw response:', raw)
+      console.error('[suggest-summary] Sliced JSON candidate:', stripped.slice(start, end + 1))
       return NextResponse.json({ error: 'AI returned malformed JSON' }, { status: 502 })
     }
 
