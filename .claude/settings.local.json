@@ -19,7 +19,10 @@
       "Bash(git branch *)",
       "Bash(git checkout *)",
       "Bash(npm i *)",
-      "mcp__claude_ai_Supabase__execute_sql"
+      "mcp__claude_ai_Supabase__execute_sql",
+      "Bash(grep *)",
+      "mcp__claude_ai_Supabase__list_organizations",
+      "Bash(npx --no-install tsc --noEmit -p tsconfig.json)"
     ]
   }
 }
