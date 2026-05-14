@@ -159,6 +159,8 @@ export default function GeneratePage() {
   const [savedSummaryDefault, setSavedSummaryDefault] = useState(false)
   const [education, setEducation] = useState<EducationEntry[]>([])
   const [includeEducation, setIncludeEducation] = useState(false)
+  const [awardsText, setAwardsText] = useState('')
+  const [includeAwards, setIncludeAwards] = useState(false)
   const [skills, setSkills] = useState<string[]>([])
   const [includeSkills, setIncludeSkills] = useState(true)
   const [skillInput, setSkillInput] = useState('')
@@ -288,6 +290,8 @@ export default function GeneratePage() {
     if (draft.skills) setSkills(draft.skills as string[])
     if (draft.include_education !== undefined) setIncludeEducation(draft.include_education as boolean)
     if (draft.education) setEducation(draft.education as EducationEntry[])
+    if (draft.include_awards !== undefined) setIncludeAwards(draft.include_awards as boolean)
+    if (draft.awards_text !== undefined) setAwardsText(draft.awards_text as string)
     // Re-fetch ranked modules if restoring past input
     if (draft.jd_id && ['building', 'configuring'].includes(targetStep)) {
       fetch(`/api/job-descriptions/${draft.jd_id}`)
@@ -337,10 +341,13 @@ export default function GeneratePage() {
     skills,
     include_education: includeEducation,
     education,
+    include_awards: includeAwards,
+    awards_text: awardsText,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [step, jdData, jdText, selectedIds, confirmedThemes, confirmedPhrases, alignmentStates,
       resumeFormat, jobLevel, posVariant, includeSummary, summaryOverride, includeCoverLetter,
-      coverLetterTone, coverLetterNotes, includeSkills, skills, includeEducation, education])
+      coverLetterTone, coverLetterNotes, includeSkills, skills, includeEducation, education,
+      includeAwards, awardsText])
 
   // ── Building step: group modules by job ────────────────────────────────────
   const modulesByJob = useMemo(() => {
@@ -880,8 +887,10 @@ export default function GeneratePage() {
           summary_override: summaryOverride || undefined,
           education: includeEducation ? education : [],
           skills: includeSkills ? skills : [],
+          awards_text: includeAwards ? awardsText : '',
           include_skills_section: includeSkills,
           include_education_section: includeEducation,
+          include_awards_section: includeAwards && !!awardsText.trim(),
           include_summary: includeSummary,
           cover_letter: includeCoverLetter
             ? { include: true, tone: coverLetterTone, notes: coverLetterNotes || undefined }
@@ -945,6 +954,8 @@ export default function GeneratePage() {
     setSavedToLibrary(false)
     setShowOveragePrompt(false)
     setOverageCheckoutLoading(false)
+    setIncludeAwards(false)
+    setAwardsText('')
   }
 
   // ── RENDER ──────────────────────────────────────────────────────────────────
@@ -1440,6 +1451,73 @@ export default function GeneratePage() {
                 ))}
               </div>
             )}
+
+            {/* ── Sections: Education + Skills ── */}
+            <div style={{ marginTop: 32, borderTop: '1px solid var(--border2)', paddingTop: 24 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>Additional sections</div>
+
+              {/* Education */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Education</div>
+                  <button className={`mod-toggle ${includeEducation ? '' : 'off'}`} onClick={() => setIncludeEducation(v => !v)} aria-label="Toggle education" />
+                </div>
+                {includeEducation && education.length === 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', paddingBottom: 8 }}>
+                    No education entries found. Add them in <a href="/profile" style={{ color: 'var(--teal)', textDecoration: 'none' }}>My Info</a>.
+                  </div>
+                )}
+                {includeEducation && education.map((e, i) => (
+                  <div key={i} style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 14px', marginBottom: 6 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2 }}>School</div>
+                        <input className="mod-edit-input" style={{ fontSize: 12 }} value={e.school} onChange={ev => setEducation(ed => ed.map((x, j) => j === i ? { ...x, school: ev.target.value } : x))} placeholder="University name" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2 }}>Degree</div>
+                        <input className="mod-edit-input" style={{ fontSize: 12 }} value={e.degree} onChange={ev => setEducation(ed => ed.map((x, j) => j === i ? { ...x, degree: ev.target.value } : x))} placeholder="B.S., M.A., etc." />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2 }}>Field</div>
+                        <input className="mod-edit-input" style={{ fontSize: 12 }} value={e.field} onChange={ev => setEducation(ed => ed.map((x, j) => j === i ? { ...x, field: ev.target.value } : x))} placeholder="Computer Science" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2 }}>Year</div>
+                        <input className="mod-edit-input" style={{ fontSize: 12 }} value={e.year} onChange={ev => setEducation(ed => ed.map((x, j) => j === i ? { ...x, year: ev.target.value } : x))} placeholder="2018" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Skills */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Skills section</div>
+                  <button className={`mod-toggle ${includeSkills ? '' : 'off'}`} onClick={() => setIncludeSkills(v => !v)} aria-label="Toggle skills" />
+                </div>
+                {includeSkills && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px', background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 8, alignItems: 'center', minHeight: 42 }}>
+                    {skills.map(s => (
+                      <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 999, padding: '3px 10px', fontSize: 12, color: 'var(--text)' }}>
+                        {s}
+                        <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 14, lineHeight: 1, padding: 0, marginLeft: 2 }} onClick={() => setSkills(ss => ss.filter(x => x !== s))}>×</button>
+                      </span>
+                    ))}
+                    <input
+                      className="mod-edit-input"
+                      style={{ border: 'none', background: 'none', padding: '0 4px', fontSize: 12, minWidth: 100, flex: 1, outline: 'none' }}
+                      placeholder="Add skill…"
+                      value={skillInput}
+                      onChange={e => setSkillInput(e.target.value)}
+                      onKeyDown={onSkillKeyDown}
+                      onBlur={() => { if (skillInput.trim()) addSkill(skillInput) }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1841,6 +1919,29 @@ export default function GeneratePage() {
                   <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setEducation(ed => [...ed, { school: '', degree: '', field: '', year: '' }])}>
                     + Add education
                   </button>
+                </div>
+              )}
+            </div>
+
+            {/* Awards & Certifications */}
+            <div className="config-section">
+              <div className="config-section-header">
+                <div className="config-section-title">Awards &amp; Certifications</div>
+                <button className={`mod-toggle ${includeAwards ? '' : 'off'}`} onClick={() => setIncludeAwards(v => !v)} aria-label="Toggle awards" />
+              </div>
+              {includeAwards && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>
+                    List awards, certifications, or honors — one per line or comma-separated.
+                  </div>
+                  <textarea
+                    className="mod-edit-textarea"
+                    rows={4}
+                    placeholder="e.g. AWS Certified Solutions Architect, 2023&#10;Community Leader of the Year, SXSW 2022"
+                    value={awardsText}
+                    onChange={e => setAwardsText(e.target.value)}
+                    style={{ minHeight: 90 }}
+                  />
                 </div>
               )}
             </div>

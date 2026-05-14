@@ -18,6 +18,7 @@ type StructuredData = {
   experience?: { title: string; company: string; dates: string; bullets: string[] }[]
   skills?: string
   education?: string
+  awards?: string
 }
 
 // ─── COMBINATION TEMPLATE TYPES ───────────────────────────────────────────────
@@ -28,6 +29,7 @@ type CombinationData = {
   work_experience: { title: string; company: string; dates: string; bullets: string[] }[]
   education: { degree: string; school: string; year: string }[]
   skills_list: string[]
+  awards?: string
 }
 
 // ─── HTML PREVIEW ─────────────────────────────────────────────────────────────
@@ -55,6 +57,7 @@ function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeF
       data.experience?.length ? `<div style="margin-bottom:20px"><h2 style="${h2}">Work Experience</h2>${renderJobs(data.experience, { body: f, size: sz })}</div>` : '',
       data.skills ? `<div style="margin-bottom:20px"><h2 style="${h2}">Skills</h2><p style="${p}">${data.skills}</p></div>` : '',
       data.education ? `<div style="margin-bottom:20px"><h2 style="${h2}">Education</h2><p style="${p}">${data.education}</p></div>` : '',
+      data.awards ? `<div style="margin-bottom:20px"><h2 style="${h2}">Awards &amp; Certifications</h2><p style="${p}">${data.awards}</p></div>` : '',
     ].filter(Boolean).join('')
     return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:44px 52px 52px;box-sizing:border-box">
       <div style="text-align:center;padding-bottom:16px;border-bottom:2px solid #111;margin-bottom:20px">
@@ -93,6 +96,7 @@ function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeF
       data.experience?.length ? `${sectionHead('Work Experience')}${renderTechJobs(data.experience)}` : '',
       data.skills ? `${sectionHead('Skills')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0">${data.skills}</p>` : '',
       data.education ? `${sectionHead('Education')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0">${data.education}</p>` : '',
+      data.awards ? `${sectionHead('Awards &amp; Certifications')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0">${data.awards}</p>` : '',
     ].filter(Boolean).join('')
     return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff"><div style="max-width:680px;margin:0 auto;padding:40px 48px 48px;box-sizing:border-box">
       <h1 style="font-family:${f};font-size:26px;font-weight:700;margin:0 0 4px 0;color:#111">${contact.name}</h1>
@@ -158,6 +162,7 @@ function buildDocx(contact: Contact, data: StructuredData, format: ResumeFormat,
       ] : []),
       ...(data.skills ? [sectionHead('Skills'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.skills, size: 22, font })], spacing: { after: 120, line: 276 } })] : []),
       ...(data.education ? [sectionHead('Education'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.education, size: 22, font })], spacing: { after: 120, line: 276 } })] : []),
+      ...(data.awards ? [sectionHead('Awards & Certifications'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.awards, size: 22, font })], spacing: { after: 120, line: 276 } })] : []),
     ]
     return new docx.Document({ creator: contact.name, numbering: { config: bulletConfig }, sections: [{ properties: { page: { margin: { top: twip(1), right: twip(1), bottom: twip(1), left: twip(1) } } }, children }] })
   }
@@ -200,6 +205,7 @@ function buildDocx(contact: Contact, data: StructuredData, format: ResumeFormat,
     ] : []),
     ...(data.skills ? [sectionHead('Skills'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.skills, size: 21, font })], spacing: { after: 100, line: 276 } })] : []),
     ...(data.education ? [sectionHead('Education'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.education, size: 21, font })], spacing: { after: 100, line: 276 } })] : []),
+    ...(data.awards ? [sectionHead('Awards & Certifications'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.awards, size: 21, font })], spacing: { after: 100, line: 276 } })] : []),
   ]
   return new docx.Document({ creator: contact.name, numbering: { config: bulletConfig }, sections: [{ properties: { page: { margin: { top: twip(0.85), right: twip(0.85), bottom: twip(0.85), left: twip(0.85) } } }, children }] })
 }
@@ -331,6 +337,14 @@ function buildDocxCombination(contact: Contact, data: CombinationData): docx.Doc
             children: [new docx.TextRun({ text: data.skills_list.join('  ·  '), size: 20, font: 'Calibri', color: '444444' })],
           }),
         ] : []),
+        ...(data.awards ? [
+          sectionHeader('AWARDS & CERTIFICATIONS'),
+          spacer(80),
+          new docx.Paragraph({
+            spacing: { before: 100, after: 60 },
+            children: [new docx.TextRun({ text: data.awards, size: 20, font: 'Calibri', color: '444444' })],
+          }),
+        ] : []),
       ]
     }]
   })
@@ -395,6 +409,12 @@ const ResumePDFClassic = ({ contact, data }: { contact: Contact; data: Structure
             <Text style={{ ...body, marginTop: 4 }}>{data.education}</Text>
           </View>
         ) : null}
+        {data.awards ? (
+          <View style={{ marginBottom: 10 }}>
+            <SectionH title="Awards & Certifications" />
+            <Text style={{ ...body, marginTop: 4 }}>{data.awards}</Text>
+          </View>
+        ) : null}
       </Page>
     </PdfDoc>
   )
@@ -452,6 +472,12 @@ const ResumePDFTech = ({ contact, data }: { contact: Contact; data: StructuredDa
           <View style={{ marginBottom: 10 }}>
             <SectionH title="Education" />
             <Text style={body}>{data.education}</Text>
+          </View>
+        ) : null}
+        {data.awards ? (
+          <View style={{ marginBottom: 10 }}>
+            <SectionH title="Awards & Certifications" />
+            <Text style={body}>{data.awards}</Text>
           </View>
         ) : null}
       </Page>
@@ -524,6 +550,12 @@ const ResumePDFCombination = ({ contact, data }: { contact: Contact; data: Combi
             <View style={{ marginTop: 10 }}>
               <SectionBanner title="Skills" />
               <Text style={{ fontSize: 9.5, color: '#444444', lineHeight: 1.5 }}>{data.skills_list.join('  ·  ')}</Text>
+            </View>
+          ) : null}
+          {data.awards ? (
+            <View style={{ marginTop: 10 }}>
+              <SectionBanner title="Awards & Certifications" />
+              <Text style={{ fontSize: 9.5, color: '#444444', lineHeight: 1.5 }}>{data.awards}</Text>
             </View>
           ) : null}
         </View>
@@ -604,8 +636,10 @@ export async function POST(req: Request) {
       summary_override,
       education,
       skills,
+      awards_text,
       include_skills_section,
       include_education_section,
+      include_awards_section,
       include_summary,
       cover_letter,
       job_level,
@@ -621,8 +655,10 @@ export async function POST(req: Request) {
       summary_override?: string
       education?: EducationEntry[]
       skills?: string[]
+      awards_text?: string
       include_skills_section: boolean
       include_education_section: boolean
+      include_awards_section?: boolean
       include_summary: boolean
       cover_letter?: CoverLetterConfig
       job_level?: string
@@ -654,13 +690,28 @@ export async function POST(req: Request) {
       .in('id', module_ids)
     if (modError) throw modError
 
-    const sortedModules = module_ids
+    // Build ordered modules (preserving user's selection order) with augmentations applied
+    const orderedModules = module_ids
       .map((id: string) => modules.find(m => m.id === id))
       .filter((m): m is Record<string, unknown> => Boolean(m))
       .map((m) => {
         const augmented = module_augmentations?.[String(m.id)]
         return augmented ? { ...m, content: augmented } : m
       })
+
+    // Pre-group by (source_company, source_role_title) to enforce job anchoring.
+    // Modules within the same job are clustered so the AI never confuses which
+    // bullets belong to which role. Order within each group is preserved.
+    const jobKeyOf = (m: Record<string, unknown>) =>
+      `${String(m.source_company ?? '')}||${String(m.source_role_title ?? '')}`
+    const jobOrder: string[] = []
+    const jobGroups = new Map<string, Record<string, unknown>[]>()
+    for (const m of orderedModules) {
+      const k = jobKeyOf(m)
+      if (!jobGroups.has(k)) { jobGroups.set(k, []); jobOrder.push(k) }
+      jobGroups.get(k)!.push(m)
+    }
+    const sortedModules = jobOrder.flatMap(k => jobGroups.get(k)!)
 
     const variantFraming: Record<string, string> = {
       A: 'Lead with community impact and grassroots momentum',
@@ -679,6 +730,10 @@ export async function POST(req: Request) {
 
     const skillsText = (skills as string[] | undefined)?.length
       ? (skills as string[]).join(', ')
+      : ''
+
+    const awardsSection = include_awards_section && awards_text?.trim()
+      ? awards_text.trim()
       : ''
 
     const levelFraming: Record<string, string> = {
@@ -744,13 +799,15 @@ Respond with JSON ONLY matching this exact structure:
   "education": [
     { "degree": "Degree and Major", "school": "University Name", "year": "YYYY" }
   ],
-  "skills_list": ["skill1", "skill2"]
+  "skills_list": ["skill1", "skill2"],
+  "awards": "award or certification text, or empty string if none"
 }
 
 - skill_sections: one entry per module (use module title as category, convert content to 2–4 bullets)
-- work_experience: group modules by source_company; 2–3 bullets per role
+- work_experience: modules are pre-sorted by job — group consecutive modules with the same source_company into one entry. CRITICAL: each module MUST stay under its own source_company. Never reassign a module to a different company.
 - education: ${include_education_section && educationText ? educationText : 'leave as empty array []'}
 - skills_list: ${include_skills_section && skillsText ? skillsText : 'leave as empty array []'}
+- awards: ${awardsSection ? `include this verbatim: ${awardsSection}` : 'set to empty string ""'}
 ${!include_summary ? '- summary: set to empty string ""' : ''}
 
 Modules:
@@ -797,6 +854,7 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({
           ${skillsHtml}
           <div style="background:#EDD5D7;padding:6px 12px;font-weight:700;font-size:12px;color:#3D2B2D;margin:16px 0 12px">WORK EXPERIENCE</div>
           ${expHtml}
+          ${comboData.awards ? `<div style="background:#EDD5D7;padding:6px 12px;font-weight:700;font-size:12px;color:#3D2B2D;margin:16px 0 8px">AWARDS &amp; CERTIFICATIONS</div><p style="font-size:11.5px;color:#333;line-height:1.6;margin:0">${comboData.awards}</p>` : ''}
         </div>
       </body></html>`
 
@@ -815,9 +873,10 @@ ${levelInstruction ? `- ${levelInstruction}` : ''}
 
 Summary: ${summaryInstruction}
 
-For the experience array: group modules by source_company, one entry per role. Convert each module's content into 2–4 bullets as described above. Format dates as "Mon YYYY – Mon YYYY" using date_start/date_end fields (format YYYY-MM). If date_end is null use "Present".
+For the experience array: modules are pre-sorted by job. Group consecutive modules with the same source_company into one experience entry — one entry per (company, role). CRITICAL: Each module MUST appear under its own source_company. Never move a module's bullets to a different company's entry. Convert each module's content into 2–4 bullets as described above. Format dates as "Mon YYYY – Mon YYYY" using date_start/date_end fields (format YYYY-MM). If date_end is null use "Present". Use the earliest date_start and latest date_end across all modules in the same job group for the experience entry's dates.
 ${include_skills_section && skillsText ? `Skills: list these as a comma-separated string: ${skillsText}` : ''}
 ${include_education_section && educationText ? `Education: use this verbatim: ${educationText}` : ''}
+${awardsSection ? `Awards & Certifications: include this section verbatim: ${awardsSection}` : ''}
 ${compactInstruction}
 
 Respond with ONLY this JSON structure — no markdown, no explanation:
@@ -827,7 +886,8 @@ Respond with ONLY this JSON structure — no markdown, no explanation:
     { "title": "Job Title", "company": "Company Name", "dates": "Jan 2020 – Present", "bullets": ["Led team of 8 across 3 regions, delivering 40% growth.", "Built ambassador program reaching 1,200 members in 6 months."] }
   ],
   "skills": "skill1, skill2, skill3",
-  "education": "B.S. Communications, UC Berkeley (2017)"
+  "education": "B.S. Communications, UC Berkeley (2017)",
+  "awards": "award or certification text, or empty string if none"
 }
 
 Modules to convert:
@@ -846,6 +906,7 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
         experience: resumeData.experience,
         skills: include_skills_section ? resumeData.skills : undefined,
         education: include_education_section ? resumeData.education : undefined,
+        awards: awardsSection || undefined,
       }
 
       const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
