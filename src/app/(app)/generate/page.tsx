@@ -7,7 +7,7 @@ import { isAtFreeLimit } from '@/lib/plan'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
-type Step = 'input' | 'analyzing' | 'confirming' | 'selecting' | 'aligning' | 'configuring' | 'generating' | 'done'
+type Step = 'input' | 'analyzing' | 'building' | 'configuring' | 'generating' | 'done'
 
 type AlignmentSuggestion = {
   theme: string
@@ -74,43 +74,54 @@ function weightColor(w: string) {
 
 // ─── STEP INDICATOR ───────────────────────────────────────────────────────────
 
-const STEPS: Step[] = ['input', 'confirming', 'selecting', 'aligning', 'configuring', 'done']
+const STEPS: Step[] = ['input', 'building', 'configuring', 'done']
 const STEP_LABELS: Record<string, string> = {
   input: 'Job description',
-  confirming: 'Confirm keywords',
-  selecting: 'Select modules',
-  aligning: 'Align themes',
+  building: 'Review & build',
   configuring: 'Configure',
   done: 'Download',
 }
 
 function StepIndicator({ current }: { current: Step }) {
-  const displaySteps = STEPS
-  const currentIdx = displaySteps.indexOf(
-    current === 'analyzing' ? 'input'
-    : current === 'generating' ? 'configuring'
-    : current
-  )
+  // Map transient steps to their display step
+  const display: Step =
+    current === 'analyzing' ? 'input' :
+    current === 'generating' ? 'configuring' :
+    current
+  const displaySteps: Step[] = ['input', 'building', 'configuring']
+  const currentIdx = displaySteps.indexOf(display)
   return (
-    <div style={{ display: 'flex', gap: 0, alignItems: 'center' }}>
-      {displaySteps.map((s, i) => (
-        <div key={s} style={{ display: 'flex', alignItems: 'center' }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: '50%',
-            background: i <= currentIdx ? 'var(--teal)' : 'var(--bg3)',
-            border: i === currentIdx ? '2px solid var(--teal-glow)' : '1px solid var(--border2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 10, fontWeight: 700, color: i <= currentIdx ? '#000' : 'var(--text3)',
-            transition: 'all 0.2s',
-          }}>{i + 1}</div>
-          <span style={{ fontSize: 11, color: i === currentIdx ? 'var(--text)' : 'var(--text3)', marginLeft: 6, marginRight: 16 }}>
-            {STEP_LABELS[s]}
-          </span>
-          {i < displaySteps.length - 1 && (
-            <div style={{ width: 20, height: 1, background: i < currentIdx ? 'var(--teal)' : 'var(--border)', marginRight: 16 }} />
-          )}
-        </div>
-      ))}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+      {displaySteps.map((s, i) => {
+        const done = i < currentIdx
+        const active = i === currentIdx
+        return (
+          <div key={s} style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{
+              width: 26, height: 26, borderRadius: '50%',
+              background: done ? 'var(--teal-dim)' : active ? 'var(--teal)' : 'var(--bg3)',
+              border: active ? '2px solid var(--teal-glow)' : done ? '1px solid var(--teal-glow)' : '1px solid var(--border2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 10, fontWeight: 700,
+              color: done ? 'var(--teal)' : active ? '#fff' : 'var(--text3)',
+              transition: 'all 0.25s',
+              flexShrink: 0,
+            }}>
+              {done ? '✓' : i + 1}
+            </div>
+            <span style={{
+              fontSize: 12, marginLeft: 7, marginRight: 20,
+              fontWeight: active ? 700 : 500,
+              color: active ? 'var(--text)' : done ? 'var(--teal)' : 'var(--text3)',
+            }}>
+              {STEP_LABELS[s]}
+            </span>
+            {i < displaySteps.length - 1 && (
+              <div style={{ width: 24, height: 1.5, background: done ? 'var(--teal-glow)' : 'var(--border2)', marginRight: 20, borderRadius: 1 }} />
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -188,6 +199,9 @@ export default function GeneratePage() {
   const [overageCheckoutLoading, setOverageCheckoutLoading] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [draftRestored, setDraftRestored] = useState(false)
+  // Building step UI state
+  const [collapsedJobs, setCollapsedJobs] = useState<Record<string, boolean>>({})
+  const [openSuggestion, setOpenSuggestion] = useState<string | null>(null)
   const skillInputRef = useRef<HTMLInputElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -220,7 +234,7 @@ export default function GeneratePage() {
         setRankedModules(data.ranked ?? [])
         setUnmatchedModules(data.unmatched ?? [])
         setSelectedIds((data.ranked ?? []).filter((m: RankedModule) => m.match_score >= 60).map((m: RankedModule) => m.module_id))
-        setStep('selecting')
+        setStep('building')
       })
       .catch(e => {
         setErrorMessage((e as Error).message)
@@ -237,8 +251,13 @@ export default function GeneratePage() {
       .then(r => r.json())
       .then(({ draft }) => {
         if (!draft) return
-        // Don't restore to terminal states — send back to configuring
-        const safeStep: Step = draft.step === 'done' || draft.step === 'generating' ? 'configuring' : draft.step
+        // Map old step names from before the 3-step redesign, then guard terminal states
+        const stepMap: Record<string, Step> = {
+          confirming: 'building', selecting: 'building', aligning: 'building',
+        }
+        const rawStep = draft.step as string
+        const mappedStep: Step = stepMap[rawStep] ?? rawStep as Step
+        const safeStep: Step = mappedStep === 'done' || mappedStep === 'generating' ? 'configuring' : mappedStep
         // Only show the banner on 'input' step; for deeper steps, restore silently
         if (safeStep === 'input' || safeStep === 'analyzing') {
           setHasDraft(true)
@@ -269,8 +288,8 @@ export default function GeneratePage() {
     if (draft.skills) setSkills(draft.skills as string[])
     if (draft.include_education !== undefined) setIncludeEducation(draft.include_education as boolean)
     if (draft.education) setEducation(draft.education as EducationEntry[])
-    // Re-fetch ranked modules if restoring past 'confirming'
-    if (draft.jd_id && ['selecting', 'aligning', 'configuring'].includes(targetStep)) {
+    // Re-fetch ranked modules if restoring past input
+    if (draft.jd_id && ['building', 'configuring'].includes(targetStep)) {
       fetch(`/api/job-descriptions/${draft.jd_id}`)
         .then(r => r.json())
         .then(data => {
@@ -322,6 +341,37 @@ export default function GeneratePage() {
   }), [step, jdData, jdText, selectedIds, confirmedThemes, confirmedPhrases, alignmentStates,
       resumeFormat, jobLevel, posVariant, includeSummary, summaryOverride, includeCoverLetter,
       coverLetterTone, coverLetterNotes, includeSkills, skills, includeEducation, education])
+
+  // ── Building step: group modules by job ────────────────────────────────────
+  const modulesByJob = useMemo(() => {
+    const groups = new Map<string, { company: string; role: string; dates: string; modules: RankedModule[] }>()
+    for (const m of rankedModules) {
+      const key = `${m.source_company ?? ''}||${m.source_role_title ?? ''}`
+      if (!groups.has(key)) {
+        const start = m.date_start ? new Date(m.date_start).getFullYear().toString() : null
+        const end = m.date_end ? new Date(m.date_end).getFullYear().toString() : 'Present'
+        groups.set(key, {
+          company: m.source_company ?? 'Other',
+          role: m.source_role_title ?? '',
+          dates: start ? `${start} — ${end}` : '',
+          modules: [],
+        })
+      }
+      groups.get(key)!.modules.push(m)
+    }
+    return Array.from(groups.values())
+  }, [rankedModules])
+
+  // ── Building step: live theme coverage ─────────────────────────────────────
+  const coveredThemes = useMemo(() => {
+    const covered = new Set<string>()
+    for (const m of rankedModules) {
+      if (selectedIds.includes(m.module_id)) {
+        for (const t of m.themes ?? []) covered.add(t)
+      }
+    }
+    return covered
+  }, [rankedModules, selectedIds])
 
   useEffect(() => {
     // Don't save ephemeral / terminal states
@@ -445,6 +495,28 @@ export default function GeneratePage() {
     return () => window.removeEventListener('click', handler)
   }, [showDownloadMenu])
 
+  // Background alignment fetch when entering building step
+  useEffect(() => {
+    if (step !== 'building') return
+    if (!jdData?.jd_id || selectedIds.length === 0) return
+    if (alignmentSuggestions.length > 0 || alignmentMatched.length > 0 || alignmentLoading) return
+    setAlignmentLoading(true)
+    setAlignmentError(null)
+    fetch('/api/theme-alignment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ module_ids: selectedIds, jd_id: jdData.jd_id }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.gaps) setAlignmentSuggestions(data.gaps)
+        if (data.matched) setAlignmentMatched(data.matched)
+      })
+      .catch(() => {})
+      .finally(() => setAlignmentLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, jdData?.jd_id])
+
   // ── Step 1: fetch URL ───────────────────────────────────────────────────────
 
   async function handleFetchUrl() {
@@ -475,6 +547,7 @@ export default function GeneratePage() {
     setStep('analyzing')
     setErrorMessage('')
     try {
+      // Step 1: Analyze JD
       const analyzeRes = await fetch('/api/analyze-jd', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -483,16 +556,46 @@ export default function GeneratePage() {
       const analyzeData = await analyzeRes.json()
       if (!analyzeRes.ok) throw new Error(analyzeData.error ?? 'Analysis failed')
       setJdData(analyzeData)
-      setConfirmedPhrases(analyzeData.extracted_phrases ?? [])
-      setConfirmedThemes(analyzeData.extracted_themes ?? [])
-      setStep('confirming')
+
+      const phrases = analyzeData.extracted_phrases ?? []
+      const themes = analyzeData.extracted_themes ?? []
+      setConfirmedPhrases(phrases)
+      setConfirmedThemes(themes)
+
+      // Step 2: Auto-confirm keywords (no manual confirmation step)
+      await fetch(`/api/job-descriptions/${analyzeData.jd_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extracted_phrases: phrases, extracted_themes: themes }),
+      })
+
+      // Step 3: Match modules
+      const matchRes = await fetch('/api/match-modules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jd_id: analyzeData.jd_id }),
+      })
+      const matchData = await matchRes.json()
+      if (!matchRes.ok) throw new Error(matchData.error ?? 'Matching failed')
+
+      const ranked: RankedModule[] = matchData.ranked_modules ?? []
+      setRankedModules(ranked)
+      setUnmatchedModules(matchData.unmatched_modules ?? [])
+      setSelectedIds(ranked.filter(m => m.match_score >= 70).map(m => m.module_id))
+
+      const skillModules = ranked.filter(m => m.type === 'skill' && m.match_score >= 70)
+      if (skillModules.length > 0) {
+        setSkills(skillModules.map(m => m.title))
+      }
+
+      setStep('building')
     } catch (e) {
       setErrorMessage((e as Error).message)
       setStep('input')
     }
   }
 
-  // ── Step 1.5: confirm keywords then match ───────────────────────────────────
+  // ── Step 1.5: confirm keywords then match (legacy — kept for restoreDraft) ──
 
   async function handleConfirm() {
     setConfirmLoading(true)
@@ -522,7 +625,7 @@ export default function GeneratePage() {
         setSkills(skillModules.map(m => m.title))
       }
 
-      setStep('selecting')
+      setStep('building')
     } catch (e) {
       setErrorMessage((e as Error).message)
     } finally {
@@ -530,12 +633,11 @@ export default function GeneratePage() {
     }
   }
 
-  // ── Step 2.5: theme alignment ───────────────────────────────────────────────
+  // ── Step 2.5: theme alignment (manual retry — background fetch runs automatically) ─
 
   async function handleAlign() {
     setAlignmentLoading(true)
     setAlignmentError(null)
-    setStep('aligning')
     setAlignmentStates({})
     setAlignmentSuggestions([])
     setAlignmentMatched([])
@@ -858,25 +960,17 @@ export default function GeneratePage() {
           <StepIndicator current={step} />
         </div>
         <div className="top-bar-right">
-          {step === 'confirming' && (
+          {step === 'building' && (
             <>
               <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep('input')}>← Back</button>
-              <button className="btn-primary" onClick={handleConfirm} disabled={confirmLoading}>
-                {confirmLoading ? <><Spinner /> Matching…</> : 'Looks good →'}
+              <button className="btn-primary" onClick={() => setStep('configuring')} disabled={selectedIds.length === 0}>
+                Continue →
               </button>
             </>
           )}
-          {step === 'selecting' && (
-            <button className="btn-primary" onClick={handleAlign} disabled={selectedIds.length === 0}>
-              Continue →
-            </button>
-          )}
-          {step === 'aligning' && (
-            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep('selecting')}>← Back</button>
-          )}
           {step === 'configuring' && (
             <>
-              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep('aligning')}>← Back</button>
+              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep('building')}>← Back</button>
               <button className="btn-primary" onClick={handleGenerate} disabled={!contact.name || !contact.email}>
                 Generate resume →
               </button>
@@ -888,7 +982,7 @@ export default function GeneratePage() {
                 className="btn-ghost"
                 style={{ fontSize: 12 }}
                 title="Auto-adjust: re-rank modules for better keyword coverage"
-                onClick={() => setStep('selecting')}
+                onClick={() => setStep('building')}
               >
                 ↺ Auto-adjust
               </button>
@@ -963,7 +1057,12 @@ export default function GeneratePage() {
                   onClick={() => {
                     fetch('/api/draft-generation').then(r => r.json()).then(({ draft }) => {
                       if (draft) {
-                        const safeStep: Step = draft.step === 'done' || draft.step === 'generating' ? 'configuring' : draft.step as Step
+                        const stepMap: Record<string, Step> = {
+                          confirming: 'building', selecting: 'building', aligning: 'building',
+                        }
+                        const rawStep = draft.step as string
+                        const mapped: Step = stepMap[rawStep] ?? rawStep as Step
+                        const safeStep: Step = mapped === 'done' || mapped === 'generating' ? 'configuring' : mapped
                         restoreDraft(draft, safeStep)
                       }
                     })
@@ -1067,205 +1166,273 @@ export default function GeneratePage() {
         </div>
       )}
 
-      {/* ── CONFIRMING ────────────────────────────────────────────────────── */}
-      {step === 'confirming' && (
-        <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
-          <div style={{ maxWidth: 680, margin: '0 auto' }}>
+      {/* ── BUILDING ──────────────────────────────────────────────────────── */}
+      {step === 'building' && (
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16 }}>
-              <div>
-                <div className="page-title" style={{ marginBottom: 4 }}>Themes &amp; keywords</div>
-                <div style={{ fontSize: 13, color: 'var(--text2)' }}>
-                  {jdData?.extracted_company && <strong style={{ color: 'var(--text)', fontWeight: 500 }}>{jdData.extracted_company}</strong>}
-                  {jdData?.extracted_role_type && <span style={{ color: 'var(--text3)' }}> · {jdData.extracted_role_type}</span>}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 5, lineHeight: 1.5 }}>
-                  Remove anything that doesn&apos;t apply — we&apos;ll use these to match and tailor your modules.
-                </div>
-              </div>
-              {(confirmedThemes.length > 0 || confirmedPhrases.length > 0) && (
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--teal)', lineHeight: 1.1 }}>
-                    {confirmedThemes.length + confirmedPhrases.length}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>keywords</div>
-                </div>
+          {/* Left: JD Intelligence panel */}
+          <div style={{
+            width: 280,
+            flexShrink: 0,
+            borderRight: '1px solid var(--border2)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflowY: 'auto',
+            padding: '24px 20px',
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>JD Intelligence</div>
+
+            {/* Job info */}
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', lineHeight: 1.3 }}>{jdData?.extracted_company ?? '—'}</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 2 }}>{jdData?.extracted_role_type ?? ''}</div>
+              {jdData?.extracted_seniority && (
+                <span style={{ display: 'inline-block', marginTop: 6, fontSize: 10, fontWeight: 600, color: 'var(--teal)', background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 999, padding: '2px 8px', letterSpacing: '0.04em' }}>
+                  {jdData.extracted_seniority}
+                </span>
               )}
             </div>
 
-            {errorMessage && (
-              <div style={{ background: 'oklch(0.4 0.18 10 / 0.12)', border: '1px solid var(--rose)', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: 'var(--rose)', marginBottom: 16 }}>
-                {errorMessage}
+            {/* Coverage meter */}
+            {confirmedThemes.length > 0 && (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Theme coverage</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: coveredThemes.size > 0 ? 'var(--teal)' : 'var(--text3)' }}>
+                    {coveredThemes.size}/{confirmedThemes.length}
+                  </div>
+                </div>
+                <div style={{ height: 4, background: 'var(--bg3)', borderRadius: 999, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${confirmedThemes.length > 0 ? Math.round((coveredThemes.size / confirmedThemes.length) * 100) : 0}%`,
+                    background: 'var(--teal)',
+                    borderRadius: 999,
+                    transition: 'width 0.3s',
+                  }} />
+                </div>
               </div>
             )}
 
-            {/* Themes — one card row per theme */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Themes</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{confirmedThemes.length} identified</div>
+            {/* Theme pills */}
+            {confirmedThemes.length > 0 && (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Themes</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {confirmedThemes.map(t => {
+                    const covered = coveredThemes.has(t)
+                    return (
+                      <span key={t} style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        borderRadius: 999,
+                        padding: '3px 9px',
+                        border: covered ? '1px solid var(--teal-glow)' : '1px dashed var(--border2)',
+                        background: covered ? 'var(--teal-dim)' : 'transparent',
+                        color: covered ? 'var(--teal)' : 'var(--text3)',
+                      }}>
+                        {t}
+                      </span>
+                    )
+                  })}
+                </div>
               </div>
-              {confirmedThemes.length === 0 && (
-                <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', padding: '12px 0' }}>No themes detected.</div>
-              )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {confirmedThemes.map(t => (
-                  <div key={t} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '10px 14px', gap: 10 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 999, padding: '2px 8px', fontSize: 11, color: 'var(--teal)', fontWeight: 600, flexShrink: 0 }}>theme</span>
-                      <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: 500 }}>{t}</span>
-                    </div>
-                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 16, lineHeight: 1, padding: '0 2px', flexShrink: 0, opacity: 0.6 }} onClick={() => setConfirmedThemes(ts => ts.filter(x => x !== t))} aria-label={`Remove ${t}`}>×</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Key phrases — one card row per phrase */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Key phrases</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{confirmedPhrases.length} identified</div>
-              </div>
-              {confirmedPhrases.length === 0 && (
-                <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', padding: '12px 0' }}>No phrases detected.</div>
-              )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {confirmedPhrases.map(p => (
-                  <div key={p} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '10px 14px', gap: 10 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 999, padding: '2px 8px', fontSize: 11, color: 'var(--text3)', fontWeight: 600, flexShrink: 0 }}>phrase</span>
-                      <span style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.4 }}>{p}</span>
-                    </div>
-                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 16, lineHeight: 1, padding: '0 2px', flexShrink: 0, opacity: 0.6 }} onClick={() => setConfirmedPhrases(ps => ps.filter(x => x !== p))} aria-label={`Remove ${p}`}>×</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Add keyword */}
-            <div style={{ marginBottom: 8 }}>
-              <input
-                className="mod-edit-input"
-                style={{ width: '100%', fontSize: 13 }}
-                placeholder="+ Add a keyword or phrase…"
-                value={phraseInput}
-                onChange={e => setPhraseInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    const v = phraseInput.trim().replace(/,+$/, '')
-                    if (v && !confirmedPhrases.includes(v)) setConfirmedPhrases(ps => [...ps, v])
-                    setPhraseInput('')
-                  }
-                }}
-                onBlur={() => {
-                  const v = phraseInput.trim().replace(/,+$/, '')
-                  if (v && !confirmedPhrases.includes(v)) setConfirmedPhrases(ps => [...ps, v])
-                  setPhraseInput('')
-                }}
-              />
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* ── SELECTING ─────────────────────────────────────────────────────── */}
-      {step === 'selecting' && (
-        <div className="selection-layout" style={{ flex: 1, overflow: 'hidden' }}>
-
-          {/* Left: JD summary */}
-          <div className="col-left">
-            <div className="jd-summary-label">Job description</div>
-            <div className="jd-company">{jdData?.extracted_company ?? '—'}</div>
-            <div className="jd-role">{jdData?.extracted_role_type ?? '—'}</div>
-            {jdData?.extracted_seniority && (
-              <span className="jd-badge">{jdData.extracted_seniority}</span>
             )}
-            {jdData?.extracted_themes && jdData.extracted_themes.length > 0 && (
-              <>
-                <div className="jd-themes-title" style={{ marginTop: 16 }}>Key themes</div>
-                <div className="jd-theme-chips">
-                  {jdData.extracted_themes.map(t => (
-                    <span key={t} className="theme-chip">{t}</span>
+
+            {/* Key phrases */}
+            {confirmedPhrases.length > 0 && (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Key phrases</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {confirmedPhrases.map(p => (
+                    <div key={p} style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.4 }}>· {p}</div>
                   ))}
                 </div>
-              </>
+              </div>
+            )}
+
+            {/* Alignment status indicator */}
+            {alignmentLoading && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                <Spinner />
+                <span>Analyzing coverage…</span>
+              </div>
             )}
           </div>
 
-          {/* Center: module list */}
-          <div className="col-center">
-            <div className="stack-label">
-              <span>Ranked modules</span>
-              <span>{selectedIds.length} selected</span>
-            </div>
+          {/* Right: Module library grouped by job */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
 
-            {rankedModules.map((m, i) => {
-              const on = selectedIds.includes(m.module_id)
+            {modulesByJob.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text3)', fontSize: 13 }}>
+                No modules matched. Try adjusting your job description.
+              </div>
+            )}
+
+            {modulesByJob.map(group => {
+              const groupKey = `${group.company}||${group.role}`
+              const isCollapsed = collapsedJobs[groupKey] ?? false
+              const selectedInGroup = group.modules.filter(m => selectedIds.includes(m.module_id)).length
+
               return (
-                <div key={m.module_id} className={`module-row ${!on ? 'off' : ''}`} style={!on ? { opacity: 0.5 } : undefined}>
-                  {/* Up/down */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
-                    <button
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', padding: 0, lineHeight: 1 }}
-                      onClick={() => moveModule(m.module_id, -1)}
-                      disabled={i === 0}
-                      title="Move up"
+                <div key={groupKey} style={{ marginBottom: 24 }}>
+                  {/* Job section header */}
+                  <button
+                    onClick={() => setCollapsedJobs(prev => ({ ...prev, [groupKey]: !isCollapsed }))}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      width: '100%',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '6px 0',
+                      textAlign: 'left',
+                      borderBottom: '1px solid var(--border2)',
+                      marginBottom: 10,
+                    }}
+                  >
+                    <svg
+                      width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="var(--text3)" strokeWidth="1.6"
+                      style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}
                     >
-                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M1 6l4-4 4 4" /></svg>
-                    </button>
-                    <button
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', padding: 0, lineHeight: 1 }}
-                      onClick={() => moveModule(m.module_id, 1)}
-                      disabled={i === rankedModules.length - 1}
-                      title="Move down"
-                    >
-                      <svg width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M1 2l4 4 4-4" /></svg>
-                    </button>
-                  </div>
+                      <path d="M1 2l4 4 4-4" />
+                    </svg>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{group.company}</span>
+                      {group.role && <span style={{ fontSize: 12, color: 'var(--text3)', marginLeft: 8 }}>{group.role}</span>}
+                      {group.dates && <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 8, fontFamily: 'var(--mono)' }}>{group.dates}</span>}
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0 }}>{selectedInGroup}/{group.modules.length}</span>
+                  </button>
 
-                  <div className={`mod-left-bar ${weightColor(m.weight)}`} style={{ width: 3, alignSelf: 'stretch', borderRadius: 2, flexShrink: 0 }} />
+                  {!isCollapsed && group.modules.map(m => {
+                    const on = selectedIds.includes(m.module_id)
+                    const suggestion = alignmentSuggestions.find(s => s.module_id === m.module_id)
+                    const hasSuggestion = !!suggestion && on
+                    const suggestionOpen = openSuggestion === m.module_id
 
-                  <div className="mod-info" style={{ flex: 1, minWidth: 0 }}>
-                    <div className="mod-domain-sm" style={{ color: m.weight === 'anchor' ? 'var(--teal)' : m.weight === 'strong' ? 'var(--indigo)' : 'var(--amber)' }}>{m.title}</div>
-                    {m.source_company && (
-                      <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{m.source_company}</div>
-                    )}
-                    <div className="mod-excerpt">{m.content.slice(0, 100)}{m.content.length > 100 ? '…' : ''}</div>
-                  </div>
+                    return (
+                      <div
+                        key={m.module_id}
+                        style={{
+                          background: 'var(--surface)',
+                          border: `1px solid ${hasSuggestion ? 'oklch(0.65 0.14 60 / 0.4)' : 'var(--border2)'}`,
+                          borderRadius: 10,
+                          marginBottom: 8,
+                          opacity: on ? 1 : 0.5,
+                          transition: 'opacity 0.15s',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {/* Module row */}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px' }}>
+                          <div style={{ width: 3, alignSelf: 'stretch', borderRadius: 2, flexShrink: 0, background: m.weight === 'anchor' ? 'var(--teal)' : m.weight === 'strong' ? 'var(--indigo)' : 'var(--amber)' }} />
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                    {m.match_score > 0 && (
-                      <span className={`mod-score ${scoreClass(m.match_score)}`}>{m.match_score}%</span>
-                    )}
-                    <span className={`plan-chip plan-${m.weight}`} style={{ fontSize: 9 }}>{m.weight}</span>
-                    <button
-                      className={`mod-toggle ${on ? '' : 'off'}`}
-                      onClick={() => toggleModule(m.module_id)}
-                      aria-label={`Toggle ${m.title}`}
-                    />
-                  </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>{m.title}</div>
+                            <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.4 }}>{m.content.slice(0, 120)}{m.content.length > 120 ? '…' : ''}</div>
+
+                            {/* Theme tags */}
+                            {m.themes && m.themes.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                                {m.themes.map(t => (
+                                  <span key={t} style={{
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    borderRadius: 999,
+                                    padding: '1px 7px',
+                                    background: coveredThemes.has(t) && on ? 'var(--teal-dim)' : 'var(--bg3)',
+                                    color: coveredThemes.has(t) && on ? 'var(--teal)' : 'var(--text3)',
+                                    border: coveredThemes.has(t) && on ? '1px solid var(--teal-glow)' : '1px solid transparent',
+                                  }}>
+                                    {t}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                            {m.match_score > 0 && (
+                              <span className={`mod-score ${scoreClass(m.match_score)}`}>{m.match_score}%</span>
+                            )}
+                            {hasSuggestion && (
+                              <button
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 600,
+                                  background: alignmentStates[suggestion.theme] === 'accepted' ? 'var(--teal-dim)' : 'oklch(0.4 0.13 60 / 0.18)',
+                                  border: alignmentStates[suggestion.theme] === 'accepted' ? '1px solid var(--teal-glow)' : '1px solid oklch(0.65 0.14 60 / 0.5)',
+                                  color: alignmentStates[suggestion.theme] === 'accepted' ? 'var(--teal)' : 'oklch(0.75 0.16 60)',
+                                  borderRadius: 4,
+                                  padding: '2px 7px',
+                                  cursor: 'pointer',
+                                  fontFamily: 'var(--font)',
+                                }}
+                                onClick={() => setOpenSuggestion(suggestionOpen ? null : m.module_id)}
+                              >
+                                {alignmentStates[suggestion.theme] === 'accepted' ? '✓ rewritten' : 'gap'}
+                              </button>
+                            )}
+                            <button
+                              className={`mod-toggle ${on ? '' : 'off'}`}
+                              onClick={() => toggleModule(m.module_id)}
+                              aria-label={`Toggle ${m.title}`}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Inline suggestion panel */}
+                        {hasSuggestion && suggestionOpen && (
+                          <div style={{ borderTop: '1px solid var(--border2)', padding: '12px 14px', background: 'var(--bg2)' }}>
+                            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>
+                              Theme gap: <strong style={{ color: 'oklch(0.75 0.16 60)' }}>{suggestion.theme}</strong>
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--teal)', marginBottom: 3 }}>Suggested rewrite</div>
+                            <div style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.55, background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', padding: '7px 12px', borderRadius: 6, marginBottom: 10 }}>
+                              {suggestion.suggestion}
+                            </div>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button
+                                className="btn-ghost"
+                                style={{ fontSize: 11 }}
+                                onClick={() => { setAlignmentStates(prev => ({ ...prev, [suggestion.theme]: 'skipped' })); setOpenSuggestion(null) }}
+                              >
+                                Skip
+                              </button>
+                              <button
+                                className="btn-primary"
+                                style={{ fontSize: 11 }}
+                                onClick={() => { setAlignmentStates(prev => ({ ...prev, [suggestion.theme]: 'accepted' })); setOpenSuggestion(null) }}
+                              >
+                                Accept rewrite
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )
             })}
 
-            {/* Add more section */}
+            {/* Add more from library */}
             {unmatchedModules.length > 0 && (
-              <div style={{ marginTop: 24 }}>
+              <div style={{ marginTop: 8 }}>
                 <button
                   className="btn-ghost"
-                  style={{ fontSize: 12, marginBottom: 12 }}
+                  style={{ fontSize: 12, marginBottom: 10 }}
                   onClick={() => setShowUnmatched(v => !v)}
                 >
                   {showUnmatched ? '▾' : '▸'} Add more from library ({unmatchedModules.length})
                 </button>
                 {showUnmatched && unmatchedModules.map(m => (
-                  <div key={m.id} className="module-row" style={{ opacity: 0.7 }}>
-                    <div className="mod-info" style={{ flex: 1, minWidth: 0 }}>
-                      <div className="mod-domain-sm">{m.title}</div>
+                  <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10, padding: '10px 14px', marginBottom: 6, opacity: 0.7 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: 'var(--text)' }}>{m.title}</div>
                       {m.source_company && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{m.source_company}</div>}
                     </div>
                     <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => addUnmatched(m)}>+ Add</button>
@@ -1274,258 +1441,8 @@ export default function GeneratePage() {
               </div>
             )}
           </div>
-
-          {/* Right: career narrative variant */}
-          <div className="col-right">
-            <div
-              className="pos-label"
-              title="Pick the angle the AI should lead with when framing your resume. These are generation strategies — they don't add new content."
-            >
-              Career Narrative
-            </div>
-            {([
-              { letter: 'A', name: 'Impact-led' },
-              { letter: 'B', name: 'Scale-led' },
-              { letter: 'C', name: 'Cross-functional' },
-              { letter: 'D', name: 'Technical-depth-led' },
-            ] as const).map(v => (
-              <div
-                key={v.letter}
-                className={`pos-card ${posVariant === v.letter ? 'selected' : ''}`}
-                onClick={() => setPosVariant(v.letter)}
-              >
-                <div className="pos-letter">{v.letter}</div>
-                <div className="pos-name">{v.name}</div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
-
-      {/* ── ALIGNING ──────────────────────────────────────────────────────── */}
-      {step === 'aligning' && (() => {
-        const AMBER = 'oklch(0.75 0.16 60)'
-        const AMBER_DIM = 'oklch(0.4 0.13 60 / 0.18)'
-        const AMBER_BORDER = 'oklch(0.65 0.14 60 / 0.5)'
-
-        const acceptedCount = alignmentSuggestions.filter(s => alignmentStates[s.theme] === 'accepted').length
-        const totalThemes = alignmentMatched.length + alignmentSuggestions.length
-        const coveredCount = alignmentMatched.length + acceptedCount
-        const undecidedGaps = alignmentSuggestions.filter(s => !alignmentStates[s.theme]).length
-
-        const highlightTheme = (text: string, theme: string) => {
-          if (!theme) return text
-          const escaped = theme.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-          const re = new RegExp(`(${escaped})`, 'gi')
-          const parts = text.split(re)
-          return parts.map((part, i) =>
-            re.test(part)
-              ? <mark key={i} style={{ background: 'var(--teal-glow)', color: 'var(--teal)', padding: '0 2px', fontWeight: 600 }}>{part}</mark>
-              : <span key={i}>{part}</span>
-          )
-        }
-
-        return (
-          <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
-            <div style={{ maxWidth: 680, margin: '0 auto' }}>
-
-              {/* Loading */}
-              {alignmentLoading && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', gap: 14 }}>
-                  <Spinner />
-                  <div style={{ fontSize: 13, color: 'var(--text2)' }}>Analyzing theme coverage…</div>
-                </div>
-              )}
-
-              {!alignmentLoading && (
-                <>
-                  {/* Header row: title + coverage score */}
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16 }}>
-                    <div>
-                      <div className="page-title" style={{ marginBottom: 4 }}>Theme coverage</div>
-                      <div style={{ fontSize: 13, color: 'var(--text2)' }}>
-                        {jdData?.extracted_company && <strong style={{ color: 'var(--text)', fontWeight: 500 }}>{jdData.extracted_company}</strong>}
-                        {jdData?.extracted_role_type && <span style={{ color: 'var(--text3)' }}> · {jdData.extracted_role_type}</span>}
-                      </div>
-                    </div>
-                    {totalThemes > 0 && (
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontSize: 22, fontWeight: 600, color: coveredCount === totalThemes ? 'var(--teal)' : 'var(--text)', lineHeight: 1.1 }}>
-                          {coveredCount}/{totalThemes}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>themes covered</div>
-                        <div style={{ width: 100, height: 5, background: 'var(--bg3)', borderRadius: 999, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${Math.round((coveredCount / totalThemes) * 100)}%`, background: 'var(--teal)', borderRadius: 999, transition: 'width 0.3s' }} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Error banner */}
-                  {alignmentError && (
-                    <div style={{ background: 'oklch(0.4 0.18 10 / 0.12)', border: '1px solid var(--rose)', borderRadius: 10, padding: '16px 18px', marginBottom: 16 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--rose)', marginBottom: 4 }}>Theme analysis didn&apos;t complete</div>
-                      <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 12, lineHeight: 1.5 }}>{alignmentError}</div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => { setAlignmentError(null); handleAlign() }}>↺ Retry</button>
-                        <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('configuring')}>Skip and continue →</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* No themes at all */}
-                  {!alignmentError && totalThemes === 0 && (
-                    <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '20px 22px' }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>No themes found</div>
-                      <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 14, lineHeight: 1.5 }}>No themes were extracted from this job description. Your modules look good — continue to configure.</div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button className="btn-ghost" style={{ fontSize: 12 }} onClick={handleAlign}>↺ Retry</button>
-                        <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('configuring')}>Continue to configure →</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Theme cards */}
-                  {!alignmentError && totalThemes > 0 && (
-                    <>
-                      {/* Accept all shortcut */}
-                      {undecidedGaps > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-                          <button
-                            className="btn-ghost"
-                            style={{ fontSize: 12 }}
-                            onClick={() => setAlignmentStates(prev => {
-                              const next = { ...prev }
-                              for (const s of alignmentSuggestions) { if (!next[s.theme]) next[s.theme] = 'accepted' }
-                              return next
-                            })}
-                          >
-                            Accept all rewrites
-                          </button>
-                        </div>
-                      )}
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-
-                        {/* ── Covered themes ── */}
-                        {alignmentMatched.map(t => (
-                          <div key={t} style={{ background: 'var(--surface)', border: '1px solid var(--teal-glow)', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--teal-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                              <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="var(--teal)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            </div>
-                            <span style={{ fontSize: 13, color: 'var(--text)', flex: 1 }}>{t}</span>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal)', background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 999, padding: '2px 9px' }}>covered</span>
-                          </div>
-                        ))}
-
-                        {/* ── Gap themes ── */}
-                        {alignmentSuggestions.map(s => {
-                          const decision = alignmentStates[s.theme]
-                          const accepted = decision === 'accepted'
-                          const skipped = decision === 'skipped'
-
-                          if (accepted) {
-                            return (
-                              <div key={s.theme} style={{ background: 'var(--surface)', border: '1px solid var(--teal-glow)', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                                <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--teal-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="var(--teal)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                </div>
-                                <span style={{ fontSize: 13, color: 'var(--text)', flex: 1 }}>{s.theme}</span>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>{s.module_title}</span>
-                                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal)', background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 999, padding: '2px 9px' }}>rewritten</span>
-                                  <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text3)', padding: 0, fontFamily: 'var(--font)' }} onClick={() => setAlignmentStates(prev => { const n = { ...prev }; delete n[s.theme]; return n })}>undo</button>
-                                </div>
-                              </div>
-                            )
-                          }
-
-                          if (skipped) {
-                            return (
-                              <div key={s.theme} style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, opacity: 0.6 }}>
-                                <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--bg3)', flexShrink: 0 }} />
-                                <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1, textDecoration: 'line-through' }}>{s.theme}</span>
-                                <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: 'var(--text3)', padding: 0, opacity: 1, fontFamily: 'var(--font)' }} onClick={() => setAlignmentStates(prev => { const n = { ...prev }; delete n[s.theme]; return n })}>undo</button>
-                              </div>
-                            )
-                          }
-
-                          // Undecided gap card
-                          return (
-                            <div key={s.theme} style={{ background: 'var(--surface)', border: `1px solid ${AMBER_BORDER}`, borderRadius: 10, padding: '16px 18px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-                                <div style={{ width: 20, height: 20, borderRadius: '50%', background: AMBER_DIM, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  <span style={{ fontSize: 12, color: AMBER, fontWeight: 600, lineHeight: 1 }}>!</span>
-                                </div>
-                                <span style={{ fontSize: 13, color: 'var(--text)', flex: 1 }}>{s.theme}</span>
-                                <span style={{ fontSize: 11, fontWeight: 600, color: AMBER, background: AMBER_DIM, border: `1px solid ${AMBER_BORDER}`, borderRadius: 999, padding: '2px 9px' }}>gap</span>
-                              </div>
-                              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
-                                Suggested rewrite for <strong style={{ color: 'var(--text2)', fontWeight: 500 }}>{s.module_title}</strong>
-                              </div>
-                              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 3 }}>Original</div>
-                              <div style={{ borderLeft: '3px solid var(--border2)', marginBottom: 12, fontSize: 12, color: 'var(--text3)', lineHeight: 1.55, background: 'var(--bg3)', padding: '7px 12px', borderRadius: '0 6px 6px 0' }}>
-                                {s.original}
-                              </div>
-                              <div style={{ fontSize: 11, color: 'var(--teal)', marginBottom: 3 }}>Suggested rewrite</div>
-                              <div style={{ borderLeft: '3px solid var(--teal)', marginBottom: 14, fontSize: 12, color: 'var(--text)', lineHeight: 1.55, background: 'var(--teal-dim)', padding: '7px 12px', borderRadius: '0 6px 6px 0' }}>
-                                {highlightTheme(s.suggestion, s.theme)}
-                              </div>
-                              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                                <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setAlignmentStates(prev => ({ ...prev, [s.theme]: 'skipped' }))}>Skip</button>
-                                <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setAlignmentStates(prev => ({ ...prev, [s.theme]: 'accepted' }))}>Accept rewrite</button>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-
-                      {/* Save to library */}
-                      {acceptedCount > 0 && (
-                        <div style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 10, padding: '16px 18px', marginBottom: 16 }}>
-                          {savedToLibrary ? (
-                            <div style={{ fontSize: 13, color: 'var(--teal)', fontWeight: 600 }}>✓ Saved — your module library has been updated.</div>
-                          ) : (
-                            <>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Save changes to your module library?</div>
-                              <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.55, marginBottom: 12 }}>
-                                These accepted rewrites only apply to this generation. Save them permanently so future resumes start with stronger keyword coverage.
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <button
-                                  onClick={handleSaveToLibrary}
-                                  disabled={savingToLibrary}
-                                  style={{ fontSize: 12, padding: '6px 14px', borderRadius: 7, background: 'var(--surface)', border: '1px solid var(--teal-glow)', color: 'var(--teal)', cursor: savingToLibrary ? 'default' : 'pointer', fontFamily: 'var(--font)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: savingToLibrary ? 0.7 : 1 }}
-                                >
-                                  {savingToLibrary ? <><Spinner /> Saving…</> : `Save ${acceptedCount} module${acceptedCount === 1 ? '' : 's'} to library`}
-                                </button>
-                                <span style={{ fontSize: 11, color: 'var(--text3)' }}>or skip this</span>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Footer */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, gap: 12 }}>
-                        <span style={{ fontSize: 12, color: 'var(--text3)' }}>
-                          {undecidedGaps > 0
-                            ? `${undecidedGaps} gap${undecidedGaps === 1 ? '' : 's'} remaining — you can still continue`
-                            : coveredCount === totalThemes ? 'All themes covered' : 'Ready to continue'
-                          }
-                        </span>
-                        <button className="btn-primary" onClick={() => setStep('configuring')}>
-                          Continue to configure →
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )
-      })()}
 
       {/* ── CONFIGURING ───────────────────────────────────────────────────── */}
       {step === 'configuring' && (
@@ -1926,30 +1843,6 @@ export default function GeneratePage() {
                   </button>
                 </div>
               )}
-            </div>
-
-            {/* Career narrative variant */}
-            <div className="config-section">
-              <div className="config-section-title" style={{ marginBottom: 4 }}>Career Narrative</div>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>
-                Generation strategies — they shape how the AI frames your existing modules, not new content.
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
-                {([
-                  { letter: 'A', name: 'Impact-led', desc: 'Lead with grassroots momentum and community growth' },
-                  { letter: 'B', name: 'Scale-led', desc: 'Lead with team building and organizational scale' },
-                  { letter: 'C', name: 'Cross-functional', desc: 'Lead with stakeholder alignment and influence' },
-                  { letter: 'D', name: 'Technical-depth-led', desc: 'Lead with product partnership and technical knowledge' },
-                ] as const).map(v => (
-                  <label key={v.letter} style={{ display: 'flex', gap: 10, padding: '12px 14px', background: posVariant === v.letter ? 'var(--teal-dim)' : 'var(--surface)', border: `1px solid ${posVariant === v.letter ? 'var(--teal-glow)' : 'var(--border2)'}`, borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s' }}>
-                    <input type="radio" name="variant" value={v.letter} checked={posVariant === v.letter} onChange={() => setPosVariant(v.letter)} style={{ marginTop: 2, accentColor: 'var(--teal)' }} />
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: posVariant === v.letter ? 'var(--teal)' : 'var(--text)' }}>{v.letter} — {v.name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{v.desc}</div>
-                    </div>
-                  </label>
-                ))}
-              </div>
             </div>
 
             {/* Target level */}
