@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, KeyboardEvent, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import ScoreGauge from '@/components/ScoreGauge'
-import { isAtFreeLimit } from '@/lib/plan'
+import { canGenerate } from '@/lib/plan'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -931,8 +931,8 @@ export default function GeneratePage() {
     try {
       const usageRes = await fetch('/api/usage')
       if (usageRes.ok) {
-        const usage = await usageRes.json() as { count: number; overage_credits: number; plan: string }
-        if (usage.plan === 'free' && isAtFreeLimit(usage.count, usage.overage_credits)) {
+        const usage = await usageRes.json() as { count: number; overage_credits: number; resume_credits: number; plan: string }
+        if (!canGenerate(usage.plan, usage.count, usage.resume_credits)) {
           setShowOveragePrompt(true)
           return
         }
@@ -1824,7 +1824,7 @@ export default function GeneratePage() {
                   You&apos;ve used your 2 free resumes this month.
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 14 }}>
-                  $4 to generate one more — no subscription needed.
+                  Buy a single resume for $9, a 5-pack for $29, or go unlimited with Pro. Credits never expire.
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <button
@@ -1834,10 +1834,10 @@ export default function GeneratePage() {
                     disabled={overageCheckoutLoading}
                     style={overageCheckoutLoading ? { opacity: 0.7, display: 'inline-flex', alignItems: 'center', gap: 6 } : { display: 'inline-flex', alignItems: 'center', gap: 6 }}
                   >
-                    {overageCheckoutLoading ? <><Spinner /> Starting checkout…</> : 'Generate for $4 →'}
+                    {overageCheckoutLoading ? <><Spinner /> Starting checkout…</> : 'Buy single — $9 →'}
                   </button>
                   <a href="/pricing" style={{ fontSize: 13, color: 'var(--teal)', textDecoration: 'none' }}>
-                    Or upgrade for unlimited →
+                    See all options →
                   </a>
                 </div>
               </div>

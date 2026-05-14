@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-type Plan = 'free' | 'starter' | 'pro'
+type Plan = 'free' | 'pro'
 
 interface Props {
   planKey: Plan

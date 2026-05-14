@@ -1,9 +1,9 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { FREE_LIMIT, STARTER_LIMIT, moduleLimit, uploadLimit } from '@/lib/plan';
+import { FREE_LIMIT, moduleLimit, uploadLimit } from '@/lib/plan';
 import BillingActions from './BillingActions';
 
-type Plan = 'free' | 'starter' | 'pro';
+type Plan = 'free' | 'pro';
 
 function fmtLimit(n: number, unit: string) {
   return Number.isFinite(n) ? `${n} ${unit}` : `Unlimited ${unit}`;
@@ -27,45 +27,27 @@ const PLANS: Array<{
     features: [
       fmtLimit(uploadLimit('free'), 'resume upload'),
       fmtLimit(moduleLimit('free'), 'modules'),
-      `${FREE_LIMIT} resumes/mo — $4 per additional`,
-      'DOCX + PDF (24-hour links)',
+      `${FREE_LIMIT} resumes/mo`,
+      'Or buy credits: $9 single · $29 5-pack',
+      'DOCX + PDF download',
       'Paste JD input',
     ],
     cta: 'Current plan',
   },
   {
-    key: 'starter',
-    name: 'Starter',
-    price: '$29/mo',
-    annualPrice: '$289/yr',
-    desc: 'For active job seekers.',
-    features: [
-      fmtLimit(uploadLimit('starter'), 'resume uploads'),
-      fmtLimit(moduleLimit('starter'), 'modules'),
-      `${STARTER_LIMIT} resumes/mo`,
-      'Permanent file storage',
-      'Cover letter generation',
-      'Save job descriptions',
-      '60-day generation history',
-    ],
-    cta: 'Upgrade to Starter',
-  },
-  {
     key: 'pro',
     name: 'Pro',
-    price: '$40/mo',
-    annualPrice: '$399/yr',
+    price: '$19/mo',
+    annualPrice: '$99/yr',
     desc: 'Unlimited everything.',
     features: [
       'Unlimited resume uploads',
       'Unlimited modules',
-      'Unlimited resumes',
-      'Permanent file storage',
-      'Cover letter generation',
-      'Save job descriptions',
+      'Unlimited tailored resumes',
+      'All 6 formats (PDF + DOCX)',
+      'Full ATS optimization + live score',
       'Full generation history',
-      'Faster AI generation',
-      'Early access to new features',
+      'Priority access to new features',
     ],
     cta: 'Upgrade to Pro',
   },
@@ -82,7 +64,9 @@ export default async function BillingPage() {
     .eq('id', user.id)
     .single();
 
-  const currentPlan = (profile?.plan ?? 'free') as Plan;
+  const rawPlan = (profile?.plan ?? 'free') as string;
+  // 'starter' is a retired tier — surface those users as 'free' for upgrade prompts.
+  const currentPlan: Plan = rawPlan === 'pro' ? 'pro' : 'free';
   const hasStripe = !!profile?.stripe_customer_id;
 
   return (
@@ -98,10 +82,7 @@ export default async function BillingPage() {
         <div className="pricing-grid">
           {PLANS.map(plan => {
             const isCurrent = plan.key === currentPlan;
-            const isDowngrade = (
-              (currentPlan === 'pro' && plan.key !== 'pro') ||
-              (currentPlan === 'starter' && plan.key === 'free')
-            );
+            const isDowngrade = currentPlan === 'pro' && plan.key !== 'pro';
 
             return (
               <div key={plan.key} className={`pricing-card${isCurrent ? ' current' : ''}`}>
@@ -150,11 +131,11 @@ export default async function BillingPage() {
             </div>
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>What happens when I hit my free limit?</div>
-              <div style={{ fontSize: 13, color: 'var(--text2)' }}>You&apos;ll get a prompt to pay $4 for one more resume, or upgrade to a paid plan for unlimited. Your modules and history are never deleted.</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>You can buy a single resume for $9, a 5-pack for $29 (credits never expire), or upgrade to Pro for unlimited. Your modules and history are never deleted.</div>
             </div>
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>What&apos;s the difference between Starter and Pro?</div>
-              <div style={{ fontSize: 13, color: 'var(--text2)' }}>Starter covers active job seekers — 3 uploads, 50 modules, 15 resumes/mo. Pro unlocks unlimited everything plus faster AI generation and early feature access.</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Do resume credits expire?</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>No — credits from single and 5-pack purchases never expire. Use them whenever you&apos;re ready.</div>
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Can I cancel anytime?</div>

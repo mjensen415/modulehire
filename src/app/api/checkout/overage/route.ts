@@ -15,14 +15,14 @@ export async function POST() {
       .single()
 
     const plan = profile?.plan ?? 'free'
-    if (plan !== 'free') {
-      return NextResponse.json({ error: 'Overage credits are only for the free plan.' }, { status: 400 })
+    if (plan === 'pro') {
+      return NextResponse.json({ error: 'Pro plans already include unlimited resumes.' }, { status: 400 })
     }
 
-    const priceId = process.env.STRIPE_PRICE_RESUME_OVERAGE
+    const priceId = process.env.STRIPE_PRICE_SINGLE_RESUME
     if (!priceId) {
-      console.error('[api/checkout/overage] STRIPE_PRICE_RESUME_OVERAGE is not configured')
-      return NextResponse.json({ error: 'Overage purchase is not available right now.' }, { status: 500 })
+      console.error('[api/checkout/overage] STRIPE_PRICE_SINGLE_RESUME is not configured')
+      return NextResponse.json({ error: 'Single-resume purchase is not available right now.' }, { status: 500 })
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL
@@ -54,11 +54,12 @@ export async function POST() {
       mode: 'payment',
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${appUrl}/generate?overage_success=true`,
+      success_url: `${appUrl}/generate?credits=true`,
       cancel_url:  `${appUrl}/generate`,
       metadata: {
         supabase_user_id: user.id,
-        type: 'resume_overage',
+        type: 'resume_single',
+        credits: '1',
       },
     })
 

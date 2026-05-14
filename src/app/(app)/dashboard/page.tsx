@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { moduleLimit, FREE_LIMIT, STARTER_LIMIT } from '@/lib/plan';
+import { moduleLimit, FREE_LIMIT } from '@/lib/plan';
 
 // ─── ICONS ───
 function IconBlocks() {
@@ -224,7 +224,7 @@ export default async function Dashboard() {
   const resumesThisMonth = resumesThisMonthCount ?? 0;
 
   const moduleCap = moduleLimit(plan);
-  const resumeCap = plan === 'pro' ? Infinity : plan === 'starter' ? STARTER_LIMIT : FREE_LIMIT;
+  const resumeCap = plan === 'pro' ? Infinity : FREE_LIMIT;
 
   const nearModuleLimit = !isAdmin && Number.isFinite(moduleCap) && currentModuleCount >= moduleCap - 2;
   const atModuleLimit = !isAdmin && Number.isFinite(moduleCap) && currentModuleCount >= moduleCap;

@@ -16,19 +16,19 @@ function Spinner() {
 }
 
 export default function Pricing() {
-  const [upgrading, setUpgrading] = useState<Record<string, boolean>>({})
+  const [loading, setLoading] = useState<Record<string, boolean>>({})
+  const [proInterval, setProInterval] = useState<'monthly' | 'annual'>('monthly')
 
-  async function handleUpgrade(plan: 'starter' | 'pro', interval: 'monthly' | 'annual') {
-    const key = `${plan}-${interval}`
-    setUpgrading(prev => ({ ...prev, [key]: true }))
+  async function postCheckout(key: string, body: Record<string, unknown>) {
+    setLoading(prev => ({ ...prev, [key]: true }))
     try {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan, interval }),
+        body: JSON.stringify(body),
       })
       if (res.status === 401) {
-        window.location.href = '/signin?next=/billing'
+        window.location.href = '/signin?next=/pricing'
         return
       }
       const data = await res.json()
@@ -37,12 +37,21 @@ export default function Pricing() {
     } catch (e) {
       alert((e as Error).message ?? 'Could not start checkout.')
     } finally {
-      setUpgrading(prev => ({ ...prev, [key]: false }))
+      setLoading(prev => ({ ...prev, [key]: false }))
     }
   }
 
-  const starterLoading = !!upgrading['starter-monthly']
-  const proLoading = !!upgrading['pro-monthly']
+  function handleOneTime(product: 'single' | 'pack') {
+    return postCheckout(`product-${product}`, { product })
+  }
+
+  function handleUpgrade(plan: 'pro', interval: 'monthly' | 'annual') {
+    return postCheckout(`${plan}-${interval}`, { plan, interval })
+  }
+
+  const singleLoading = !!loading['product-single']
+  const packLoading = !!loading['product-pack']
+  const proLoading = !!loading[`pro-${proInterval}`]
 
   return (
     <>
@@ -51,13 +60,13 @@ export default function Pricing() {
       <section className="page-hero">
         <div className="hero-glow"></div>
         <div className="eyebrow">Pricing</div>
-        <h1 className="page-headline">Free to start. Scale when you need to.</h1>
+        <h1 className="page-headline">Pay as you go, or go unlimited.</h1>
+        <p style={{ color: 'var(--text2)', marginTop: 12 }}>No hidden fees. Credits don&apos;t expire.</p>
       </section>
 
       <section className="pricing-section">
-        <div className="pricing-grid">
-
-          {/* FREE */}
+        {/* ROW 1 — Free */}
+        <div className="pricing-grid" style={{ marginBottom: 24 }}>
           <div className="price-card">
             <div className="plan-name">Free</div>
             <div className="plan-price">
@@ -69,81 +78,121 @@ export default function Pricing() {
               <li><span className="feature-dot"></span>1 resume upload</li>
               <li><span className="feature-dot"></span>Up to 20 modules in your library</li>
               <li><span className="feature-dot"></span>2 tailored resumes per month</li>
-              <li><span className="feature-dot"></span>$4 per additional resume</li>
-              <li><span className="feature-dot"></span>DOCX + PDF download (24-hour link)</li>
+              <li><span className="feature-dot"></span>DOCX + PDF download</li>
               <li><span className="feature-dot"></span>Paste JD input</li>
             </ul>
             <Link href="/signin" className="btn-secondary" style={{ textDecoration: 'none' }}>Get started free</Link>
           </div>
+        </div>
 
-          {/* STARTER */}
-          <div className="price-card starter">
-            <div className="plan-name">Starter</div>
+        {/* ROW 2 — One-time purchases */}
+        <div className="pricing-grid" style={{ marginBottom: 24 }}>
+          <div className="price-card">
+            <div className="plan-name">Single Resume</div>
             <div className="plan-price">
-              <span className="price-amount">$29</span>
-              <span className="price-period">/ month</span>
+              <span className="price-amount">$9</span>
+              <span className="price-period">one-time</span>
             </div>
-            <div className="price-alt"><s>$348/year</s> &nbsp;<strong>$289/year — save $59</strong></div>
+            <div className="price-alt">One credit, no subscription</div>
             <ul className="features-list">
-              <li><span className="feature-dot"></span>3 resume uploads</li>
-              <li><span className="feature-dot"></span>Up to 50 modules in your library</li>
-              <li><span className="feature-dot"></span>15 tailored resumes per month</li>
-              <li><span className="feature-dot"></span>Permanent file storage</li>
-              <li><span className="feature-dot"></span>Cover letter generation</li>
-              <li><span className="feature-dot"></span>Save job descriptions</li>
-              <li><span className="feature-dot"></span>60-day generation history</li>
+              <li><span className="feature-dot"></span>1 tailored resume</li>
+              <li><span className="feature-dot"></span>All 6 formats (PDF + DOCX)</li>
+              <li><span className="feature-dot"></span>Credits never expire</li>
+              <li><span className="feature-dot"></span>Full ATS optimization</li>
             </ul>
             <button
               type="button"
               className="btn-secondary"
-              onClick={() => handleUpgrade('starter', 'monthly')}
-              disabled={starterLoading}
-              style={{ cursor: starterLoading ? 'default' : 'pointer', opacity: starterLoading ? 0.7 : 1 }}
+              onClick={() => handleOneTime('single')}
+              disabled={singleLoading}
+              style={{ cursor: singleLoading ? 'default' : 'pointer', opacity: singleLoading ? 0.7 : 1 }}
             >
-              {starterLoading ? <><Spinner />Starting checkout…</> : 'Start for $29/mo'}
+              {singleLoading ? <><Spinner />Starting checkout…</> : 'Buy one resume'}
             </button>
           </div>
 
-          {/* PRO */}
-          <div className="price-card pro">
-            <div className="popular-badge">Most Popular</div>
+          <div className="price-card">
+            <div className="popular-badge">Best value</div>
+            <div className="plan-name">5-Pack</div>
+            <div className="plan-price">
+              <span className="price-amount">$29</span>
+              <span className="price-period">one-time</span>
+            </div>
+            <div className="price-alt">~$5.80 per resume</div>
+            <ul className="features-list">
+              <li><span className="feature-dot"></span>5 tailored resumes</li>
+              <li><span className="feature-dot"></span>All 6 formats (PDF + DOCX)</li>
+              <li><span className="feature-dot"></span>Credits never expire</li>
+              <li><span className="feature-dot"></span>Full ATS optimization</li>
+              <li><span className="feature-dot"></span>Save $16 vs single</li>
+            </ul>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => handleOneTime('pack')}
+              disabled={packLoading}
+              style={{ cursor: packLoading ? 'default' : 'pointer', opacity: packLoading ? 0.7 : 1 }}
+            >
+              {packLoading ? <><Spinner />Starting checkout…</> : 'Buy 5-pack'}
+            </button>
+          </div>
+        </div>
+
+        {/* ROW 3 — Pro subscription */}
+        <div className="pricing-grid">
+          <div className="price-card pro" style={{ gridColumn: '1 / -1' }}>
+            <div className="popular-badge">Most popular</div>
             <div className="plan-name">Pro</div>
             <div className="plan-price">
-              <span className="price-amount">$40</span>
-              <span className="price-period">/ month</span>
+              <span className="price-amount">{proInterval === 'monthly' ? '$19' : '$99'}</span>
+              <span className="price-period">{proInterval === 'monthly' ? '/ month' : '/ year'}</span>
             </div>
-            <div className="price-alt"><s>$480/year</s> &nbsp;<strong>$399/year — save $81</strong></div>
+            <div className="price-alt" style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setProInterval('monthly')}
+                className={proInterval === 'monthly' ? 'btn-primary' : 'btn-ghost'}
+                style={{ fontSize: 12, padding: '4px 10px' }}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                onClick={() => setProInterval('annual')}
+                className={proInterval === 'annual' ? 'btn-primary' : 'btn-ghost'}
+                style={{ fontSize: 12, padding: '4px 10px' }}
+              >
+                Annual <strong style={{ marginLeft: 4 }}>save $29</strong>
+              </button>
+            </div>
             <ul className="features-list">
-              <li><span className="feature-dot"></span>Unlimited resume uploads</li>
-              <li><span className="feature-dot"></span>Unlimited modules</li>
               <li><span className="feature-dot"></span>Unlimited tailored resumes</li>
-              <li><span className="feature-dot"></span>Permanent file storage</li>
-              <li><span className="feature-dot"></span>Cover letter generation</li>
-              <li><span className="feature-dot"></span>Save job descriptions</li>
+              <li><span className="feature-dot"></span>Unlimited resume uploads</li>
+              <li><span className="feature-dot"></span>Unlimited module library</li>
+              <li><span className="feature-dot"></span>All 6 formats (PDF + DOCX)</li>
+              <li><span className="feature-dot"></span>Full ATS optimization + live score</li>
               <li><span className="feature-dot"></span>Full generation history</li>
-              <li><span className="feature-dot"></span>Faster AI generation</li>
-              <li><span className="feature-dot"></span>Priority generation</li>
-              <li><span className="feature-dot"></span>Early access to new features</li>
+              <li><span className="feature-dot"></span>Priority access to new features</li>
             </ul>
             <button
               type="button"
               className="btn-primary"
-              onClick={() => handleUpgrade('pro', 'monthly')}
+              onClick={() => handleUpgrade('pro', proInterval)}
               disabled={proLoading}
               style={{ cursor: proLoading ? 'default' : 'pointer', opacity: proLoading ? 0.7 : 1 }}
             >
-              {proLoading ? <><Spinner />Starting checkout…</> : 'Start Pro free for 7 days'}
+              {proLoading ? <><Spinner />Starting checkout…</> : 'Start Pro'}
             </button>
           </div>
-
         </div>
       </section>
 
       <section className="faq-section">
         <h2 className="section-headline">Questions about pricing</h2>
+        <FaqItem question="Do resume credits expire?" answer="No — credits from single and pack purchases never expire. Use them whenever you're ready." />
+        <FaqItem question="Can I mix credits and a subscription?" answer="Yes. If you have credits and upgrade to Pro, your credits stay in your account." />
         <FaqItem question="Can I upgrade or downgrade later?" answer="Yes — any time. Your module library is fully preserved when you change plans. All modules, edits, and settings carry over automatically." />
         <FaqItem question="What happens to my files if I downgrade?" answer="Files are archived for 30 days after a downgrade. You can re-download any previously generated resumes during that window. After 30 days, stored files are removed — but your modules always remain." />
-        <FaqItem question="What's the difference between Starter and Pro?" answer="Starter is great if you're actively job searching but don't need unlimited volume. Pro unlocks unlimited everything — uploads, modules, resumes — plus priority generation, URL imports, full history, and early access to new features." />
         <FaqItem question="Is there a team plan?" answer="Coming soon — join the waitlist and we'll let you know when team accounts are available. Team plans will include shared module libraries and manager visibility into team output." />
         <FaqItem question="Do you offer refunds?" answer="If you're not satisfied within the first 7 days of a paid plan, we'll refund you — no questions asked. Email support@modulehire.com." />
       </section>

@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
-import { canGenerate } from '@/lib/plan'
+import { canGenerate, FREE_LIMIT } from '@/lib/plan'
 import * as docx from 'docx'
 import { renderToBuffer, Document as PdfDoc, Page, Text, View } from '@react-pdf/renderer'
 import React from 'react'
@@ -990,19 +990,19 @@ export async function POST(req: Request) {
         .maybeSingle(),
       supabase
         .from('users')
-        .select('plan')
+        .select('plan, resume_credits')
         .eq('id', user.id)
         .single(),
     ])
 
     const usageRow = usageRes.data as { count?: number; overage_credits?: number } | null
-    const profileRow = profileRes.data as { plan?: string } | null
+    const profileRow = profileRes.data as { plan?: string; resume_credits?: number } | null
 
     const plan = (profileRow?.plan ?? 'free') as string
     const count = usageRow?.count ?? 0
-    const overageCredits = usageRow?.overage_credits ?? 0
+    const resumeCredits = profileRow?.resume_credits ?? 0
 
-    if (!canGenerate(plan, count, overageCredits)) {
+    if (!canGenerate(plan, count, resumeCredits)) {
       return NextResponse.json(
         { error: 'Generation limit reached.', code: 'LIMIT_REACHED', plan, count },
         { status: 403 }
@@ -1443,6 +1443,17 @@ Rules:
     }
 
     await supabase.from('usage_events').insert({ user_id: user.id, action: 'generate_resume' })
+
+    // Consume one resume credit if the user is past the free monthly limit and not pro.
+    if (plan !== 'pro' && count >= FREE_LIMIT && resumeCredits > 0) {
+      const { error: creditError } = await supabase.rpc('increment_resume_credits', {
+        p_user_id: user.id,
+        p_amount: -1,
+      })
+      if (creditError) {
+        console.error('[generate-resume] decrement resume_credits failed:', creditError)
+      }
+    }
 
     // Increment monthly resume count (atomic via RPC). Generation already succeeded —
     // log on failure but don't fail the request.

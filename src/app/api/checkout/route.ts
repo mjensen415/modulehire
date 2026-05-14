@@ -3,13 +3,15 @@ import { stripe } from '@/lib/stripe'
 import { createClient } from '@/lib/supabase/server'
 
 const PRICE_MAP: Record<string, string | undefined> = {
-  'starter-monthly': process.env.STRIPE_PRICE_STARTER_MONTHLY,
-  'starter-annual':  process.env.STRIPE_PRICE_STARTER_ANNUAL,
-  'pro-monthly':     process.env.STRIPE_PRICE_PRO_MONTHLY,
-  'pro-annual':      process.env.STRIPE_PRICE_PRO_ANNUAL,
+  'pro-monthly': process.env.STRIPE_PRICE_PRO_MONTHLY,
+  'pro-annual':  process.env.STRIPE_PRICE_PRO_ANNUAL,
+}
+const ONE_TIME_MAP: Record<string, { priceId: string | undefined; credits: number; type: string }> = {
+  'single': { priceId: process.env.STRIPE_PRICE_SINGLE_RESUME, credits: 1, type: 'resume_single' },
+  'pack':   { priceId: process.env.STRIPE_PRICE_FIVE_PACK,     credits: 5, type: 'resume_pack'   },
 }
 
-const VALID_PLANS = new Set(['starter', 'pro'])
+const VALID_PLANS = new Set(['pro'])
 const VALID_INTERVALS = new Set(['monthly', 'annual'])
 
 export async function POST(req: Request) {
@@ -18,16 +20,8 @@ export async function POST(req: Request) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { plan, interval } = await req.json()
-    if (!VALID_PLANS.has(plan) || !VALID_INTERVALS.has(interval)) {
-      return NextResponse.json({ error: 'Invalid plan or interval' }, { status: 400 })
-    }
-
-    const priceId = PRICE_MAP[`${plan}-${interval}`]
-    if (!priceId) {
-      console.error('[api/checkout] missing price id for', plan, interval)
-      return NextResponse.json({ error: 'Plan is not available right now.' }, { status: 500 })
-    }
+    const body = await req.json()
+    const { plan, interval, product } = body as { plan?: string; interval?: string; product?: string }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL
     if (!appUrl) {
@@ -57,8 +51,48 @@ export async function POST(req: Request) {
         .eq('id', user.id)
       if (saveError) {
         console.error('[api/checkout] failed to persist stripe_customer_id:', saveError)
-        // Continue — checkout will still work, but the webhook may need to reconcile.
       }
+    }
+
+    // One-time purchase (resume credits)
+    if (product) {
+      const item = ONE_TIME_MAP[product]
+      if (!item) {
+        return NextResponse.json({ error: 'Invalid product' }, { status: 400 })
+      }
+      if (!item.priceId) {
+        console.error('[api/checkout] missing one-time price id for', product)
+        return NextResponse.json({ error: 'Product is not available right now.' }, { status: 500 })
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        customer: customerId,
+        line_items: [{ price: item.priceId, quantity: 1 }],
+        success_url: `${appUrl}/dashboard?credits=true`,
+        cancel_url:  `${appUrl}/pricing`,
+        metadata: {
+          type: item.type,
+          supabase_user_id: user.id,
+          credits: String(item.credits),
+        },
+      })
+
+      if (!session.url) {
+        return NextResponse.json({ error: 'Could not start checkout.' }, { status: 500 })
+      }
+      return NextResponse.json({ url: session.url })
+    }
+
+    // Subscription (Pro)
+    if (!plan || !interval || !VALID_PLANS.has(plan) || !VALID_INTERVALS.has(interval)) {
+      return NextResponse.json({ error: 'Invalid plan or interval' }, { status: 400 })
+    }
+
+    const priceId = PRICE_MAP[`${plan}-${interval}`]
+    if (!priceId) {
+      console.error('[api/checkout] missing price id for', plan, interval)
+      return NextResponse.json({ error: 'Plan is not available right now.' }, { status: 500 })
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -68,10 +102,9 @@ export async function POST(req: Request) {
       success_url: `${appUrl}/dashboard?upgraded=true`,
       cancel_url:  `${appUrl}/pricing`,
       subscription_data: {
-        ...(plan === 'pro' && { trial_period_days: 7 }),
         metadata: {
           supabase_user_id: user.id,
-          plan,
+          plan: 'pro',
           interval,
         },
       },

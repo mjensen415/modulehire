@@ -19,17 +19,18 @@ export async function GET() {
         .maybeSingle(),
       supabase
         .from('users')
-        .select('plan')
+        .select('plan, resume_credits')
         .eq('id', user.id)
         .single(),
     ])
 
     const usage = usageRes.data as { count?: number; overage_credits?: number } | null
-    const profile = profileRes.data as { plan?: string } | null
+    const profile = profileRes.data as { plan?: string; resume_credits?: number } | null
 
     return NextResponse.json({
       count: usage?.count ?? 0,
       overage_credits: usage?.overage_credits ?? 0,
+      resume_credits: profile?.resume_credits ?? 0,
       plan: profile?.plan ?? 'free',
     })
   } catch (error) {

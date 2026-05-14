@@ -46,22 +46,20 @@ export async function POST(req: Request) {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
 
-    // One-time overage purchase (free plan resume credit) — payment mode, no subscription
-    if (session.mode === 'payment' && session.metadata?.type === 'resume_overage') {
+    // One-time resume credit purchases (single or 5-pack) — payment mode, no subscription
+    if (session.mode === 'payment') {
+      const type = session.metadata?.type;
+      const credits = parseInt(session.metadata?.credits ?? '0', 10);
       const userId = session.metadata?.supabase_user_id;
-      if (!userId || !isUuid(userId)) {
-        console.error('[stripe webhook] overage session missing/invalid supabase_user_id:', session.id);
-        return NextResponse.json({ ok: true });
-      }
-      const now = new Date();
-      const month = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-      const { error: rpcError } = await supabase.rpc('increment_overage_credits', {
-        p_user_id: userId,
-        p_month: month,
-      });
-      if (rpcError) {
-        // Log but do NOT return non-200 — Stripe would retry indefinitely.
-        console.error('[stripe webhook] increment_overage_credits failed:', rpcError);
+      if ((type === 'resume_single' || type === 'resume_pack') && credits > 0 && userId && isUuid(userId)) {
+        const { error: rpcError } = await supabase.rpc('increment_resume_credits', {
+          p_user_id: userId,
+          p_amount: credits,
+        });
+        if (rpcError) {
+          // Log but do NOT return non-200 — Stripe would retry indefinitely.
+          console.error('[stripe webhook] increment_resume_credits failed:', rpcError);
+        }
       }
       return NextResponse.json({ ok: true });
     }
