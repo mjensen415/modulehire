@@ -204,6 +204,13 @@ export default function GeneratePage() {
   // Building step UI state
   const [collapsedJobs, setCollapsedJobs] = useState<Record<string, boolean>>({})
   const [openSuggestion, setOpenSuggestion] = useState<string | null>(null)
+  // Inline module editing
+  const [editingModuleId, setEditingModuleId] = useState<string | null>(null)
+  const [editingContent, setEditingContent] = useState('')
+  const [editSaveToLibrary, setEditSaveToLibrary] = useState(false)
+  const [editSaving, setEditSaving] = useState(false)
+  // Content overrides: keyed by module_id, holds edited content for this session
+  const [moduleContentOverrides, setModuleContentOverrides] = useState<Record<string, string>>({})
   const skillInputRef = useRef<HTMLInputElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -372,13 +379,19 @@ export default function GeneratePage() {
   // ── Building step: live theme coverage ─────────────────────────────────────
   const coveredThemes = useMemo(() => {
     const covered = new Set<string>()
+    const themes = confirmedThemes.length > 0 ? confirmedThemes : (jdData?.extracted_themes ?? [])
     for (const m of rankedModules) {
-      if (selectedIds.includes(m.module_id)) {
-        for (const t of m.themes ?? []) covered.add(t)
+      if (!selectedIds.includes(m.module_id)) continue
+      // Tag-based coverage (set at parse time in library)
+      for (const t of m.themes ?? []) covered.add(t)
+      // Content-based coverage: check if any JD theme string appears in effective content
+      const effectiveContent = (moduleContentOverrides[m.module_id] ?? m.content).toLowerCase()
+      for (const theme of themes) {
+        if (effectiveContent.includes(theme.toLowerCase())) covered.add(theme)
       }
     }
     return covered
-  }, [rankedModules, selectedIds])
+  }, [rankedModules, selectedIds, moduleContentOverrides, confirmedThemes, jdData?.extracted_themes])
 
   useEffect(() => {
     // Don't save ephemeral / terminal states
@@ -722,6 +735,39 @@ export default function GeneratePage() {
     setUnmatchedModules(um => um.filter(u => u.id !== m.id))
   }
 
+  // ── Module inline edit ───────────────────────────────────────────────────────
+
+  function startEditModule(m: RankedModule) {
+    setEditingModuleId(m.module_id)
+    setEditingContent(moduleContentOverrides[m.module_id] ?? m.content)
+    setEditSaveToLibrary(false)
+    setOpenSuggestion(null)
+  }
+
+  async function saveModuleEdit(moduleId: string) {
+    const trimmed = editingContent.trim()
+    if (!trimmed) return
+    setEditSaving(true)
+    // Update local override immediately so coverage updates right away
+    setModuleContentOverrides(prev => ({ ...prev, [moduleId]: trimmed }))
+    if (editSaveToLibrary) {
+      try {
+        await fetch(`/api/modules/${moduleId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: trimmed }),
+        })
+      } catch (_) { /* silently ignore — local override already applied */ }
+    }
+    setEditSaving(false)
+    setEditingModuleId(null)
+  }
+
+  function cancelModuleEdit() {
+    setEditingModuleId(null)
+    setEditingContent('')
+  }
+
   // ── Step 3: skills input ────────────────────────────────────────────────────
 
   function addSkill(val: string) {
@@ -867,7 +913,9 @@ export default function GeneratePage() {
         .filter(m => selectedIds.includes(m.module_id))
         .map(m => m.module_id)
 
-      const moduleAugmentations: Record<string, string> = {}
+      // Merge content overrides (manual edits) + accepted alignment rewrites
+      // Accepted alignment suggestions take priority over manual edits
+      const moduleAugmentations: Record<string, string> = { ...moduleContentOverrides }
       for (const s of alignmentSuggestions) {
         if (alignmentStates[s.theme] === 'accepted') {
           moduleAugmentations[s.module_id] = s.suggestion
@@ -956,6 +1004,9 @@ export default function GeneratePage() {
     setOverageCheckoutLoading(false)
     setIncludeAwards(false)
     setAwardsText('')
+    setModuleContentOverrides({})
+    setEditingModuleId(null)
+    setEditingContent('')
   }
 
   // ── RENDER ──────────────────────────────────────────────────────────────────
@@ -1323,30 +1374,47 @@ export default function GeneratePage() {
                     const suggestion = alignmentSuggestions.find(s => s.module_id === m.module_id)
                     const hasSuggestion = !!suggestion && on
                     const suggestionOpen = openSuggestion === m.module_id
+                    const isEditing = editingModuleId === m.module_id
+                    const effectiveContent = moduleContentOverrides[m.module_id] ?? m.content
+                    const isOverridden = !!moduleContentOverrides[m.module_id]
+                    // Uncovered themes for this module — show as edit hints
+                    const allThemes = confirmedThemes.length > 0 ? confirmedThemes : (jdData?.extracted_themes ?? [])
+                    const uncoveredForModule = allThemes.filter(t => !coveredThemes.has(t))
 
                     return (
                       <div
                         key={m.module_id}
                         style={{
                           background: 'var(--surface)',
-                          border: `1px solid ${hasSuggestion ? 'oklch(0.65 0.14 60 / 0.4)' : 'var(--border2)'}`,
+                          border: `1px solid ${isEditing ? 'var(--teal-glow)' : hasSuggestion ? 'oklch(0.65 0.14 60 / 0.4)' : 'var(--border2)'}`,
                           borderRadius: 10,
                           marginBottom: 8,
                           opacity: on ? 1 : 0.5,
-                          transition: 'opacity 0.15s',
+                          transition: 'opacity 0.15s, border-color 0.15s',
                           overflow: 'hidden',
                         }}
                       >
-                        {/* Module row */}
+                        {/* Module header row */}
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px' }}>
                           <div style={{ width: 3, alignSelf: 'stretch', borderRadius: 2, flexShrink: 0, background: m.weight === 'anchor' ? 'var(--teal)' : m.weight === 'strong' ? 'var(--indigo)' : 'var(--amber)' }} />
 
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>{m.title}</div>
-                            <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.4 }}>{m.content.slice(0, 120)}{m.content.length > 120 ? '…' : ''}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{m.title}</div>
+                              {isOverridden && !isEditing && (
+                                <span style={{ fontSize: 10, color: 'var(--teal)', background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>edited</span>
+                              )}
+                            </div>
+
+                            {/* Content: full text when not editing */}
+                            {!isEditing && (
+                              <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                                {effectiveContent}
+                              </div>
+                            )}
 
                             {/* Theme tags */}
-                            {m.themes && m.themes.length > 0 && (
+                            {!isEditing && m.themes && m.themes.length > 0 && (
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                                 {m.themes.map(t => (
                                   <span key={t} style={{
@@ -1366,10 +1434,10 @@ export default function GeneratePage() {
                           </div>
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                            {m.match_score > 0 && (
+                            {m.match_score > 0 && !isEditing && (
                               <span className={`mod-score ${scoreClass(m.match_score)}`}>{m.match_score}%</span>
                             )}
-                            {hasSuggestion && (
+                            {hasSuggestion && !isEditing && (
                               <button
                                 style={{
                                   fontSize: 10,
@@ -1387,16 +1455,119 @@ export default function GeneratePage() {
                                 {alignmentStates[suggestion.theme] === 'accepted' ? '✓ rewritten' : 'gap'}
                               </button>
                             )}
-                            <button
-                              className={`mod-toggle ${on ? '' : 'off'}`}
-                              onClick={() => toggleModule(m.module_id)}
-                              aria-label={`Toggle ${m.title}`}
-                            />
+                            {!isEditing && (
+                              <button
+                                onClick={() => startEditModule(m)}
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 500,
+                                  background: 'none',
+                                  border: '1px solid var(--border2)',
+                                  borderRadius: 5,
+                                  padding: '2px 8px',
+                                  color: 'var(--text3)',
+                                  cursor: 'pointer',
+                                  fontFamily: 'var(--font)',
+                                }}
+                              >
+                                Edit
+                              </button>
+                            )}
+                            {!isEditing && (
+                              <button
+                                className={`mod-toggle ${on ? '' : 'off'}`}
+                                onClick={() => toggleModule(m.module_id)}
+                                aria-label={`Toggle ${m.title}`}
+                              />
+                            )}
                           </div>
                         </div>
 
+                        {/* Inline edit panel */}
+                        {isEditing && (
+                          <div style={{ borderTop: '1px solid var(--teal-glow)', padding: '12px 14px', background: 'var(--bg2)' }}>
+                            {/* Gap theme hints */}
+                            {uncoveredForModule.length > 0 && (
+                              <div style={{ marginBottom: 8 }}>
+                                <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                  Weave in to cover gaps
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                  {uncoveredForModule.map(t => (
+                                    <button
+                                      key={t}
+                                      onClick={() => setEditingContent(c => c.trimEnd() + ' ' + t)}
+                                      style={{
+                                        fontSize: 10,
+                                        fontWeight: 600,
+                                        borderRadius: 999,
+                                        padding: '2px 8px',
+                                        background: 'oklch(0.4 0.13 60 / 0.12)',
+                                        border: '1px dashed oklch(0.65 0.14 60 / 0.5)',
+                                        color: 'oklch(0.75 0.16 60)',
+                                        cursor: 'pointer',
+                                        fontFamily: 'var(--font)',
+                                      }}
+                                    >
+                                      + {t}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Textarea */}
+                            <textarea
+                              value={editingContent}
+                              onChange={e => setEditingContent(e.target.value)}
+                              rows={6}
+                              style={{
+                                width: '100%',
+                                fontSize: 12,
+                                lineHeight: 1.55,
+                                color: 'var(--text)',
+                                background: 'var(--surface)',
+                                border: '1px solid var(--teal-glow)',
+                                borderRadius: 6,
+                                padding: '8px 10px',
+                                resize: 'vertical',
+                                fontFamily: 'var(--font)',
+                                boxSizing: 'border-box',
+                                outline: 'none',
+                              }}
+                              autoFocus
+                            />
+
+                            {/* Save options */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text3)', cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={editSaveToLibrary}
+                                  onChange={e => setEditSaveToLibrary(e.target.checked)}
+                                  style={{ accentColor: 'var(--teal)', cursor: 'pointer' }}
+                                />
+                                Save changes to my module library
+                              </label>
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button className="btn-ghost" style={{ fontSize: 11 }} onClick={cancelModuleEdit}>
+                                  Cancel
+                                </button>
+                                <button
+                                  className="btn-primary"
+                                  style={{ fontSize: 11 }}
+                                  onClick={() => saveModuleEdit(m.module_id)}
+                                  disabled={editSaving}
+                                >
+                                  {editSaving ? 'Saving…' : 'Save'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Inline suggestion panel */}
-                        {hasSuggestion && suggestionOpen && (
+                        {hasSuggestion && suggestionOpen && !isEditing && (
                           <div style={{ borderTop: '1px solid var(--border2)', padding: '12px 14px', background: 'var(--bg2)' }}>
                             <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>
                               Theme gap: <strong style={{ color: 'oklch(0.75 0.16 60)' }}>{suggestion.theme}</strong>
@@ -1416,7 +1587,12 @@ export default function GeneratePage() {
                               <button
                                 className="btn-primary"
                                 style={{ fontSize: 11 }}
-                                onClick={() => { setAlignmentStates(prev => ({ ...prev, [suggestion.theme]: 'accepted' })); setOpenSuggestion(null) }}
+                                onClick={() => {
+                                  setAlignmentStates(prev => ({ ...prev, [suggestion.theme]: 'accepted' }))
+                                  // Apply the rewrite as a content override
+                                  setModuleContentOverrides(prev => ({ ...prev, [m.module_id]: suggestion.suggestion }))
+                                  setOpenSuggestion(null)
+                                }}
                               >
                                 Accept rewrite
                               </button>
