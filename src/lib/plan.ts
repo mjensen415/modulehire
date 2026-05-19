@@ -7,7 +7,7 @@ export function canGenerate(): boolean {
 
 // Download requires credits or pro subscription
 export function canDownload(plan: string, resumeCredits = 0): boolean {
-  if (plan === 'pro' || plan === 'starter') return true
+  if (plan === 'pro' || plan === 'starter' || plan === 'unknown') return true
   return resumeCredits > 0
 }
 

@@ -230,10 +230,15 @@ export default function GeneratePage() {
         if (!profile.error) {
           if (profile.plan) setUserPlan(profile.plan)
           if (typeof profile.resume_credits === 'number') setResumeCredits(profile.resume_credits)
+        } else {
+          setUserPlan('unknown')
         }
         setPlanLoaded(true)
       })
-      .catch(() => { setPlanLoaded(true) })
+      .catch(() => {
+        setUserPlan('unknown')
+        setPlanLoaded(true)
+      })
   }, [])
 
   // Pre-load JD if ?jd_id= param is present (e.g. from "Regenerate" on My Resumes)
@@ -2424,7 +2429,7 @@ export default function GeneratePage() {
         return (
           <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
             <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-              {!downloadAllowed && (
+              {planLoaded && !downloadAllowed && (
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',

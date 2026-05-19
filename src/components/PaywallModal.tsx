@@ -190,10 +190,6 @@ export default function PaywallModal({ open, onClose }: Props) {
             </button>
           </div>
         </div>
-
-        <div style={{ marginTop: 20, fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
-          Already purchased? Refresh the page to unlock your download.
-        </div>
       </div>
     </div>
   )
