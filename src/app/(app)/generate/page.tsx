@@ -203,6 +203,8 @@ export default function GeneratePage() {
   const [showPaywall, setShowPaywall] = useState(false)
   const [userPlan, setUserPlan] = useState<string>('free')
   const [resumeCredits, setResumeCredits] = useState(0)
+  const [planLoaded, setPlanLoaded] = useState(false)
+  const [editingSummary, setEditingSummary] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [draftRestored, setDraftRestored] = useState(false)
   // Building step UI state
@@ -225,11 +227,13 @@ export default function GeneratePage() {
     fetch('/api/me')
       .then(r => r.json())
       .then(profile => {
-        if (profile.error) return
-        if (profile.plan) setUserPlan(profile.plan)
-        if (typeof profile.resume_credits === 'number') setResumeCredits(profile.resume_credits)
+        if (!profile.error) {
+          if (profile.plan) setUserPlan(profile.plan)
+          if (typeof profile.resume_credits === 'number') setResumeCredits(profile.resume_credits)
+        }
+        setPlanLoaded(true)
       })
-      .catch(() => {})
+      .catch(() => { setPlanLoaded(true) })
   }, [])
 
   // Pre-load JD if ?jd_id= param is present (e.g. from "Regenerate" on My Resumes)
@@ -479,7 +483,8 @@ export default function GeneratePage() {
         if (profile.plan) setUserPlan(profile.plan)
         if (typeof profile.resume_credits === 'number') setResumeCredits(profile.resume_credits)
       }
-    }).catch(() => {})
+      setPlanLoaded(true)
+    }).catch(() => { setPlanLoaded(true) })
 
     // Pre-fill education from saved profile entries (only if user hasn't
     // already added/edited rows in this session).
@@ -917,6 +922,7 @@ export default function GeneratePage() {
   function applySuggestion() {
     if (!suggestedSummary) return
     setSummaryOverride(suggestedSummary)
+    setEditingSummary(false)
   }
 
   async function saveSuggestionAsDefault() {
@@ -1011,6 +1017,7 @@ export default function GeneratePage() {
     setDraftRestored(false)
     setHasDraft(false)
     setStep('input')
+    setEditingSummary(false)
     setJdText('')
     setJdUrl('')
     setInputTab('paste')
@@ -1117,6 +1124,7 @@ export default function GeneratePage() {
                       onClick={e => {
                         e.stopPropagation()
                         setShowDownloadMenu(false)
+                        if (!planLoaded) return
                         if (!canDownload(userPlan, resumeCredits)) { setShowPaywall(true); return }
                         downloadFile(generatedUrls.docx_url, generatedUrls.docx_filename)
                       }}
@@ -1130,6 +1138,7 @@ export default function GeneratePage() {
                       onClick={e => {
                         e.stopPropagation()
                         setShowDownloadMenu(false)
+                        if (!planLoaded) return
                         if (!canDownload(userPlan, resumeCredits)) { setShowPaywall(true); return }
                         downloadFile(generatedUrls.pdf_url, generatedUrls.docx_filename.replace('.docx', '.pdf'))
                       }}
@@ -2124,14 +2133,34 @@ export default function GeneratePage() {
                       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
                         {savedSummary && summaryOverride === savedSummary ? 'Your saved summary' : 'For this resume'}
                       </div>
-                      <textarea
-                        className="mod-edit-textarea"
-                        rows={6}
-                        value={summaryOverride}
-                        onChange={e => setSummaryOverride(e.target.value)}
-                        placeholder="2-4 sentences about who you are and the kind of work you do…"
-                        style={{ minHeight: 130 }}
-                      />
+                      {editingSummary || !summaryOverride ? (
+                        <textarea
+                          autoFocus={editingSummary}
+                          className="mod-edit-textarea"
+                          rows={6}
+                          value={summaryOverride}
+                          onChange={e => setSummaryOverride(e.target.value)}
+                          placeholder="2–4 sentences about who you are and the kind of work you do…"
+                          style={{ minHeight: 130 }}
+                          onBlur={() => { if (summaryOverride.trim()) setEditingSummary(false) }}
+                        />
+                      ) : (
+                        <div style={{ position: 'relative', minHeight: 130, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 12px' }}>
+                          <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text)', whiteSpace: 'pre-wrap', margin: 0, paddingRight: 28 }}>
+                            {summaryOverride}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setEditingSummary(true)}
+                            title="Edit summary"
+                            style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', padding: 4, borderRadius: 4 }}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M9 2l2 2-6 6H3V8l6-6z"/>
+                            </svg>
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* RIGHT: suggested */}
