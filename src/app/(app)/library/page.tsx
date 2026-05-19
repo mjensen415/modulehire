@@ -79,6 +79,7 @@ export default function LibraryPage() {
   const [editEndDate, setEditEndDate] = useState('')
   const [editLocation, setEditLocation] = useState('')
   const [savingEditJob, setSavingEditJob] = useState(false)
+  const [editJobError, setEditJobError] = useState<string | null>(null)
 
   // Inline job deletion confirm
   const [confirmDeleteJobId, setConfirmDeleteJobId] = useState<string | null>(null)
@@ -299,23 +300,34 @@ export default function LibraryPage() {
   async function saveEditJob() {
     if (!editingJobId) return
     setSavingEditJob(true)
-    const res = await fetch(`/api/job-experiences/${editingJobId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        company: editCompany,
-        title: editTitle || null,
-        start_date: editStartDate || null,
-        end_date: editEndDate || null,
-        location: editLocation || null,
-      }),
-    })
-    const data = await res.json()
-    if (data.job) {
-      setJobs(prev => prev.map(j => j.id === editingJobId ? data.job : j))
-      setEditingJobId(null)
+    setEditJobError(null)
+    try {
+      const res = await fetch(`/api/job-experiences/${editingJobId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: editCompany,
+          title: editTitle || null,
+          start_date: editStartDate || null,
+          end_date: editEndDate || null,
+          location: editLocation || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setEditJobError(data.error ?? 'Could not save changes.')
+        return
+      }
+      if (data.job) {
+        setJobs(prev => prev.map(j => j.id === editingJobId ? data.job : j))
+        setEditingJobId(null)
+        setEditJobError(null)
+      }
+    } catch {
+      setEditJobError('Could not save changes. Please try again.')
+    } finally {
+      setSavingEditJob(false)
     }
-    setSavingEditJob(false)
   }
 
   async function deleteJob(jobId: string) {
@@ -388,7 +400,7 @@ export default function LibraryPage() {
             {jobs.map(job => (
               <button
                 key={job.id}
-                onClick={() => { setSelectedJobId(job.id); setEditingJobId(null); setConfirmDeleteJobId(null) }}
+                onClick={() => { setSelectedJobId(job.id); setEditingJobId(null); setEditJobError(null); setConfirmDeleteJobId(null) }}
                 style={{
                   display: 'block', width: '100%', textAlign: 'left',
                   padding: '10px 14px', border: 'none',
@@ -513,8 +525,13 @@ export default function LibraryPage() {
                         <button className="btn-primary" style={{ fontSize: 11, padding: '4px 12px' }} onClick={saveEditJob} disabled={savingEditJob || !editCompany.trim()}>
                           {savingEditJob ? '…' : 'Save'}
                         </button>
-                        <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 12px' }} onClick={() => setEditingJobId(null)}>Cancel</button>
+                        <button className="btn-ghost" style={{ fontSize: 11, padding: '4px 12px' }} onClick={() => { setEditingJobId(null); setEditJobError(null) }}>Cancel</button>
                       </div>
+                      {editJobError && (
+                        <p style={{ fontSize: 11, color: 'var(--rose)', marginTop: 4 }}>
+                          {editJobError}
+                        </p>
+                      )}
                     </div>
                   ) : confirmDeleteJobId === selectedJob.id ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, flexWrap: 'wrap' }}>
