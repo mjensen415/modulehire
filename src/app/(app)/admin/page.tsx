@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import { PlanSelect, AdminToggleButton, PurgeButton } from './UserActions';
 import { BetaAdminWrapper } from './BetaAdminWrapper';
+import FeedbackTable from './FeedbackTable';
 
 function IconShield() {
   return (
@@ -127,7 +128,7 @@ export default async function AdminPage({
   // Recent beta feedback + email lookup
   const { data: feedback } = await adminClient
     .from('beta_feedback')
-    .select('id, rating, category, message, page_url, created_at, user_id')
+    .select('id, rating, category, message, page_url, created_at, user_id, status')
     .order('created_at', { ascending: false })
     .limit(50);
 
@@ -236,55 +237,7 @@ export default async function AdminPage({
         </div>
 
         {/* BETA FEEDBACK */}
-        <div className="section-card" style={{ marginTop: 24 }}>
-          <div className="section-head">
-            <div className="section-head-title">Beta feedback</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-              {feedback?.length ?? 0} most recent
-            </div>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>User</th>
-                  <th>Rating</th>
-                  <th>Category</th>
-                  <th>Page</th>
-                  <th>Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(feedback ?? []).map(f => (
-                  <tr key={f.id}>
-                    <td style={{ fontSize: 12, color: 'var(--text3)', whiteSpace: 'nowrap' }}>
-                      {new Date(f.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
-                    </td>
-                    <td style={{ fontSize: 12 }}>{feedbackUserMap[f.user_id] ?? '—'}</td>
-                    <td style={{ fontSize: 13, textAlign: 'center' }}>
-                      {f.rating ? '★'.repeat(f.rating) + '☆'.repeat(5 - f.rating) : '—'}
-                    </td>
-                    <td>
-                      {f.category && (
-                        <span className={`plan-chip plan-${f.category === 'bug' ? 'free' : f.category === 'feature' ? 'standard' : f.category === 'praise' ? 'pro' : 'free'}`}>
-                          {f.category}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
-                      {f.page_url ?? '—'}
-                    </td>
-                    <td style={{ fontSize: 12, maxWidth: 360, color: 'var(--text2)' }}>{f.message}</td>
-                  </tr>
-                ))}
-                {(feedback ?? []).length === 0 && (
-                  <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: '24px 0' }}>No feedback yet.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <FeedbackTable feedback={feedback ?? []} feedbackUserMap={feedbackUserMap} />
         {/* BETA REQUESTS + CODE GENERATOR */}
         <BetaAdminWrapper
           initialRequests={betaRequests ?? []}
