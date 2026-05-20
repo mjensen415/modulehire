@@ -56,8 +56,9 @@ export async function parseModules(
   const prompt = `You are a resume parsing expert. Decompose the resume below into modular skill blocks.
 
 RULES:
-- Create one module per skill domain per job (NOT one module per job)
-- A 4-year role should produce multiple modules: each major domain separately
+- Create one module per meaningful cluster of related work. Prefer specificity over consolidation — a notable project, achievement, or sub-specialization should be its own module even if it overlaps in topic with another module from the same job.
+- A single role will often produce many modules. That is expected and correct. The user curates from abundance — do not filter on their behalf.
+- Err on the side of more modules rather than fewer. Do not drop or merge significant achievements, projects, or responsibilities to keep the list short.
 - "source_company" MUST NOT be a comma-separated list of companies. If the resume groups multiple
   distinct employers under one date range, emit one module per employer.
   Slash-joined names like "Microsoft / Yammer" are allowed when they describe a single employer

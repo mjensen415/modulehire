@@ -79,6 +79,9 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 ### Priority 4 — Generation & output quality
 10. **Better generated resume format** — Investigate using `.design.md` files or a more structured template system for resume generation. Current output quality needs review.
 
+### Priority 5 — Module library depth
+11. **Module grouping in generate step** — When multiple modules share the same skill domain or overlap in topic (e.g. three "Data Analysis" modules from different jobs), group them visually in the building step with a "pick one or include both" affordance. Hold until enough users have deep libraries to validate whether this is actually needed in practice.
+
 ---
 
 ## Known DB migrations (applied to Supabase, NOT yet in schema.sql — add before any fresh deploys)
@@ -89,6 +92,8 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - `job_skills` table (id, user_id, job_id, name)
 - `skill_module_assignments` table (skill_id, module_id primary key)
 - All four new tables have RLS enabled with `_own` policies
+- `ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_credits INTEGER NOT NULL DEFAULT 0;` (applied directly via Supabase MCP)
+- `increment_resume_credits(p_user_id uuid, p_amount integer)` function created
 
 ## Gotchas
 - `git add` with parentheses in paths trips up zsh — always use `git add -A`
