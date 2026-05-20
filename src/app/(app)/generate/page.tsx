@@ -382,16 +382,24 @@ export default function GeneratePage() {
       includeAwards, awardsText])
 
   // ── Building step: group modules by job ────────────────────────────────────
+  // Key on (source_company, source_role_title, date_start) so two stints at the
+  // same company with the same title still produce separate groups, and modules
+  // with no company each get their own group rather than collapsing into "||".
   const modulesByJob = useMemo(() => {
     const groups = new Map<string, { company: string; role: string; dates: string; modules: RankedModule[] }>()
     for (const m of rankedModules) {
-      const key = `${m.source_company ?? ''}||${m.source_role_title ?? ''}`
+      // Use module_id as tiebreaker for truly unattributed modules so they don't merge
+      const company = m.source_company?.trim() || null
+      const role    = m.source_role_title?.trim() || ''
+      const key = company
+        ? `${company}||${role}||${m.date_start ?? ''}`
+        : `__unattributed__${m.module_id}`
       if (!groups.has(key)) {
         const start = m.date_start ? new Date(m.date_start).getFullYear().toString() : null
-        const end = m.date_end ? new Date(m.date_end).getFullYear().toString() : 'Present'
+        const end   = m.date_end   ? new Date(m.date_end).getFullYear().toString()   : 'Present'
         groups.set(key, {
-          company: m.source_company ?? 'Other',
-          role: m.source_role_title ?? '',
+          company: company ?? 'Other',
+          role,
           dates: start ? `${start} — ${end}` : '',
           modules: [],
         })

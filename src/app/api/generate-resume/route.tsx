@@ -1089,6 +1089,30 @@ export async function POST(req: Request) {
     }
     const sortedModules = jobOrder.flatMap(k => jobGroups.get(k)!)
 
+    // Build pre-structured experience groups so the AI never has to decide which
+    // module belongs to which job. Passing pre-built groups eliminates the most
+    // common misattribution bug (same skill domain appearing under multiple roles).
+    type ExperienceGroup = {
+      company: string
+      role: string
+      date_start: string | null
+      date_end: string | null
+      modules: { title: string; content: string }[]
+    }
+    const experienceGroups: ExperienceGroup[] = jobOrder.map(k => {
+      const mods = jobGroups.get(k)!
+      const starts = mods.map(m => m.date_start as string | null).filter((s): s is string => Boolean(s))
+      const ends   = mods.map(m => m.date_end   as string | null).filter((s): s is string => Boolean(s))
+      const hasPresent = mods.some(m => !m.date_end)
+      return {
+        company:    String(mods[0].source_company    ?? 'Unknown'),
+        role:       String(mods[0].source_role_title ?? ''),
+        date_start: starts.length ? [...starts].sort()[0] : null,
+        date_end:   hasPresent ? null : (ends.length ? [...ends].sort().reverse()[0] : null),
+        modules:    mods.map(m => ({ title: String(m.title ?? ''), content: String(m.content ?? '') })),
+      }
+    })
+
     const variantFraming: Record<string, string> = {
       A: 'Lead with community impact and grassroots momentum',
       B: 'Lead with leadership scale and organizational growth',
@@ -1179,19 +1203,18 @@ Respond with JSON ONLY matching this exact structure:
   "awards": "award or certification text, or empty string if none"
 }
 
-- skill_sections: one entry per module (use module title as category, convert content to 2–4 bullets)
-- work_experience: modules are pre-sorted by job — group consecutive modules with the same source_company into one entry. CRITICAL: each module MUST stay under its own source_company. Never reassign a module to a different company.
+- skill_sections: one entry per module in skill_modules below (use module title as category, convert content to 2–4 bullets)
+- work_experience: use EXACTLY the pre-built experience_groups below — one experience entry per group, in order. Do NOT merge groups, split groups, or move any module to a different group. The company, role, and dates are pre-set — do not change them. Convert each module's content into 2–4 bullets.
 - education: ${include_education_section && educationText ? educationText : 'leave as empty array []'}
 - skills_list: ${include_skills_section && skillsText ? skillsText : 'leave as empty array []'}
 - awards: ${awardsSection ? `include this verbatim: ${awardsSection}` : 'set to empty string ""'}
 ${!include_summary ? '- summary: set to empty string ""' : ''}
 
-Modules:
-${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({
-  title: m.title, content: m.content,
-  source_company: m.source_company, source_role_title: m.source_role_title,
-  date_start: m.date_start, date_end: m.date_end,
-})))}
+skill_modules (one skill_section entry per module):
+${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.title, content: m.content })))}
+
+experience_groups (one work_experience entry per group — do not reorder or reassign):
+${JSON.stringify(experienceGroups)}
 `
 
       const rawCombo = await aiComplete([{ role: 'user', content: comboPrompt }], 4096)
@@ -1249,7 +1272,7 @@ ${levelInstruction ? `- ${levelInstruction}` : ''}
 
 Summary: ${summaryInstruction}
 
-For the experience array: modules are pre-sorted by job. Group consecutive modules with the same source_company into one experience entry — one entry per (company, role). CRITICAL: Each module MUST appear under its own source_company. Never move a module's bullets to a different company's entry. Convert each module's content into 2–4 bullets as described above. Format dates as "Mon YYYY – Mon YYYY" using date_start/date_end fields (format YYYY-MM). If date_end is null use "Present". Use the earliest date_start and latest date_end across all modules in the same job group for the experience entry's dates.
+For the experience array: use EXACTLY the pre-built experience_groups below — produce one experience entry per group, in order. Do NOT merge groups, split groups, or reassign any module to a different group. The company, role, and dates for each entry are pre-set — use them verbatim. Convert each module's content into 2–4 bullets as described above. Format dates as "Mon YYYY – Mon YYYY" (date format YYYY-MM). If date_end is null use "Present".
 ${include_skills_section && skillsText ? `Skills: list these as a comma-separated string: ${skillsText}` : ''}
 ${include_education_section && educationText ? `Education: use this verbatim: ${educationText}` : ''}
 ${awardsSection ? `Awards & Certifications: include this section verbatim: ${awardsSection}` : ''}
@@ -1267,8 +1290,8 @@ Respond with ONLY this JSON structure — no markdown, no explanation:
   "awards": "award or certification text, or empty string if none"
 }
 
-Modules to convert:
-${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.title, content: m.content, source_company: m.source_company, source_role_title: m.source_role_title, date_start: m.date_start, date_end: m.date_end })))}`
+experience_groups (one experience entry per group — do not reorder or reassign):
+${JSON.stringify(experienceGroups)}`
 
       const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 4096)
       const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
