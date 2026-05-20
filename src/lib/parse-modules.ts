@@ -26,6 +26,35 @@ const VALID_TYPES = new Set(['experience', 'skill', 'story', 'positioning'])
 const VALID_WEIGHTS = new Set(['anchor', 'strong', 'supporting'])
 const VALID_EMP_TYPES = new Set(['full-time', 'consulting', 'contract', 'board', 'volunteer'])
 
+const MONTH_MAP: Record<string, string> = {
+  jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+  jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+}
+
+// Normalize a date string to YYYY-MM, or null if it represents "present" / is unparseable.
+function normalizeDate(raw: unknown): string | null {
+  const s = String(raw ?? '').trim()
+  if (!s || s.toLowerCase() === 'present') return null
+  // Already YYYY-MM
+  if (/^\d{4}-\d{2}$/.test(s)) return s
+  // Just a year → assume January
+  if (/^\d{4}$/.test(s)) return `${s}-01`
+  // "Jan 2020" / "January 2020"
+  const mY = s.match(/^([A-Za-z]+)\s+(\d{4})$/)
+  if (mY) {
+    const mon = MONTH_MAP[mY[1].toLowerCase().slice(0, 3)]
+    if (mon) return `${mY[2]}-${mon}`
+  }
+  // "2020/01" or "2020-1"
+  const yM = s.match(/^(\d{4})[-/](\d{1,2})$/)
+  if (yM) return `${yM[1]}-${yM[2].padStart(2, '0')}`
+  // "01/2020" or "01-2020"
+  const mYslash = s.match(/^(\d{1,2})[-/](\d{4})$/)
+  if (mYslash) return `${mYslash[2]}-${mYslash[1].padStart(2, '0')}`
+  // Couldn't parse — return null rather than storing garbage
+  return null
+}
+
 const toArray = (v: unknown): string[] => {
   if (Array.isArray(v)) return v.map(String)
   if (typeof v === 'string' && v.length > 0) return [v]
@@ -70,19 +99,41 @@ RULES:
   separately. Skip it entirely.
 - Output MUST be a raw JSON array. Start with [ and end with ]. No other text.
 
+MODULE TYPE — choose the most accurate:
+- "experience": work delivered at a specific job (default for most modules)
+- "skill": a capability not tied to a single role (e.g. "SQL", "Public Speaking", "Python")
+- "story": a specific project or initiative with a clear arc and measurable outcome
+- "positioning": a point of view, philosophy, or differentiating perspective about the candidate's work
+
+MODULE WEIGHT — assign based on significance within this role:
+- "anchor": the single most important achievement or flagship responsibility from this role (limit 1–2 per role)
+- "strong": a major responsibility or achievement with meaningful scope, scale, or outcome
+- "supporting": a specific project, sub-skill, or accomplishment that adds depth but is not a headline item
+
+CONTENT RULES:
+- Preserve all specific metrics, percentages, team sizes, revenue figures, and outcomes VERBATIM as they appear in the resume. Do not paraphrase or soften specific claims.
+- Write in third-person past tense (e.g. "Led a team of 12...", "Grew community from 0 to 50k members in 18 months").
+- Each module's content should be 2–4 sentences, self-contained, and read as a standalone accomplishment summary.
+
+THEMES — pick only from this exact list (omit any that don't apply):
+community-building, community-marketing, community-programs, community-ops, community-health, ambassador-programs, member-lifecycle, retention, engagement, developer-relations, developer-enablement, feedback-loops, ai, technical-content, hackathons, product-collaboration, product-advisory, cross-functional, data-driven, zero-to-one, scale, growth, brand, content-strategy, events, enablement, partnerships, lifecycle-marketing, leadership, executive, consulting, startup
+
+ROLE TYPES — pick only from this exact list (omit any that don't apply):
+vp-community, head-of-community, director-community, senior-manager-community, community-manager, developer-relations, developer-advocacy, developer-community-manager, community-marketing, community-ops, community-enablement, content-strategy, ic-community
+
 Each module object must have exactly these keys:
 {
   "type": "experience" | "skill" | "story" | "positioning",
   "title": "skill domain name",
-  "content": "paragraph describing the work in this domain",
+  "content": "2–4 sentence paragraph — preserve all metrics verbatim",
   "source_company": "company name",
-  "source_role_title": "job title",
+  "source_role_title": "job title exactly as written",
   "date_start": "YYYY-MM",
   "date_end": "YYYY-MM or present",
   "employment_type": "full-time" | "consulting" | "contract" | "board" | "volunteer",
   "weight": "anchor" | "strong" | "supporting",
-  "role_types": ["pick relevant values from the community/devrel/content taxonomy"],
-  "themes": ["pick relevant values from the community/growth/leadership taxonomy"],
+  "role_types": ["values from ROLE TYPES list above"],
+  "themes": ["values from THEMES list above"],
   "company_stage": ["startup" | "growth" | "enterprise" | "any"]
 }
 
@@ -138,6 +189,9 @@ JSON array:`
     employment_type: VALID_EMP_TYPES.has(m.employment_type as string) ? m.employment_type : 'full-time',
     title:           m.title   ?? 'Untitled Module',
     content:         m.content ?? '',
+    // Normalize to YYYY-MM; "present" / unparseable → null so downstream null-checks work
+    date_start: normalizeDate(m.date_start),
+    date_end:   normalizeDate(m.date_end),
   }))
 
   const { data: insertedModules, error: dbError } = await supabase
@@ -165,17 +219,18 @@ JSON array:`
     for (const m of modulesData) {
       const company    = String(m.source_company    ?? '').trim()
       const roleTitle  = String(m.source_role_title ?? '').trim()
-      const dateStart  = String(m.date_start        ?? '').trim()
-      const dateEnd    = String(m.date_end           ?? '').trim()
+      // date_start is now normalized to YYYY-MM or null by normalizeDate()
+      const dateStart  = typeof m.date_start === 'string' ? m.date_start : null
+      const dateEnd    = typeof m.date_end   === 'string' ? m.date_end   : null
       if (!company) continue
-      const key = `${company}||${roleTitle}||${dateStart}`
+      const key = `${company}||${roleTitle}||${dateStart ?? ''}`
       if (!seen.has(key)) {
         seen.add(key)
         uniqueExperiences.push({
           company,
           title:            roleTitle || null,
           start_date:       dateStart ? `${dateStart}-01` : null,
-          end_date:         dateEnd && dateEnd.toLowerCase() !== 'present' ? `${dateEnd}-01` : null,
+          end_date:         dateEnd   ? `${dateEnd}-01`   : null,
           employment_type:  String(m.employment_type ?? 'full-time'),
         })
       }

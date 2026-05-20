@@ -1101,9 +1101,10 @@ export async function POST(req: Request) {
     }
     const experienceGroups: ExperienceGroup[] = jobOrder.map(k => {
       const mods = jobGroups.get(k)!
-      const starts = mods.map(m => m.date_start as string | null).filter((s): s is string => Boolean(s))
-      const ends   = mods.map(m => m.date_end   as string | null).filter((s): s is string => Boolean(s))
-      const hasPresent = mods.some(m => !m.date_end)
+      const isPresent = (v: unknown) => !v || String(v).toLowerCase() === 'present'
+      const starts = mods.map(m => m.date_start as string | null).filter((s): s is string => Boolean(s) && !isPresent(s))
+      const ends   = mods.map(m => m.date_end   as string | null).filter((s): s is string => Boolean(s) && !isPresent(s))
+      const hasPresent = mods.some(m => isPresent(m.date_end))
       return {
         company:    String(mods[0].source_company    ?? 'Unknown'),
         role:       String(mods[0].source_role_title ?? ''),

@@ -396,7 +396,8 @@ export default function GeneratePage() {
         : `__unattributed__${m.module_id}`
       if (!groups.has(key)) {
         const start = m.date_start ? new Date(m.date_start).getFullYear().toString() : null
-        const end   = m.date_end   ? new Date(m.date_end).getFullYear().toString()   : 'Present'
+        const isPresent = !m.date_end || m.date_end.toLowerCase() === 'present'
+        const end = isPresent ? 'Present' : new Date(m.date_end!).getFullYear().toString()
         groups.set(key, {
           company: company ?? 'Other',
           role,
