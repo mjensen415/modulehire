@@ -52,7 +52,7 @@ function renderInviteEmail(code: string): string {
         <div style="background:#0d1224;border-radius:10px;padding:22px;text-align:center;">
           <div style="font-size:32px;font-weight:700;color:#1d9e75;letter-spacing:6px;font-family:monospace;">${code}</div>
         </div>
-        <p style="color:#3d4663;margin-top:24px;">Go to <a href="https://www.modulehire.com/signin" style="color:#1d9e75;">app.modulehire.com/signin</a>, enter your code to unlock signup, upload your resume and start building.</p>
+        <p style="color:#3d4663;margin-top:24px;">Go to <a href="https://modulehire.com/signin" style="color:#1d9e75;">modulehire.com/signin</a>, enter your code to unlock signup, upload your resume and start building.</p>
         <p style="color:#7a82a0;font-size:13px;">Have feedback? Use the widget in the bottom left corner of any page.</p>
       </td></tr>
     </table>
