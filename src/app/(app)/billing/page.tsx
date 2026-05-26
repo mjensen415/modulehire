@@ -45,7 +45,7 @@ const PLANS: Array<{
       'Unlimited modules',
       'Unlimited tailored resumes',
       'All 6 formats (PDF + DOCX)',
-      'Full ATS optimization + live score',
+      'Full ATS optimization + live ATS Estimator',
       'Full generation history',
       'Priority access to new features',
     ],

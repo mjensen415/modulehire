@@ -11,6 +11,8 @@ type Profile = {
   linkedin_url: string
   location: string
   plan: string
+  tier?: 'free' | 'pro' | 'beta_pro'
+  tier_expires_at?: string | null
 }
 
 export default function Settings() {
@@ -23,6 +25,33 @@ export default function Settings() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [portalLoading, setPortalLoading] = useState(false)
+  const [portalError, setPortalError] = useState('')
+
+  async function openBillingPortal() {
+    setPortalError('')
+    setPortalLoading(true)
+    try {
+      const res = await fetch('/api/billing/portal', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || !data.url) {
+        setPortalError(data.error ?? 'Could not open billing portal.')
+        return
+      }
+      window.location.href = data.url
+    } catch {
+      setPortalError('Could not open billing portal. Please try again.')
+    } finally {
+      setPortalLoading(false)
+    }
+  }
+
+  const tier = profile?.tier ?? 'free'
+  const tierLabel = tier === 'beta_pro' ? 'Pro (Beta)' : tier === 'pro' ? 'Pro' : 'Free'
+  const expiresAt = profile?.tier_expires_at ? new Date(profile.tier_expires_at) : null
+  const expiresLabel = expiresAt
+    ? expiresAt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    : null
 
   useEffect(() => {
     fetch('/api/me')
@@ -180,22 +209,36 @@ export default function Settings() {
                 <div className="plan-row">
                   <div>
                     <div className="plan-label">Current plan</div>
-                    <div className="plan-value">{profile?.plan ? profile.plan.charAt(0).toUpperCase() + profile.plan.slice(1) : 'Free'}</div>
+                    <div className="plan-value">{tierLabel}</div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div className="plan-label">Resumes this month</div>
-                    <div className="plan-value" style={{ fontSize: 20 }}>2 / 3</div>
+                    <button
+                      className="btn-primary"
+                      onClick={openBillingPortal}
+                      disabled={portalLoading}
+                    >
+                      {portalLoading ? 'Opening…' : 'Manage Billing'}
+                    </button>
                   </div>
                 </div>
-                <div className="usage-bar-wrap">
-                  <div className="usage-bar-label"><span>Monthly resume limit</span><span>2 of 3 used</span></div>
-                  <div className="usage-bar"><div className="usage-bar-fill"></div></div>
-                </div>
-                <div className="upgrade-card">
-                  <div className="upgrade-card-title">Upgrade to Pro</div>
-                  <div className="upgrade-card-sub">Unlimited resumes, permanent storage, URL JD import, and priority generation. Starting at $12/month.</div>
-                  <button className="btn-upgrade">Upgrade to Pro →</button>
-                </div>
+
+                {tier === 'beta_pro' && expiresLabel && (
+                  <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 6, fontSize: 13, color: 'var(--teal)' }}>
+                    Pro access — complimentary through {expiresLabel}.
+                  </div>
+                )}
+
+                {portalError && (
+                  <div style={{ marginTop: 12, fontSize: 12, color: 'var(--rose)' }}>{portalError}</div>
+                )}
+
+                {tier === 'free' && (
+                  <div className="upgrade-card" style={{ marginTop: 16 }}>
+                    <div className="upgrade-card-title">Upgrade to Pro</div>
+                    <div className="upgrade-card-sub">Unlimited tailored resumes, priority generation, and full history. $19/mo or $99/yr.</div>
+                    <a href="/billing" className="btn-upgrade">View plans →</a>
+                  </div>
+                )}
               </div>
             )}
 

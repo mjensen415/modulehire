@@ -83,7 +83,7 @@ export default function ScoreGauge({ score, size = 'md', showLabel = true }: Sco
       height={s.svgH}
       viewBox={`0 0 ${s.svgW} ${s.svgH}`}
       style={{ display: 'block' }}
-      aria-label={`ATS score: ${clampedScore} — ${label}`}
+      aria-label={`Estimated ATS Match: ${clampedScore} — ${label}`}
     >
       <defs>
         <linearGradient id={gradId} gradientUnits="userSpaceOnUse"

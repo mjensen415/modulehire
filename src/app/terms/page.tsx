@@ -77,7 +77,7 @@ export default function TermsPage() {
           <section>
             <h2 style={h2}>6. AI-generated content</h2>
             <p style={p}>ModuleHire uses AI to parse resumes, suggest modules, and generate resume text. AI output may contain errors, omissions, or content that does not accurately reflect your experience. You are responsible for reviewing all generated content before submitting it to employers.</p>
-            <p style={p}>ATS scores and keyword match estimates are approximations. Different applicant tracking systems behave differently and actual results may vary. We make no guarantee that using ModuleHire will result in interview requests or job offers.</p>
+            <p style={p}>ATS Estimator scores and keyword match estimates are approximations. Different applicant tracking systems behave differently and actual results may vary. We make no guarantee that using ModuleHire will result in interview requests or job offers.</p>
           </section>
 
           <section>

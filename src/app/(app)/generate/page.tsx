@@ -1377,7 +1377,7 @@ export default function GeneratePage() {
             {estimatedAtsScore !== null && (
               <div style={{ marginBottom: 18 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Est. ATS score</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Est. ATS Match</div>
                   <div style={{
                     fontSize: 12, fontWeight: 700,
                     color: estimatedAtsScore >= 85 ? 'var(--teal)' : estimatedAtsScore >= 75 ? '#4ade80' : estimatedAtsScore >= 60 ? '#eab308' : '#ef4444',
@@ -1894,7 +1894,7 @@ export default function GeneratePage() {
               return (
                 <div style={{ marginBottom: 24 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>Estimated ATS score</span>
+                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>Estimated ATS Match</span>
                     <div style={{ width: 120, height: 4, borderRadius: 2, background: 'var(--bg3)', overflow: 'hidden' }}>
                       <div style={{ width: `${estimatedScore}%`, height: '100%', background: 'var(--teal)', transition: 'width 0.2s' }} />
                     </div>
@@ -2532,7 +2532,7 @@ export default function GeneratePage() {
                     <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
                       <ScoreGauge score={displayScore} size="md" />
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600, marginBottom: 2 }}>ATS Score</div>
+                    <div style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600, marginBottom: 2 }}>ATS Estimator</div>
                     {totalKw > 0 && (
                       <div style={{ fontSize: 11, color: 'var(--text3)' }}>
                         {matchedKw.length}/{totalKw} keywords · {
