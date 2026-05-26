@@ -24,7 +24,12 @@
       "mcp__claude_ai_Supabase__list_organizations",
       "Bash(npx --no-install tsc --noEmit -p tsconfig.json)",
       "Bash(git merge *)",
-      "mcp__claude_ai_Supabase__list_projects"
+      "mcp__claude_ai_Supabase__list_projects",
+      "Bash(git mv *)",
+      "Bash(supabase status *)",
+      "Bash(supabase --env-file /dev/null status)",
+      "Bash(supabase db *)",
+      "Bash(supabase --workdir /tmp db start)"
     ]
   }
 }

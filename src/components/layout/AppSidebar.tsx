@@ -134,9 +134,9 @@ export default function AppSidebar({ footer, plan, isAdmin }: { footer?: React.R
 
       <div className="sidebar-section">
         <div className="sidebar-section-label">Account</div>
-        <Link href="/settings" className={`nav-item${pathname === '/settings' ? ' active' : ''}`}>
+        <Link href="/account" className={`nav-item${pathname === '/account' ? ' active' : ''}`}>
           <span className="nav-item-icon"><IconSettings /></span>
-          Settings
+          Account
         </Link>
         {plan !== 'pro' && (
           <Link href="/billing" className={`nav-item${pathname === '/billing' ? ' active' : ''}`}>
