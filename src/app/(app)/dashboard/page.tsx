@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { moduleLimit, FREE_LIMIT } from '@/lib/plan';
 
@@ -120,6 +121,14 @@ function ModuleChip({ m }: { m: ModuleRecord }) {
 export default async function Dashboard() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/signin');
+
+  const { data: onboardingProfile } = await supabase
+    .from('users')
+    .select('onboarding_complete')
+    .eq('id', user.id)
+    .single();
+  if (!onboardingProfile?.onboarding_complete) redirect('/onboarding');
 
   const monthStart = new Date();
   monthStart.setDate(1);

@@ -19,3 +19,5 @@ BEGIN
 END$$;
 
 CREATE INDEX IF NOT EXISTS users_tier_idx ON users(tier);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_complete boolean NOT NULL DEFAULT false;

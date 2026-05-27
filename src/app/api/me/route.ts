@@ -17,7 +17,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('users')
-      .select('name, email, phone, linkedin_url, location, summary, plan, resume_credits, tier, tier_expires_at')
+      .select('name, email, phone, linkedin_url, location, summary, plan, resume_credits, tier, tier_expires_at, onboarding_complete')
       .eq('id', user.id)
       .single()
 
@@ -34,6 +34,7 @@ export async function GET() {
       resume_credits: data.resume_credits ?? 0,
       tier: data.tier ?? 'free',
       tier_expires_at: data.tier_expires_at ?? null,
+      onboarding_complete: data.onboarding_complete ?? false,
     })
   } catch (error) {
     console.error('[api/me]', error)

@@ -202,6 +202,7 @@ export default function GeneratePage() {
   const [overageCheckoutLoading, setOverageCheckoutLoading] = useState(false)
   const [showPaywall, setShowPaywall] = useState(false)
   const [userPlan, setUserPlan] = useState<string>('free')
+  const [userTier, setUserTier] = useState<string>('free')
   const [resumeCredits, setResumeCredits] = useState(0)
   const [planLoaded, setPlanLoaded] = useState(false)
   const [editingSummary, setEditingSummary] = useState(false)
@@ -229,6 +230,7 @@ export default function GeneratePage() {
       .then(profile => {
         if (!profile.error) {
           if (profile.plan) setUserPlan(profile.plan)
+          if (profile.tier) setUserTier(profile.tier)
           if (typeof profile.resume_credits === 'number') setResumeCredits(profile.resume_credits)
         } else {
           setUserPlan('unknown')
@@ -495,6 +497,7 @@ export default function GeneratePage() {
           setSummaryOverride(prev => prev || profile.summary)
         }
         if (profile.plan) setUserPlan(profile.plan)
+        if (profile.tier) setUserTier(profile.tier)
         if (typeof profile.resume_credits === 'number') setResumeCredits(profile.resume_credits)
       }
       setPlanLoaded(true)
@@ -2543,8 +2546,18 @@ export default function GeneratePage() {
                   </div>
                 )}
 
+                {/* Free-tier locked breakdown */}
+                {planLoaded && !(userTier === 'pro' || userTier === 'beta_pro') && (matchedKw.length > 0 || missingKw.length > 0) && (
+                  <div style={{ background: 'var(--surface)', border: '1px dashed var(--border2)', borderRadius: 10, padding: '16px 18px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 22, marginBottom: 6 }}>🔒</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Full ATS breakdown is Pro-only</div>
+                    <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>Keyword analysis, missing terms, and section scores are unlocked on Pro.</div>
+                    <a href="/billing" className="btn-primary" style={{ fontSize: 12, padding: '6px 14px', display: 'inline-block' }}>Upgrade to Pro to see the full breakdown</a>
+                  </div>
+                )}
+
                 {/* Matched keywords */}
-                {matchedKw.length > 0 && (
+                {(userTier === 'pro' || userTier === 'beta_pro') && matchedKw.length > 0 && (
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10, padding: '16px 18px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>Ranking well for</div>
                     {matchedKw.slice(0, showAllKeywords ? undefined : VISIBLE_KW).map(k => (
@@ -2566,7 +2579,7 @@ export default function GeneratePage() {
                 )}
 
                 {/* Missing keywords — post-generation */}
-                {missingKw.length > 0 && (
+                {(userTier === 'pro' || userTier === 'beta_pro') && missingKw.length > 0 && (
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10, padding: '16px 18px' }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 6 }}>Still missing</div>
                     <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10, lineHeight: 1.5 }}>These JD keywords weren&apos;t found in your generated resume. Regenerate after editing your modules to include them:</div>

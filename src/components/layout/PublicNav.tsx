@@ -13,6 +13,7 @@ export default function PublicNav() {
         <li><Link href="/modules">Modules</Link></li>
         <li><Link href="/pricing">Pricing</Link></li>
         <li><Link href="/docs">FAQs/Docs</Link></li>
+        <li><Link href="/support">Support</Link></li>
       </ul>
       <div className="nav-cta">
         <ThemeToggle />

@@ -11,6 +11,7 @@ export default function PublicFooter() {
         <li><Link href="/privacy">Privacy</Link></li>
         <li><Link href="/terms">Terms</Link></li>
         <li><Link href="/docs">Docs</Link></li>
+        <li><Link href="/support">Support</Link></li>
         <li><Link href="/status">Status</Link></li>
       </ul>
       <div className="footer-copy">© 2026</div>

@@ -150,6 +150,10 @@ export default function AppSidebar({ footer, plan, isAdmin }: { footer?: React.R
             Admin
           </Link>
         )}
+        <Link href="/support" className={`nav-item${pathname.startsWith('/support') ? ' active' : ''}`}>
+          <span className="nav-item-icon">?</span>
+          Support
+        </Link>
       </div>
 
       {footer}

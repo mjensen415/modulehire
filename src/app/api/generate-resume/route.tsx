@@ -5,6 +5,7 @@ import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 // canGenerate removed — generation is always allowed; download is gated client-side via canDownload.
+import { FREE_MONTHLY_GENERATIONS, isProTier } from '@/lib/plan'
 import * as docx from 'docx'
 import { renderToBuffer, Document as PdfDoc, Page, Text, View } from '@react-pdf/renderer'
 import React from 'react'
@@ -990,19 +991,34 @@ export async function POST(req: Request) {
         .maybeSingle(),
       supabase
         .from('users')
-        .select('plan, resume_credits')
+        .select('plan, resume_credits, tier')
         .eq('id', user.id)
         .single(),
     ])
 
     const usageRow = usageRes.data as { count?: number; overage_credits?: number } | null
-    const profileRow = profileRes.data as { plan?: string; resume_credits?: number } | null
+    const profileRow = profileRes.data as { plan?: string; resume_credits?: number; tier?: string } | null
 
     const plan = (profileRow?.plan ?? 'free') as string
     const resumeCredits = profileRow?.resume_credits ?? 0
+    const tier = (profileRow?.tier ?? 'free') as string
     void usageRow
 
-    // Generation is always allowed — free users get a preview, paid users get downloads.
+    // Free-tier monthly generation cap (Pro / beta_pro: unlimited).
+    if (!isProTier(tier)) {
+      const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString()
+      const { count: monthlyCount } = await supabase
+        .from('generated_resumes')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('created_at', startOfMonth)
+      if ((monthlyCount ?? 0) >= FREE_MONTHLY_GENERATIONS) {
+        return NextResponse.json({
+          error: "You've used your 2 free resumes this month. Upgrade to Pro for unlimited generations.",
+          code: 'monthly_generation_limit',
+        }, { status: 402 })
+      }
+    }
 
     const {
       module_ids,
