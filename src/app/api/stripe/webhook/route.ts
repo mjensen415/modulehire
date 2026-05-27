@@ -3,8 +3,16 @@ import { stripe } from '@/lib/stripe';
 import { createAdminClient } from '@/lib/supabase/server';
 import { isUuid } from '@/lib/validate';
 import Stripe from 'stripe';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
+
+type SkuKey = 'pro_monthly' | 'pro_annual' | 'single' | 'five_pack';
+
+const SKU_CREDITS: Partial<Record<SkuKey, number>> = {
+  single: 1,
+  five_pack: 5,
+};
 
 function planFromPriceId(priceId: string | undefined): 'free' | 'starter' | 'pro' {
   if (!priceId) return 'free';
@@ -17,15 +25,73 @@ function planFromPriceId(priceId: string | undefined): 'free' | 'starter' | 'pro
     priceId === process.env.STRIPE_PRICE_STARTER_MONTHLY ||
     priceId === process.env.STRIPE_PRICE_STARTER_ANNUAL ||
     priceId === process.env.STRIPE_STARTER_PRICE_ID ||
-    // legacy env name during migration
     priceId === process.env.STRIPE_STANDARD_PRICE_ID
   ) return 'starter';
   return 'free';
 }
 
-function userIdFromSubscriptionMetadata(sub: Stripe.Subscription): string | null {
-  const raw = sub.metadata?.supabase_user_id;
+function metadataUserId(meta: Stripe.Metadata | null | undefined): string | null {
+  const raw = meta?.supabase_user_id ?? meta?.user_id;
   return typeof raw === 'string' && isUuid(raw) ? raw : null;
+}
+
+async function resolveUserIdFromSession(
+  supabase: SupabaseClient,
+  session: Stripe.Checkout.Session,
+): Promise<string | null> {
+  const fromRef = session.client_reference_id && isUuid(session.client_reference_id)
+    ? session.client_reference_id
+    : null;
+  if (fromRef) return fromRef;
+
+  const fromMeta = metadataUserId(session.metadata);
+  if (fromMeta) return fromMeta;
+
+  const email = session.customer_email ?? (session.customer_details?.email ?? null);
+  if (email) {
+    const { data } = await supabase.from('users').select('id').eq('email', email.toLowerCase()).maybeSingle();
+    if (data?.id) return data.id as string;
+  }
+
+  if (session.customer && typeof session.customer === 'string') {
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .eq('stripe_customer_id', session.customer)
+      .maybeSingle();
+    if (data?.id) return data.id as string;
+  }
+
+  return null;
+}
+
+async function resolveUserIdFromSubscription(
+  supabase: SupabaseClient,
+  sub: Stripe.Subscription,
+): Promise<string | null> {
+  const fromMeta = metadataUserId(sub.metadata);
+  if (fromMeta) return fromMeta;
+
+  if (typeof sub.customer === 'string') {
+    const { data } = await supabase
+      .from('users')
+      .select('id')
+      .eq('stripe_customer_id', sub.customer)
+      .maybeSingle();
+    if (data?.id) return data.id as string;
+  }
+
+  const { data } = await supabase
+    .from('users')
+    .select('id')
+    .eq('stripe_subscription_id', sub.id)
+    .maybeSingle();
+  return (data?.id as string) ?? null;
+}
+
+async function getCurrentTier(supabase: SupabaseClient, userId: string): Promise<string | null> {
+  const { data } = await supabase.from('users').select('tier').eq('id', userId).single();
+  return (data?.tier as string) ?? null;
 }
 
 export async function POST(req: Request) {
@@ -43,78 +109,144 @@ export async function POST(req: Request) {
 
   const supabase = await createAdminClient();
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object as Stripe.Checkout.Session;
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const userId = await resolveUserIdFromSession(supabase, session);
 
-    // One-time resume credit purchases (single or 5-pack) — payment mode, no subscription
-    if (session.mode === 'payment') {
-      const type = session.metadata?.type;
-      const credits = parseInt(session.metadata?.credits ?? '0', 10);
-      const userId = session.metadata?.supabase_user_id;
-      if ((type === 'resume_single' || type === 'resume_pack') && credits > 0 && userId && isUuid(userId)) {
-        const { error: rpcError } = await supabase.rpc('increment_resume_credits', {
-          p_user_id: userId,
-          p_amount: credits,
-        });
-        if (rpcError) {
-          // Log but do NOT return non-200 — Stripe would retry indefinitely.
-          console.error('[stripe webhook] increment_resume_credits failed:', rpcError);
+      if (!userId) {
+        console.error('[stripe webhook] could not resolve user id for session', session.id);
+        return NextResponse.json({ ok: true });
+      }
+
+      // Backfill stripe_customer_id whenever we have one.
+      if (session.customer && typeof session.customer === 'string') {
+        const { data: existing } = await supabase
+          .from('users')
+          .select('stripe_customer_id')
+          .eq('id', userId)
+          .single();
+        if (!existing?.stripe_customer_id) {
+          await supabase
+            .from('users')
+            .update({ stripe_customer_id: session.customer })
+            .eq('id', userId);
         }
       }
+
+      // ── One-time purchases ─────────────────────────────────────────────────
+      if (session.mode === 'payment') {
+        const sku = session.metadata?.sku as SkuKey | undefined;
+        const credits = sku ? SKU_CREDITS[sku] : undefined;
+
+        if (credits) {
+          const { error } = await supabase.rpc('increment_generations_remaining', {
+            p_user_id: userId,
+            p_amount: credits,
+          });
+          if (error) console.error('[stripe webhook] increment_generations_remaining failed:', error);
+        } else {
+          // Legacy path — older checkouts encoded credits via metadata.type/credits
+          // and incremented the deprecated resume_credits column. Still honour
+          // those so in-flight purchases don't get dropped.
+          const legacyType = session.metadata?.type;
+          const legacyCredits = parseInt(session.metadata?.credits ?? '0', 10);
+          if ((legacyType === 'resume_single' || legacyType === 'resume_pack') && legacyCredits > 0) {
+            const { error } = await supabase.rpc('increment_resume_credits', {
+              p_user_id: userId,
+              p_amount: legacyCredits,
+            });
+            if (error) console.error('[stripe webhook] legacy increment_resume_credits failed:', error);
+          }
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // ── Subscription purchases ─────────────────────────────────────────────
+      if (session.mode === 'subscription' && session.subscription) {
+        const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
+        const periodEnd = new Date(
+          (subscription as unknown as { current_period_end: number }).current_period_end * 1000,
+        ).toISOString();
+        const priceId = subscription.items.data[0]?.price.id;
+        const plan = planFromPriceId(priceId);
+
+        await supabase
+          .from('users')
+          .update({
+            tier: 'pro',
+            plan,
+            stripe_subscription_id: subscription.id,
+            plan_period_end: periodEnd,
+          })
+          .eq('id', userId);
+      }
+
       return NextResponse.json({ ok: true });
     }
 
-    if (!session.subscription || !session.customer) return NextResponse.json({ ok: true });
+    if (event.type === 'customer.subscription.updated') {
+      const subscription = event.data.object as Stripe.Subscription;
+      const userId = await resolveUserIdFromSubscription(supabase, subscription);
+      if (!userId) {
+        console.error('[stripe webhook] subscription.updated: user not resolved', subscription.id);
+        return NextResponse.json({ ok: true });
+      }
 
-    const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
-    // Prefer the subscription metadata user id (set by /api/checkout); fall back to legacy client_reference_id.
-    const userId = userIdFromSubscriptionMetadata(subscription) ?? session.client_reference_id ?? null;
-    if (!userId || !isUuid(userId)) {
-      console.error('[stripe webhook] could not resolve user id for session:', session.id);
+      const priceId = subscription.items.data[0]?.price.id;
+      const plan = planFromPriceId(priceId);
+      const periodEnd = new Date(
+        (subscription as unknown as { current_period_end: number }).current_period_end * 1000,
+      ).toISOString();
+      const currentTier = await getCurrentTier(supabase, userId);
+
+      const update: Record<string, unknown> = {
+        plan,
+        plan_period_end: periodEnd,
+        stripe_subscription_id: subscription.id,
+      };
+
+      if (subscription.status === 'active') {
+        // Promote, but never demote beta_pro on an upgrade event.
+        if (currentTier !== 'beta_pro') update.tier = 'pro';
+      } else if (
+        subscription.status === 'canceled' ||
+        subscription.status === 'past_due' ||
+        subscription.status === 'unpaid'
+      ) {
+        // Only downgrade if they were the paying tier. Leave beta_pro / free alone.
+        if (currentTier === 'pro') update.tier = 'free';
+      }
+
+      await supabase.from('users').update(update).eq('id', userId);
       return NextResponse.json({ ok: true });
     }
 
-    // Verify the user actually exists before mutating their plan
-    const { data: existingUser } = await supabase.from('users').select('id').eq('id', userId).single();
-    if (!existingUser) {
-      console.error('[stripe webhook] user not found:', userId);
+    if (event.type === 'customer.subscription.deleted') {
+      const subscription = event.data.object as Stripe.Subscription;
+      const userId = await resolveUserIdFromSubscription(supabase, subscription);
+      if (!userId) {
+        console.error('[stripe webhook] subscription.deleted: user not resolved', subscription.id);
+        return NextResponse.json({ ok: true });
+      }
+      const currentTier = await getCurrentTier(supabase, userId);
+
+      const update: Record<string, unknown> = {
+        plan_period_end: null,
+        stripe_subscription_id: null,
+      };
+      // Never downgrade beta_pro automatically.
+      if (currentTier === 'pro') {
+        update.tier = 'free';
+        update.plan = 'free';
+      }
+
+      await supabase.from('users').update(update).eq('id', userId);
       return NextResponse.json({ ok: true });
     }
-
-    const periodEnd = new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString();
-    const priceId = subscription.items.data[0]?.price.id;
-    const plan = planFromPriceId(priceId);
-
-    await supabase.from('users').update({
-      plan,
-      stripe_customer_id: session.customer as string,
-      stripe_subscription_id: session.subscription as string,
-      plan_period_end: periodEnd,
-    }).eq('id', userId);
-  }
-
-  if (event.type === 'customer.subscription.updated') {
-    const subscription = event.data.object as Stripe.Subscription;
-    const priceId = subscription.items.data[0]?.price.id;
-    const plan = planFromPriceId(priceId);
-    const periodEnd = new Date((subscription as unknown as { current_period_end: number }).current_period_end * 1000).toISOString();
-
-    // Prefer metadata.supabase_user_id; fall back to looking up by stripe_subscription_id.
-    const userId = userIdFromSubscriptionMetadata(subscription);
-    const query = supabase.from('users').update({ plan, plan_period_end: periodEnd });
-    await (userId ? query.eq('id', userId) : query.eq('stripe_subscription_id', subscription.id));
-  }
-
-  if (event.type === 'customer.subscription.deleted') {
-    const subscription = event.data.object as Stripe.Subscription;
-
-    const userId = userIdFromSubscriptionMetadata(subscription);
-    const query = supabase.from('users').update({
-      plan: 'free',
-      stripe_subscription_id: null,
-      plan_period_end: null,
-    });
-    await (userId ? query.eq('id', userId) : query.eq('stripe_subscription_id', subscription.id));
+  } catch (err) {
+    // Log but return 200 — returning non-2xx makes Stripe retry forever.
+    console.error('[stripe webhook] handler error', event.type, err);
   }
 
   return NextResponse.json({ ok: true });

@@ -54,6 +54,9 @@ export async function POST(req: Request) {
       success_url: successUrl.toString(),
       cancel_url: safe,
       metadata: { supabase_user_id: user.id, sku },
+      ...(mode === 'subscription'
+        ? { subscription_data: { metadata: { supabase_user_id: user.id, sku } } }
+        : {}),
     })
 
     return NextResponse.json({ url: session.url })
