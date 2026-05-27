@@ -201,6 +201,7 @@ export default function GeneratePage() {
   const [showOveragePrompt, setShowOveragePrompt] = useState(false)
   const [overageCheckoutLoading, setOverageCheckoutLoading] = useState(false)
   const [showPaywall, setShowPaywall] = useState(false)
+  const [showMonthlyLimitModal, setShowMonthlyLimitModal] = useState(false)
   const [userPlan, setUserPlan] = useState<string>('free')
   const [userTier, setUserTier] = useState<string>('free')
   const [resumeCredits, setResumeCredits] = useState(0)
@@ -1012,7 +1013,14 @@ export default function GeneratePage() {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Generation failed')
+      if (!res.ok) {
+        if (data.code === 'monthly_generation_limit') {
+          setShowMonthlyLimitModal(true)
+          setStep('configuring')
+          return
+        }
+        throw new Error(data.error ?? 'Generation failed')
+      }
       setGeneratedUrls({ docx_url: data.docx_url, pdf_url: data.pdf_url, docx_filename: data.docx_filename ?? 'Resume.docx' })
       setResumeHtml(data.resume_html ?? null)
       setCoverLetterText(data.cover_letter_text ?? null)
@@ -2627,6 +2635,43 @@ export default function GeneratePage() {
       })()}
 
       <PaywallModal open={showPaywall} onClose={() => setShowPaywall(false)} />
+
+      {showMonthlyLimitModal && (
+        <div
+          onClick={() => setShowMonthlyLimitModal(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: 20,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--surface)', border: '1px solid var(--border2)',
+              borderRadius: 12, padding: 28, maxWidth: 440, width: '100%',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+            }}
+          >
+            <div style={{ fontSize: 32, marginBottom: 8 }}>🚀</div>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', marginBottom: 10 }}>
+              You&apos;ve used your 2 free resumes this month.
+            </h2>
+            <p style={{ fontSize: 14, color: 'var(--text2)', lineHeight: 1.55, marginBottom: 22 }}>
+              Upgrade to Pro for unlimited resume generations, plus the full ATS Estimator breakdown for every resume you create.
+            </p>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowMonthlyLimitModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text3)', padding: '8px 12px' }}
+              >
+                Remind me next month
+              </button>
+              <a href="/billing" className="btn-primary">Upgrade to Pro →</a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
