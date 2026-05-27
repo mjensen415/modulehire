@@ -238,7 +238,7 @@ export default function Home() {
         </div>
 
         <h1 className="hero-headline">
-          Your resume contains<br/>
+          Most resumes<br/>
           <em style={{
             fontStyle: 'normal',
             display: 'inline',
@@ -247,25 +247,20 @@ export default function Home() {
             backgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             color: 'transparent',
-          }}>more than one story.</em><br/>
-          <span style={{fontWeight:300, fontSize:'0.75em', color:'var(--text2)', letterSpacing:'-0.01em'}}>ModuleHire Labs finds them all.</span>
+          }}>never reach a human.</em><br/>
+          <span style={{fontWeight:300, fontSize:'0.75em', color:'var(--text2)', letterSpacing:'-0.01em'}}>ModuleHire fixes that.</span>
         </h1>
 
         <p className="hero-sub">
-          Parse your resume into modular skill blocks. Reassemble them instantly into tailored applications — tuned to each job description.
+          Parse your resume into modular skill blocks. Reassemble them instantly into tailored, ATS-ready applications — tuned to each job description.
         </p>
 
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--teal)', border: '1px solid var(--teal-glow)', background: 'var(--teal-dim)', borderRadius: 20, padding: '4px 12px', marginBottom: 20, fontFamily: 'var(--mono)', letterSpacing: '0.06em' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--teal)', display: 'inline-block' }} />
-          PRIVATE BETA
-        </div>
-
         <div className="hero-ctas">
-          <Link href="/request-access" className="btn-primary" style={{textDecoration: 'none'}}>
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-              <path d="M7.5 1v9M4 7l3.5 3.5L11 7M2 13h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <Link href="/signin?signup=1" className="btn-primary" style={{textDecoration: 'none'}}>
+            Start free
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M1 7h12M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Request beta access
           </Link>
           <Link href="/how-it-works" className="btn-secondary" style={{textDecoration: 'none'}}>
             See how it works
@@ -371,6 +366,71 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ─── PRICING ─── */}
+      <section id="pricing" style={{ padding: '72px 24px', maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+          <div style={{
+            fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--teal)',
+            letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 14, fontWeight: 500,
+          }}>Pricing</div>
+          <h2 style={{ fontSize: 'clamp(24px,3vw,38px)', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.15 }}>
+            Start free. Upgrade when you&apos;re ready.
+          </h2>
+        </div>
+
+        <div style={{
+          display: 'grid', gap: 18,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          maxWidth: 1080, margin: '0 auto',
+        }}>
+          {/* Free */}
+          <div className="pricing-card">
+            <div className="pricing-card-name">Free</div>
+            <div className="pricing-card-price">$0</div>
+            <div className="pricing-card-desc">Try it out.</div>
+            <div className="pricing-features">
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>2 tailored resumes / month</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Full module library</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Estimated ATS Match score</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>DOCX + PDF download</div>
+            </div>
+            <Link href="/signin?signup=1" className="btn-secondary" style={{ width: '100%', justifyContent: 'center', textDecoration: 'none' }}>Start free →</Link>
+          </div>
+
+          {/* Pro Monthly */}
+          <div className="pricing-card" style={{ borderColor: 'var(--teal-glow)' }}>
+            <div className="pricing-badge">Most popular</div>
+            <div className="pricing-card-name">Pro Monthly</div>
+            <div className="pricing-card-price">$19<span style={{ fontSize: 14, color: 'var(--text3)', fontWeight: 400 }}>/mo</span></div>
+            <div className="pricing-card-desc">Unlimited everything, billed monthly.</div>
+            <div className="pricing-features">
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Unlimited tailored resumes</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Full ATS Estimator breakdown</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Full module editing</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Multiple resume uploads</div>
+            </div>
+            <Link href="/signin?signup=1" className="btn-primary" style={{ width: '100%', justifyContent: 'center', textDecoration: 'none' }}>Start free →</Link>
+          </div>
+
+          {/* Pro Annual */}
+          <div className="pricing-card">
+            <div className="pricing-card-name">Pro Annual</div>
+            <div className="pricing-card-price">$99<span style={{ fontSize: 14, color: 'var(--text3)', fontWeight: 400 }}>/yr</span></div>
+            <div className="pricing-card-desc">Everything in Pro — save two months.</div>
+            <div className="pricing-features">
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Everything in Pro Monthly</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Billed annually</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>~ $8.25/month effective</div>
+            </div>
+            <Link href="/signin?signup=1" className="btn-secondary" style={{ width: '100%', justifyContent: 'center', textDecoration: 'none' }}>Start free →</Link>
+          </div>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: 22, fontSize: 13, color: 'var(--text3)' }}>
+          Just need a one-off? Buy <Link href="/billing" style={{ color: 'var(--teal)' }}>a single resume for $9</Link> or a <Link href="/billing" style={{ color: 'var(--teal)' }}>5-pack for $29</Link>.
+        </div>
+      </section>
+
       {/* ─── BOTTOM CTA ─── */}
       <section id="bottom-cta">
         <div className="bottom-cta-bg" />
@@ -382,8 +442,8 @@ export default function Home() {
           Your experience doesn't change. The story you tell does. ModuleHire Labs makes every application feel like it was made just for that role.
         </p>
         <div style={{display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap'}}>
-          <Link href="/request-access" className="btn-primary" style={{fontSize:'15px', padding:'14px 28px', textDecoration: 'none'}}>
-            Request beta access →
+          <Link href="/signin?signup=1" className="btn-primary" style={{fontSize:'15px', padding:'14px 28px', textDecoration: 'none'}}>
+            Start free →
           </Link>
           <Link href="/how-it-works" className="btn-secondary" style={{fontSize:'15px', padding:'14px 28px', textDecoration: 'none'}}>
             View sample output

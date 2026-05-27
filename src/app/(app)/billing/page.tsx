@@ -1,57 +1,69 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { FREE_LIMIT, moduleLimit, uploadLimit } from '@/lib/plan';
-import BillingActions from './BillingActions';
+import { isProTier } from '@/lib/plan';
+import BillingActions, { type Sku } from './BillingActions';
 
-type Plan = 'free' | 'pro';
-
-function fmtLimit(n: number, unit: string) {
-  return Number.isFinite(n) ? `${n} ${unit}` : `Unlimited ${unit}`;
+type PlanCard = {
+  sku: Sku
+  name: string
+  price: string
+  priceSub?: string
+  desc: string
+  features: string[]
+  cta: string
+  recommended?: boolean
 }
 
-const PLANS: Array<{
-  key: Plan;
-  name: string;
-  price: string;
-  annualPrice: string;
-  desc: string;
-  features: string[];
-  cta: string;
-}> = [
+const SUBSCRIPTION_PLANS: PlanCard[] = [
   {
-    key: 'free',
-    name: 'Free',
-    price: '$0/mo',
-    annualPrice: '',
-    desc: 'Try it out.',
+    sku: 'pro_monthly',
+    name: 'Pro Monthly',
+    price: '$19',
+    priceSub: '/mo',
+    desc: 'Unlimited everything, billed monthly.',
     features: [
-      fmtLimit(uploadLimit('free'), 'resume upload'),
-      fmtLimit(moduleLimit('free'), 'modules'),
-      `${FREE_LIMIT} resumes/mo`,
-      'Or buy credits: $9 single · $29 5-pack',
-      'DOCX + PDF download',
-      'Paste JD input',
-    ],
-    cta: 'Current plan',
-  },
-  {
-    key: 'pro',
-    name: 'Pro',
-    price: '$19/mo',
-    annualPrice: '$99/yr',
-    desc: 'Unlimited everything.',
-    features: [
-      'Unlimited resume uploads',
-      'Unlimited modules',
       'Unlimited tailored resumes',
-      'All 6 formats (PDF + DOCX)',
-      'Full ATS optimization + live ATS Estimator',
-      'Full generation history',
-      'Priority access to new features',
+      'Full ATS Estimator breakdown',
+      'Full module editing',
+      'Multiple resume uploads',
+      'Priority generation',
     ],
-    cta: 'Upgrade to Pro',
+    cta: 'Upgrade to Pro Monthly',
+    recommended: true,
   },
-];
+  {
+    sku: 'pro_annual',
+    name: 'Pro Annual',
+    price: '$99',
+    priceSub: '/yr',
+    desc: 'Everything in Pro — save two months.',
+    features: [
+      'Everything in Pro Monthly',
+      'Billed annually',
+      '~ $8.25/month effective',
+    ],
+    cta: 'Upgrade to Pro Annual',
+  },
+]
+
+const ONE_TIME_PURCHASES: PlanCard[] = [
+  {
+    sku: 'single',
+    name: 'Single resume',
+    price: '$9',
+    desc: 'One tailored resume. No subscription.',
+    features: ['1 resume credit', 'Never expires', 'DOCX + PDF download'],
+    cta: 'Buy 1 resume — $9',
+  },
+  {
+    sku: 'five_pack',
+    name: '5-pack',
+    price: '$29',
+    desc: 'Five credits. ~ $5.80 each.',
+    features: ['5 resume credits', 'Never expires', 'DOCX + PDF download'],
+    cta: 'Buy 5-pack — $29',
+  },
+]
 
 export default async function BillingPage() {
   const supabase = await createClient();
@@ -60,13 +72,12 @@ export default async function BillingPage() {
 
   const { data: profile } = await supabase
     .from('users')
-    .select('plan, stripe_customer_id')
+    .select('plan, tier, stripe_customer_id')
     .eq('id', user.id)
     .single();
 
-  const rawPlan = (profile?.plan ?? 'free') as string;
-  // 'starter' is a retired tier — surface those users as 'free' for upgrade prompts.
-  const currentPlan: Plan = rawPlan === 'pro' ? 'pro' : 'free';
+  const tier = (profile?.tier ?? 'free') as string;
+  const proCurrent = isProTier(tier);
   const hasStripe = !!profile?.stripe_customer_id;
 
   return (
@@ -79,24 +90,64 @@ export default async function BillingPage() {
       </div>
 
       <div className="dash-content">
-        <div className="pricing-grid">
-          {PLANS.map(plan => {
-            const isCurrent = plan.key === currentPlan;
-            const isDowngrade = currentPlan === 'pro' && plan.key !== 'pro';
-
-            return (
-              <div key={plan.key} className={`pricing-card${isCurrent ? ' current' : ''}`}>
-                {isCurrent && <div className="pricing-badge">Current plan</div>}
-                <div className="pricing-card-name">{plan.name}</div>
-                <div className="pricing-card-price">{plan.price}</div>
-                {plan.annualPrice && (
-                  <div style={{ fontSize: 12, color: 'var(--teal)', marginBottom: 4 }}>
-                    or {plan.annualPrice} — save 2 months
+        <div className="section-card" style={{ marginBottom: 24 }}>
+          <div className="section-head">
+            <div className="section-head-title">Subscriptions</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)' }}>Unlimited resumes + full ATS Estimator</div>
+          </div>
+          <div className="pricing-grid" style={{ padding: '12px 20px 20px' }}>
+            {SUBSCRIPTION_PLANS.map(plan => {
+              const isCurrent = proCurrent && (
+                (plan.sku === 'pro_monthly' && profile?.plan !== 'pro_annual') ||
+                plan.sku === 'pro_annual' && profile?.plan === 'pro_annual'
+              );
+              return (
+                <div key={plan.sku} className={`pricing-card${isCurrent ? ' current' : ''}`}>
+                  {isCurrent && <div className="pricing-badge">Current plan</div>}
+                  {!isCurrent && plan.recommended && <div className="pricing-badge">Most popular</div>}
+                  <div className="pricing-card-name">{plan.name}</div>
+                  <div className="pricing-card-price">
+                    {plan.price}{plan.priceSub && <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text3)' }}>{plan.priceSub}</span>}
                   </div>
-                )}
-                <div className="pricing-card-desc">{plan.desc}</div>
+                  <div className="pricing-card-desc">{plan.desc}</div>
+                  <div className="pricing-features">
+                    {plan.features.map(f => (
+                      <div key={f} className="pricing-feature">
+                        <span className="pricing-feature-icon">
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                            <path d="M2.5 7l3.5 3.5 5.5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </span>
+                        {f}
+                      </div>
+                    ))}
+                  </div>
+                  <BillingActions
+                    sku={plan.sku}
+                    cta={plan.cta}
+                    isCurrent={isCurrent}
+                    hasStripe={hasStripe}
+                    variant={plan.recommended ? 'primary' : 'secondary'}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="section-card">
+          <div className="section-head">
+            <div className="section-head-title">One-time purchases</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)' }}>Pay per resume — credits never expire</div>
+          </div>
+          <div className="pricing-grid" style={{ padding: '12px 20px 20px' }}>
+            {ONE_TIME_PURCHASES.map(p => (
+              <div key={p.sku} className="pricing-card">
+                <div className="pricing-card-name">{p.name}</div>
+                <div className="pricing-card-price">{p.price}</div>
+                <div className="pricing-card-desc">{p.desc}</div>
                 <div className="pricing-features">
-                  {plan.features.map(f => (
+                  {p.features.map(f => (
                     <div key={f} className="pricing-feature">
                       <span className="pricing-feature-icon">
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -107,40 +158,9 @@ export default async function BillingPage() {
                     </div>
                   ))}
                 </div>
-
-                <BillingActions
-                  planKey={plan.key}
-                  cta={plan.cta}
-                  isCurrent={isCurrent}
-                  isDowngrade={isDowngrade}
-                  hasStripe={hasStripe}
-                />
+                <BillingActions sku={p.sku} cta={p.cta} variant="secondary" />
               </div>
-            );
-          })}
-        </div>
-
-        <div className="section-card" style={{ marginTop: 24 }}>
-          <div className="section-head">
-            <div className="section-head-title">Frequently asked questions</div>
-          </div>
-          <div style={{ padding: '8px 20px 20px' }}>
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>What counts as a module?</div>
-              <div style={{ fontSize: 13, color: 'var(--text2)' }}>Each skill block extracted from your resume is one module. A typical resume produces 8–20 modules.</div>
-            </div>
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>What happens when I hit my free limit?</div>
-              <div style={{ fontSize: 13, color: 'var(--text2)' }}>You can buy a single resume for $9, a 5-pack for $29 (credits never expire), or upgrade to Pro for unlimited. Your modules and history are never deleted.</div>
-            </div>
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Do resume credits expire?</div>
-              <div style={{ fontSize: 13, color: 'var(--text2)' }}>No — credits from single and 5-pack purchases never expire. Use them whenever you&apos;re ready.</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Can I cancel anytime?</div>
-              <div style={{ fontSize: 13, color: 'var(--text2)' }}>Yes. Cancel from the billing portal and you&apos;ll stay on your paid plan until the period ends, then revert to Free.</div>
-            </div>
+            ))}
           </div>
         </div>
       </div>
