@@ -238,7 +238,7 @@ export default function Home() {
         </div>
 
         <h1 className="hero-headline">
-          Most resumes<br/>
+          Tell the right story<br/>
           <em style={{
             fontStyle: 'normal',
             display: 'inline',
@@ -247,8 +247,7 @@ export default function Home() {
             backgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             color: 'transparent',
-          }}>never reach a human.</em><br/>
-          <span style={{fontWeight:300, fontSize:'0.75em', color:'var(--text2)', letterSpacing:'-0.01em'}}>ModuleHire fixes that.</span>
+          }}>for every role.</em>
         </h1>
 
         <p className="hero-sub">
