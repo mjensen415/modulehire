@@ -251,7 +251,7 @@ export default function Home() {
         </h1>
 
         <p className="hero-sub">
-          Parse your resume into modular skill blocks. Reassemble them instantly into tailored, ATS-ready applications — tuned to each job description.
+          Upload your resume once. ModuleHire breaks it into modules and rebuilds it for each job — putting your most relevant experience front and center, every time.
         </p>
 
         <div className="hero-ctas">
