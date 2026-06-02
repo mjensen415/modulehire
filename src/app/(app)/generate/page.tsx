@@ -1870,7 +1870,7 @@ export default function GeneratePage() {
                 marginBottom: 24,
               }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
-                  You&apos;ve used your 2 free resumes this month.
+                  You&apos;ve used your 25 free resumes this month.
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 14 }}>
                   Buy a single resume for $9, a 5-pack for $29, or go unlimited with Pro. Credits never expire.
@@ -2655,7 +2655,7 @@ export default function GeneratePage() {
           >
             <div style={{ fontSize: 32, marginBottom: 8 }}>🚀</div>
             <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', marginBottom: 10 }}>
-              You&apos;ve used your 2 free resumes this month.
+              You&apos;ve used your 25 free resumes this month.
             </h2>
             <p style={{ fontSize: 14, color: 'var(--text2)', lineHeight: 1.55, marginBottom: 22 }}>
               Upgrade to Pro for unlimited resume generations, plus the full ATS Estimator breakdown for every resume you create.

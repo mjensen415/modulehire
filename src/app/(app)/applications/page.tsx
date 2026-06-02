@@ -209,7 +209,7 @@ export default function ApplicationsPage() {
               <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 24, maxWidth: 340, margin: '0 auto 24px' }}>
                 Generate a tailored resume and track it from draft through to offer right here.
               </div>
-              <Link href="/generate" className="btn-primary" style={{ display: 'inline-flex', textDecoration: 'none' }}>
+              <Link href="/generate" className="btn-primary" style={{ display: 'inline-flex', textDecoration: 'none', fontSize: 13, padding: '8px 16px' }}>
                 Generate first resume →
               </Link>
             </div>

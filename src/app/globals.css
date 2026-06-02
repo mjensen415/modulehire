@@ -2222,3 +2222,71 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
   text-decoration: none;
 }
 .btn-secondary:hover { background: var(--surface2); border-color: var(--border); }
+
+/* ─── Support / Docs ─────────────────────────────────────────────────────── */
+.docs-shell {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 80px 24px 100px;
+}
+.docs-article {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.75;
+}
+.docs-article h1 {
+  font-size: clamp(22px, 3vw, 32px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  margin: 0 0 12px;
+  color: var(--text);
+}
+.docs-article h2 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin: 36px 0 12px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+.docs-article h3 {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 24px 0 8px;
+  color: var(--text);
+}
+.docs-article p {
+  margin: 0 0 16px;
+  color: var(--text2);
+}
+.docs-article a {
+  color: var(--teal);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: opacity 0.15s;
+}
+.docs-article a:hover { opacity: 0.8; }
+.docs-article ul,
+.docs-article ol {
+  padding-left: 20px;
+  margin: 0 0 16px;
+  color: var(--text2);
+}
+.docs-article li { margin-bottom: 6px; }
+.docs-article hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 32px 0;
+}
+.docs-article code {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--teal);
+}
+.docs-article strong { color: var(--text); font-weight: 700; }

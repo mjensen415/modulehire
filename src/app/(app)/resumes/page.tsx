@@ -74,7 +74,7 @@ export default function ResumesPage() {
           <span className="topbar-title">Generated Resumes</span>
           <span className="topbar-sub">— Your resume history</span>
         </div>
-        <Link href="/generate" className="btn-primary" style={{ textDecoration: 'none', fontSize: 13 }}>
+        <Link href="/generate" className="btn-primary" style={{ textDecoration: 'none', fontSize: 13, display: 'inline-flex', padding: '7px 14px' }}>
           + Generate New
         </Link>
       </div>
@@ -88,7 +88,7 @@ export default function ResumesPage() {
             <div style={{ fontSize: 32, marginBottom: 12 }}>📄</div>
             <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text2)', marginBottom: 8 }}>No resumes yet</div>
             <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 24 }}>Generate your first tailored resume from the Generate page.</div>
-            <Link href="/generate" className="btn-primary" style={{ textDecoration: 'none' }}>Generate a Resume →</Link>
+            <Link href="/generate" className="btn-primary" style={{ textDecoration: 'none', display: 'inline-flex', fontSize: 13, padding: '8px 16px' }}>Generate a Resume →</Link>
           </div>
         )}
 

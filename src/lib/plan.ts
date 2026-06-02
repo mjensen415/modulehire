@@ -1,5 +1,5 @@
 export const FREE_LIMIT = 0  // free users get no free downloads
-export const FREE_MONTHLY_GENERATIONS = 2
+export const FREE_MONTHLY_GENERATIONS = 25
 
 // True when the user has Pro-equivalent access (paid Pro or complimentary beta_pro).
 export function isProTier(tier?: string | null): boolean {

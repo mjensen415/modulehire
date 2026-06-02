@@ -270,7 +270,7 @@ export default function OnboardingClient({
 
         {pendingFile && (
           <div style={{ marginTop: 18, textAlign: 'center' }}>
-            <button className="btn-primary" onClick={startUpload}>Upload &amp; Continue →</button>
+            <button className="btn-primary" onClick={startUpload} style={{ display: 'inline-flex' }}>Upload &amp; Continue →</button>
           </div>
         )}
 
@@ -306,7 +306,7 @@ export default function OnboardingClient({
           )}
         </div>
 
-        <button className="btn-primary" onClick={() => setStep(3)}>Generate My First Resume →</button>
+        <button className="btn-primary" onClick={() => setStep(3)} style={{ display: 'inline-flex' }}>Generate My First Resume →</button>
       </div>
     )
   }

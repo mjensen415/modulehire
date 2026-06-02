@@ -389,7 +389,7 @@ export default function Home() {
             <div className="pricing-card-price">$0</div>
             <div className="pricing-card-desc">Try it out.</div>
             <div className="pricing-features">
-              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>2 tailored resumes / month</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>25 tailored resumes / month</div>
               <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Full module library</div>
               <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Estimated ATS Match score</div>
               <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>DOCX + PDF download</div>

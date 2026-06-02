@@ -91,8 +91,8 @@ export default function Settings() {
     <>
       <div className="app-topbar">
         <div>
-          <span className="topbar-title">Settings</span>
-          <span className="topbar-sub">— Account &amp; preferences</span>
+          <span className="topbar-title">Account</span>
+          <span className="topbar-sub">— Profile &amp; billing</span>
         </div>
       </div>
 

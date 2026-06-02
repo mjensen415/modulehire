@@ -1014,7 +1014,7 @@ export async function POST(req: Request) {
         .gte('created_at', startOfMonth)
       if ((monthlyCount ?? 0) >= FREE_MONTHLY_GENERATIONS) {
         return NextResponse.json({
-          error: "You've used your 2 free resumes this month. Upgrade to Pro for unlimited generations.",
+          error: "You've used your 25 free resumes this month. Upgrade to Pro for unlimited generations.",
           code: 'monthly_generation_limit',
         }, { status: 402 })
       }
