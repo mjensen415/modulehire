@@ -2003,7 +2003,7 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
   gap: 8px;
   font-size: 14.5px; font-weight: 700;
   background: var(--teal); color: #fff;
-  border: none; border-radius: 8px;
+  border: 1px solid var(--teal); border-radius: 8px;
   padding: 13px 24px; cursor: pointer;
   font-family: var(--font);
   transition: all 0.2s;
@@ -2020,9 +2020,9 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
   width: auto;
   align-items: center;
   gap: 8px;
-  font-size: 14.5px; font-weight: 600;
-  background: transparent; color: var(--text);
-  border: 1px solid var(--border2); border-radius: 8px;
+  font-size: 14.5px; font-weight: 700;
+  background: transparent; color: var(--teal);
+  border: 1px solid oklch(0.65 0.20 195 / 0.5); border-radius: 8px;
   padding: 13px 24px; cursor: pointer;
   font-family: var(--font);
   transition: all 0.2s;
@@ -2030,8 +2030,8 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
   text-decoration: none;
 }
 .hero-ctas .btn-secondary:hover {
-  background: var(--surface);
-  border-color: rgba(255,255,255,0.2);
+  background: oklch(0.65 0.20 195 / 0.08);
+  border-color: oklch(0.65 0.20 195 / 0.8);
 }
 
 /* ─── PRICING ─────────────────────────────────────────────────── */
