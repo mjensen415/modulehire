@@ -1,12 +1,31 @@
 'use client'
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import PublicNav from '@/components/layout/PublicNav';
 import PublicFooter from '@/components/layout/PublicFooter';
 import FaqItem from '@/components/ui/FaqItem';
 
 export default function HowItWorks() {
+  const router = useRouter();
+  const [uploadHref, setUploadHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/me')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) {
+          setUploadHref('/signin?signup=1');
+        } else if (!data.onboarding_complete) {
+          setUploadHref('/onboarding');
+        } else {
+          setUploadHref('/library');
+        }
+      })
+      .catch(() => setUploadHref('/signin?signup=1'));
+  }, []);
+
   return (
     <>
       <PublicNav />
@@ -27,21 +46,27 @@ export default function HowItWorks() {
             <p className="step-desc">Drop in any resume. We handle the parsing — PDF, Word doc, or plain text. The raw text is what matters, not the formatting. Most resumes take under 10 seconds to process.</p>
           </div>
           <div className="step-visual">
-            <div className="upload-zone">
+            <div className="upload-zone" style={{ cursor: uploadHref ? 'pointer' : 'default' }} onClick={() => uploadHref && router.push(uploadHref)}>
               <div className="upload-icon">
                 <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M24 32V12M14 22l10-10 10 10M8 38h32" />
                 </svg>
               </div>
-              <div className="upload-title">Drop your resume here</div>
-              <div className="upload-sub">or click to browse files</div>
-              <div className="file-badges">
-                <span className="file-badge">PDF</span>
-                <span className="file-badge">DOCX</span>
-                <span className="file-badge">TXT</span>
-                <span className="file-badge">RTF</span>
+              <div className="upload-title">Upload your resume</div>
+              <div className="upload-sub">PDF or Word doc · Processed in seconds</div>
+              <div style={{ marginTop: 20 }}>
+                <Link
+                  href={uploadHref ?? '/signin?signup=1'}
+                  onClick={e => e.stopPropagation()}
+                  className="btn-primary"
+                  style={{ display: 'inline-flex', textDecoration: 'none', fontSize: 14, padding: '10px 22px' }}
+                >
+                  Start free — upload your resume
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{ marginLeft: 2 }}>
+                    <path d="M1 7h12M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </Link>
               </div>
-              <div className="upload-note">Max 10MB · Processed in seconds</div>
             </div>
           </div>
         </div>
