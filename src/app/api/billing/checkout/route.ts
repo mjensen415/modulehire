@@ -8,8 +8,8 @@ type SkuKey = 'pro_monthly' | 'pro_annual' | 'single' | 'five_pack'
 const SKU_TO_PRICE: Record<SkuKey, string | undefined> = {
   pro_monthly: process.env.STRIPE_PRICE_PRO_MONTHLY,
   pro_annual: process.env.STRIPE_PRICE_PRO_ANNUAL,
-  single: process.env.STRIPE_PRICE_SINGLE,
-  five_pack: process.env.STRIPE_PRICE_5PACK,
+  single: process.env.STRIPE_PRICE_SINGLE_RESUME,
+  five_pack: process.env.STRIPE_PRICE_FIVE_PACK,
 }
 
 const SUBSCRIPTION_SKUS: Set<SkuKey> = new Set(['pro_monthly', 'pro_annual'])
