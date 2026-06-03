@@ -1,17 +1,12 @@
 import type { NextConfig } from "next";
 
-const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+const nextConfig: NextConfig = {
   serverExternalPackages: ['mammoth', 'jsonrepair'],
   // Bundle email-templates/ into Vercel serverless functions so fs.readFileSync
   // works in production. Without this, send-beta-invite silently falls back to
   // the hardcoded inline template (which has a wrong URL).
-  experimental: {
-    outputFileTracingIncludes: {
-      '/api/admin/send-beta-invite': ['./email-templates/**/*'],
-    },
+  outputFileTracingIncludes: {
+    '/api/admin/send-beta-invite': ['./email-templates/**/*'],
   },
   async headers() {
     return [
@@ -42,6 +37,6 @@ const nextConfig = {
       },
     ];
   },
-} as NextConfig & { eslint?: { ignoreDuringBuilds: boolean }; serverExternalPackages?: string[] };
+};
 
 export default nextConfig;
