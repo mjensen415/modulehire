@@ -991,15 +991,14 @@ export async function POST(req: Request) {
         .maybeSingle(),
       supabase
         .from('users')
-        .select('plan, resume_credits, tier')
+        .select('resume_credits, tier')
         .eq('id', user.id)
         .single(),
     ])
 
     const usageRow = usageRes.data as { count?: number; overage_credits?: number } | null
-    const profileRow = profileRes.data as { plan?: string; resume_credits?: number; tier?: string } | null
+    const profileRow = profileRes.data as { resume_credits?: number; tier?: string } | null
 
-    const plan = (profileRow?.plan ?? 'free') as string
     const resumeCredits = profileRow?.resume_credits ?? 0
     const tier = (profileRow?.tier ?? 'free') as string
     void usageRow
@@ -1364,8 +1363,8 @@ ${JSON.stringify(experienceGroups)}`
       .upload(pdfPath, pdfBuffer, { contentType: 'application/pdf' })
     if (pdfUploadErr) throw pdfUploadErr
 
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-
+    // This route is authenticated-only (401 above if no user), so every resume
+    // belongs to a logged-in user and is saved permanently. Never expire it.
     const { data: savedResume, error: saveError } = await supabase
       .from('generated_resumes')
       .insert({
@@ -1377,8 +1376,8 @@ ${JSON.stringify(experienceGroups)}`
         positioning_variant,
         docx_url: docxPath,
         pdf_url: pdfPath,
-        is_temp: true,
-        expires_at: expiresAt,
+        is_temp: false,
+        expires_at: null,
       })
       .select()
       .single()
@@ -1442,8 +1441,8 @@ ${JSON.stringify(experienceGroups)}`
     let coverLetterText: string | null = null
     let coverLetterUrl: string | null = null
 
-    // Cover letter is a paid feature — silently skip for free plan
-    if (cover_letter?.include && plan !== 'free') {
+    // Cover letter is a paid feature — silently skip for non-pro tiers
+    if (cover_letter?.include && isProTier(tier)) {
       const toneDesc: Record<string, string> = {
         professional: 'Professional and concise — clear, direct, no fluff',
         warm: 'Warm and conversational — personable, human, enthusiastic',
@@ -1480,8 +1479,8 @@ Rules:
     await supabase.from('usage_events').insert({ user_id: user.id, action: 'generate_resume' })
 
     // Consume one resume credit per generation for non-pro users with credits.
-    // Free users with 0 credits still generate (preview only) — download is gated client-side.
-    if (plan !== 'pro' && resumeCredits > 0) {
+    // Free users with 0 credits still generate within their monthly quota.
+    if (!isProTier(tier) && resumeCredits > 0) {
       const { error: creditError } = await supabase.rpc('increment_resume_credits', {
         p_user_id: user.id,
         p_amount: -1,
@@ -1501,6 +1500,9 @@ Rules:
       console.error('[generate-resume] increment_resume_count failed:', incError)
     }
 
+    // Full keyword breakdown is a Pro-only feature. Free tiers get the score only.
+    const proBreakdown = isProTier(tier)
+
     return NextResponse.json({
       resume_id: savedResume.id,
       docx_url: docxSigned?.signedUrl,
@@ -1509,8 +1511,8 @@ Rules:
       resume_html: resumeHtml,
       cover_letter_text: coverLetterText,
       cover_letter_url: coverLetterUrl,
-      matched_keywords: matchedKeywords,
-      missing_keywords: missingKeywords,
+      matched_keywords: proBreakdown ? matchedKeywords : [],
+      missing_keywords: proBreakdown ? missingKeywords : [],
       ats_score: atsScore,
     })
   } catch (error) {
