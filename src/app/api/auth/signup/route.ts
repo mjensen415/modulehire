@@ -31,7 +31,15 @@ export async function POST(req: Request) {
     })
 
     if (createError) {
-      if (createError.message.includes('already registered')) {
+      // Supabase signals a duplicate with code 'email_exists' (status 422) and the
+      // message "A user with this email address has already been registered".
+      // Match on the stable code/status — the old `includes('already registered')`
+      // check broke because the message reads "already been registered".
+      const isDuplicate =
+        createError.code === 'email_exists' ||
+        createError.status === 422 ||
+        /already.*registered/i.test(createError.message)
+      if (isDuplicate) {
         return NextResponse.json({ error: 'An account with this email already exists.' }, { status: 400 })
       }
       console.error('[signup] createUser failed:', createError)

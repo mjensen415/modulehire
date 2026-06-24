@@ -88,22 +88,23 @@ export default function SignIn() {
     }
   }
 
-  const oauthRedirectTo = (defaultNext: string) => {
-    const cb = `${window.location.origin}/auth/callback`
-    return defaultNext === '/dashboard' ? cb : `${cb}?next=${encodeURIComponent(defaultNext)}`
-  }
+  // Always send OAuth back to the bare callback. Onboarding-vs-dashboard routing
+  // is decided server-side in /auth/callback based on onboarding_complete — passing
+  // a ?next= query string here breaks Supabase's redirect-URL allowlist match and
+  // bounces the user to the Site URL (landing page) without a session.
+  const oauthRedirectTo = () => `${window.location.origin}/auth/callback`
 
   const handleGoogle = async () => {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: oauthRedirectTo(activeTab === 'signup' ? signupNext : signinNext) },
+      options: { redirectTo: oauthRedirectTo() },
     })
   }
 
   const handleLinkedIn = async () => {
     await supabase.auth.signInWithOAuth({
       provider: 'linkedin_oidc',
-      options: { redirectTo: oauthRedirectTo(activeTab === 'signup' ? signupNext : signinNext) },
+      options: { redirectTo: oauthRedirectTo() },
     })
   }
 
