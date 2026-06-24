@@ -57,10 +57,12 @@ export default function OnboardingClient({
   const [step, setStep] = useState<Step>(initialStep)
   const [parsing, setParsing] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [completing, setCompleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [jdText, setJdText] = useState('')
   const [moduleCount, setModuleCount] = useState(initialModuleCount)
   const [jobs, setJobs] = useState<JobPreview[]>([])
+  const [jobsStatus, setJobsStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
   const [downloadFilename, setDownloadFilename] = useState<string>('Resume.pdf')
   const [atsScore, setAtsScore] = useState<number | null>(null)
@@ -90,8 +92,10 @@ export default function OnboardingClient({
       }))
       setJobs(list)
       setModuleCount(modsData.modules?.length ?? moduleCount)
+      setJobsStatus('loaded')
     } catch {
-      // Non-fatal — page still works
+      // Non-fatal — page still works; surface a real "couldn't sync" state.
+      setJobsStatus('error')
     }
   }
 
@@ -209,8 +213,17 @@ export default function OnboardingClient({
   }
 
   async function completeOnboarding(destination = '/dashboard') {
-    try { await fetch('/api/onboarding/status', { method: 'POST' }) } catch {}
-    router.push(destination)
+    setError(null)
+    setCompleting(true)
+    try {
+      const res = await fetch('/api/onboarding/status', { method: 'POST' })
+      if (!res.ok) throw new Error()
+      // Leave `completing` true through the navigation so buttons stay disabled.
+      router.push(destination)
+    } catch {
+      setCompleting(false)
+      setError("We couldn't finish setting up your account. Please try again.")
+    }
   }
 
   // ─── Render ──────────────────────────────────────────────────────────────────
@@ -287,13 +300,19 @@ export default function OnboardingClient({
         <StepBadge step={2} />
         <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Your module library is ready.</h1>
         <p style={{ fontSize: 15, color: 'var(--text2)', marginBottom: 24 }}>
-          We found <strong>{jobs.length || '…'} jobs</strong> and <strong>{moduleCount} modules</strong> from your resume. You can fine-tune everything in your library — but first, let&apos;s put it to work.
+          {jobsStatus === 'loading' ? (
+            <>Pulling your library together…</>
+          ) : jobs.length > 0 ? (
+            <>We found <strong>{jobs.length} job{jobs.length === 1 ? '' : 's'}</strong> and <strong>{moduleCount} modules</strong> from your resume. You can fine-tune everything in your library — but first, let&apos;s put it to work.</>
+          ) : (
+            <>We built <strong>{moduleCount} modules</strong> from your resume. You can fine-tune everything in your library — but first, let&apos;s put it to work.</>
+          )}
         </p>
 
         <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', marginBottom: 28 }}>
-          {jobs.length === 0 ? (
+          {jobsStatus === 'loading' ? (
             <div style={{ padding: 18, fontSize: 13, color: 'var(--text3)' }}>Loading your library…</div>
-          ) : (
+          ) : jobs.length > 0 ? (
             jobs.map(j => (
               <div key={j.id} style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
@@ -303,10 +322,19 @@ export default function OnboardingClient({
                 <div style={{ fontSize: 12, color: 'var(--text3)' }}>{j.module_count} module{j.module_count === 1 ? '' : 's'}</div>
               </div>
             ))
+          ) : (
+            <div style={{ padding: 18 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Your modules are ready.</div>
+              <div style={{ fontSize: 13, color: 'var(--text3)' }}>
+                We couldn&apos;t sync your job history this time, but your {moduleCount} module{moduleCount === 1 ? '' : 's'} {moduleCount === 1 ? 'is' : 'are'} saved. You can still continue — you can organize jobs anytime in your library.
+              </div>
+            </div>
           )}
         </div>
 
-        <button className="btn-primary" onClick={() => setStep(3)} style={{ display: 'inline-flex' }}>Generate My First Resume →</button>
+        {jobsStatus !== 'loading' && (
+          <button className="btn-primary" onClick={() => setStep(3)} style={{ display: 'inline-flex' }}>Generate My First Resume →</button>
+        )}
       </div>
     )
   }
@@ -345,12 +373,14 @@ export default function OnboardingClient({
         </div>
 
         <div style={{ marginTop: 20, textAlign: 'center' }}>
-          <a
+          <button
+            type="button"
             onClick={() => completeOnboarding('/dashboard')}
-            style={{ fontSize: 13, color: 'var(--text3)', cursor: 'pointer', textDecoration: 'underline' }}
+            disabled={completing}
+            style={{ background: 'none', border: 'none', padding: 0, fontFamily: 'inherit', fontSize: 13, color: 'var(--text3)', cursor: completing ? 'default' : 'pointer', textDecoration: 'underline' }}
           >
-            Skip for now — I&apos;ll generate my first resume later
-          </a>
+            {completing ? 'Finishing up…' : 'Skip for now — I’ll generate my first resume later'}
+          </button>
         </div>
       </div>
     )
@@ -385,10 +415,12 @@ export default function OnboardingClient({
             Download Resume
           </a>
         )}
-        <button className="btn-ghost" onClick={() => completeOnboarding('/dashboard')}>
-          Go to my dashboard →
+        <button className="btn-ghost" onClick={() => completeOnboarding('/dashboard')} disabled={completing}>
+          {completing ? 'Finishing up…' : 'Go to my dashboard →'}
         </button>
       </div>
+
+      {error && <div style={{ marginTop: 16, fontSize: 13, color: 'var(--rose)', textAlign: 'center' }}>{error}</div>}
     </div>
   )
 }
