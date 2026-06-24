@@ -2,10 +2,6 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 
-// Hard email gate — this view is for the site owner only, independent of the
-// is_admin flag used by the main /admin console.
-const ADMIN_EMAIL = 'mjensen415@gmail.com'
-
 type UserRow = {
   id: string
   email: string
@@ -18,7 +14,15 @@ export default async function AdminUsersPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/signin')
-  if (user.email !== ADMIN_EMAIL) redirect('/dashboard')
+
+  // Gate on is_admin — the same pattern as /admin and every /api/admin route.
+  const { data: gate } = await supabase
+    .from('users')
+    .select('is_admin')
+    .eq('id', user.id)
+    .single()
+  console.log('[admin/users] access', { uid: user.id, email: user.email, is_admin: gate?.is_admin })
+  if (!gate?.is_admin) redirect('/dashboard')
 
   const admin = await createAdminClient()
 

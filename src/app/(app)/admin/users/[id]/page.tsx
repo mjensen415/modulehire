@@ -2,8 +2,6 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 
-const ADMIN_EMAIL = 'mjensen415@gmail.com'
-
 type ModuleRow = {
   id: string
   title: string | null
@@ -32,7 +30,14 @@ export default async function AdminUserDetailPage({
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/signin')
-  if (user.email !== ADMIN_EMAIL) redirect('/dashboard')
+
+  // Gate on is_admin — the same pattern as /admin and every /api/admin route.
+  const { data: gate } = await supabase
+    .from('users')
+    .select('is_admin')
+    .eq('id', user.id)
+    .single()
+  if (!gate?.is_admin) redirect('/dashboard')
 
   const { id } = await params
   const admin = await createAdminClient()
