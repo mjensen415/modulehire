@@ -76,6 +76,32 @@ function splitCompanyField(raw: unknown): string[] {
   return parts.length > 0 ? parts : [stripped]
 }
 
+// Safety net for when the model ignores the prompt and merges multiple jobs into
+// one module (comma-joined source_company and/or source_role_title). Returns one
+// or more single-job clones so every persisted module is attributed to exactly
+// one (company, role) pair.
+function expandToSingleJobModules(m: Record<string, unknown>): Record<string, unknown>[] {
+  const companies = splitCompanyField(m.source_company)
+  const roles = splitCompanyField(m.source_role_title)
+
+  // Clean single job — the common, correct case.
+  if (companies.length <= 1 && roles.length <= 1) {
+    return [{ ...m, source_company: companies[0] ?? null, source_role_title: roles[0] ?? null }]
+  }
+  // Both lists, same length → pair index-wise. Resumes list these in matching
+  // order (typically most-recent first), e.g. "Skipify, Plex" / "SVP, Director".
+  if (companies.length === roles.length) {
+    return companies.map((c, i) => ({ ...m, source_company: c, source_role_title: roles[i] }))
+  }
+  // Multiple companies, one (or no) role → one module per company sharing the role.
+  if (companies.length > 1) {
+    const role = roles.length === 1 ? roles[0] : null
+    return companies.map(c => ({ ...m, source_company: c, source_role_title: role }))
+  }
+  // One company, multiple roles → one module per role sharing the company.
+  return roles.map(r => ({ ...m, source_company: companies[0] ?? null, source_role_title: r }))
+}
+
 export async function parseModules(
   supabase: SupabaseClient,
   userId: string,
@@ -88,12 +114,17 @@ RULES:
 - Create one module per meaningful cluster of related work. Prefer specificity over consolidation — a notable project, achievement, or sub-specialization should be its own module even if it overlaps in topic with another module from the same job.
 - A single role will often produce many modules. That is expected and correct. The user curates from abundance — do not filter on their behalf.
 - Err on the side of more modules rather than fewer. Do not drop or merge significant achievements, projects, or responsibilities to keep the list short.
+- CRITICAL: Each module belongs to exactly ONE job. It must carry exactly one "source_company" and
+  exactly one "source_role_title". Do NOT combine companies or roles in a single module.
+  If an accomplishment spans multiple roles, attribute it to the single role where it was most
+  relevant (prefer the most recent), or emit a separate module for each role — never a list.
 - "source_company" MUST NOT be a comma-separated list of companies. If the resume groups multiple
   distinct employers under one date range, emit one module per employer.
   Slash-joined names like "Microsoft / Yammer" are allowed when they describe a single employer
   (e.g. an acquired company under a parent). Acquired-by parentheticals like "(acquired by X)"
   should be stripped — keep only the original employer name.
-- "source_role_title" should be exactly the title as written. Slash-joined dual titles are fine.
+- "source_role_title" MUST be a single job title exactly as written, NOT a comma-separated list of
+  titles. Slash-joined dual titles like "Product & Design Lead" are fine for one role.
 - DO NOT emit a module for the resume's top-level Summary, Profile, Objective, or About section.
   That content belongs on the user's profile, not in the module library — the caller extracts it
   separately. Skip it entirely.
@@ -161,20 +192,13 @@ JSON array:`
   const repairedJson = jsonrepair(rawJson)
   const rawModulesData: Record<string, unknown>[] = JSON.parse(repairedJson)
 
-  // Safety net: even with a strict prompt, the model occasionally emits
-  // "CompanyA, CompanyB" in source_company. Clone the module per company so
-  // each row has exactly one source_company and downstream job_experience
-  // upserts produce clean rows.
+  // Safety net: even with a strict prompt, the model occasionally merges multiple
+  // jobs into one module ("CompanyA, CompanyB" / "Role1, Role2"). Expand each into
+  // single-job clones so every row has exactly one source_company AND one
+  // source_role_title, and downstream job_experience upserts produce clean rows.
   const modulesData: Record<string, unknown>[] = []
   for (const m of rawModulesData) {
-    const companies = splitCompanyField(m.source_company)
-    if (companies.length <= 1) {
-      modulesData.push({ ...m, source_company: companies[0] ?? null })
-    } else {
-      for (const c of companies) {
-        modulesData.push({ ...m, source_company: c })
-      }
-    }
+    modulesData.push(...expandToSingleJobModules(m))
   }
 
   const modulesToInsert = modulesData.map(m => ({
