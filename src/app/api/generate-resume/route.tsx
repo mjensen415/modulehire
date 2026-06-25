@@ -1441,8 +1441,9 @@ ${JSON.stringify(experienceGroups)}`
     let coverLetterText: string | null = null
     let coverLetterUrl: string | null = null
 
-    // Cover letter is a paid feature — silently skip for non-pro tiers
-    if (cover_letter?.include && isProTier(tier)) {
+    // Cover letter generates for all tiers as a teaser; the .txt download is
+    // gated to Pro in the UI.
+    if (cover_letter?.include) {
       const toneDesc: Record<string, string> = {
         professional: 'Professional and concise — clear, direct, no fluff',
         warm: 'Warm and conversational — personable, human, enthusiastic',

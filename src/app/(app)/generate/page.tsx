@@ -3,8 +3,6 @@
 import { useState, useEffect, useRef, KeyboardEvent, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import ScoreGauge from '@/components/ScoreGauge'
-import { canDownload } from '@/lib/plan'
-import PaywallModal from '@/components/PaywallModal'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -200,11 +198,8 @@ export default function GeneratePage() {
   const [savedToLibrary, setSavedToLibrary] = useState(false)
   const [showOveragePrompt, setShowOveragePrompt] = useState(false)
   const [overageCheckoutLoading, setOverageCheckoutLoading] = useState(false)
-  const [showPaywall, setShowPaywall] = useState(false)
   const [showMonthlyLimitModal, setShowMonthlyLimitModal] = useState(false)
-  const [userPlan, setUserPlan] = useState<string>('free')
   const [userTier, setUserTier] = useState<string>('free')
-  const [resumeCredits, setResumeCredits] = useState(0)
   const [planLoaded, setPlanLoaded] = useState(false)
   const [editingSummary, setEditingSummary] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
@@ -224,22 +219,15 @@ export default function GeneratePage() {
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchParams = useSearchParams()
 
-  // Load plan + credits on mount so download gating is ready before reaching done.
+  // Load tier on mount so the Pro-only ATS breakdown is ready before reaching done.
   useEffect(() => {
     fetch('/api/me')
       .then(r => r.json())
       .then(profile => {
-        if (!profile.error) {
-          if (profile.plan) setUserPlan(profile.plan)
-          if (profile.tier) setUserTier(profile.tier)
-          if (typeof profile.resume_credits === 'number') setResumeCredits(profile.resume_credits)
-        } else {
-          setUserPlan('unknown')
-        }
+        if (!profile.error && profile.tier) setUserTier(profile.tier)
         setPlanLoaded(true)
       })
       .catch(() => {
-        setUserPlan('unknown')
         setPlanLoaded(true)
       })
   }, [])
@@ -497,9 +485,7 @@ export default function GeneratePage() {
           setSavedSummary(profile.summary)
           setSummaryOverride(prev => prev || profile.summary)
         }
-        if (profile.plan) setUserPlan(profile.plan)
         if (profile.tier) setUserTier(profile.tier)
-        if (typeof profile.resume_credits === 'number') setResumeCredits(profile.resume_credits)
       }
       setPlanLoaded(true)
     }).catch(() => { setPlanLoaded(true) })
@@ -1149,8 +1135,6 @@ export default function GeneratePage() {
                       onClick={e => {
                         e.stopPropagation()
                         setShowDownloadMenu(false)
-                        if (!planLoaded) return
-                        if (!canDownload(userPlan, resumeCredits)) { setShowPaywall(true); return }
                         downloadFile(generatedUrls.docx_url, generatedUrls.docx_filename)
                       }}
                       style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text)', fontFamily: 'var(--font)' }}
@@ -1163,8 +1147,6 @@ export default function GeneratePage() {
                       onClick={e => {
                         e.stopPropagation()
                         setShowDownloadMenu(false)
-                        if (!planLoaded) return
-                        if (!canDownload(userPlan, resumeCredits)) { setShowPaywall(true); return }
                         downloadFile(generatedUrls.pdf_url, generatedUrls.docx_filename.replace('.docx', '.pdf'))
                       }}
                       style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text)', fontFamily: 'var(--font)' }}
@@ -2444,45 +2426,8 @@ export default function GeneratePage() {
         const VISIBLE_KW = 5
         const displayScore = atsScore ?? (totalKw > 0 ? Math.round((matchedKw.length / totalKw) * 100) : 0)
 
-        const downloadAllowed = canDownload(userPlan, resumeCredits)
-
         return (
           <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
-            <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-              {planLoaded && !downloadAllowed && (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 16,
-                  background: 'var(--teal-dim, var(--surface))',
-                  border: '1px solid var(--teal-glow, var(--border2))',
-                  borderRadius: 10,
-                  padding: '12px 16px',
-                  marginBottom: 18,
-                }}>
-                  <div style={{ fontSize: 13, color: 'var(--text)' }}>
-                    Your resume preview is ready. Purchase to download.
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowPaywall(true)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--teal, #14b8a6)',
-                      fontWeight: 600,
-                      fontSize: 13,
-                      cursor: 'pointer',
-                      padding: 0,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    Unlock download →
-                  </button>
-                </div>
-              )}
-            </div>
             <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', maxWidth: 1100, margin: '0 auto' }}>
 
               {/* ── LEFT: preview + downloads ── */}
@@ -2515,17 +2460,38 @@ export default function GeneratePage() {
                 {/* Cover letter */}
                 {coverLetterText && (
                   <div style={{ marginBottom: 24 }}>
-                    <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 8 }}>Cover Letter</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                      <div style={{ fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text3)' }}>Cover Letter</div>
+                    </div>
                     <div style={{ background: '#fff', borderRadius: 6, boxShadow: '0 2px 16px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.06)', padding: '28px 36px', maxHeight: 360, overflowY: 'auto' }}>
                       <pre style={{ fontFamily: 'var(--mono)', fontSize: 12.5, lineHeight: 1.75, color: '#333', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{coverLetterText}</pre>
                     </div>
-                    {coverLetterUrl && (
-                      <div style={{ marginTop: 8 }}>
-                        <a href={coverLetterUrl} download className="btn-ghost" style={{ fontSize: 12, textDecoration: 'none' }}>Download cover letter (.txt)</a>
-                      </div>
-                    )}
+                    <div style={{ marginTop: 10 }}>
+                      {(userTier === 'pro' || userTier === 'beta_pro') ? (
+                        coverLetterUrl && (
+                          <a href={coverLetterUrl} download className="btn-ghost" style={{ fontSize: 12, textDecoration: 'none' }}>
+                            Download cover letter (.txt)
+                          </a>
+                        )
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 12, color: 'var(--text3)' }}>Download is a Pro feature.</span>
+                          <a href="/billing" style={{ fontSize: 12, color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>Upgrade to Pro →</a>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
+
+                {/* Resume saved indicator */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 8 }}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--teal)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="7" cy="7" r="6" />
+                    <path d="M4.5 7l2 2 3-3" />
+                  </svg>
+                  <span style={{ fontSize: 13, color: 'var(--teal)', fontWeight: 500 }}>Resume saved. </span>
+                  <a href="/resumes" style={{ fontSize: 13, color: 'var(--teal)', textDecoration: 'underline' }}>View in My Resumes →</a>
+                </div>
 
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 10 }}>
@@ -2634,7 +2600,6 @@ export default function GeneratePage() {
         )
       })()}
 
-      <PaywallModal open={showPaywall} onClose={() => setShowPaywall(false)} />
 
       {showMonthlyLimitModal && (
         <div
