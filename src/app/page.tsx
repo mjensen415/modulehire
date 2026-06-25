@@ -255,13 +255,13 @@ export default function Home() {
         </p>
 
         <div className="hero-ctas">
-          <Link href="/signin?signup=1" className="btn-primary" style={{textDecoration: 'none'}}>
+          <Link href="/signin?signup=1" className="btn-primary" style={{textDecoration: 'none', display: 'inline-flex'}}>
             Start free
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M1 7h12M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </Link>
-          <Link href="/how-it-works" className="btn-secondary" style={{textDecoration: 'none'}}>
+          <Link href="/how-it-works" className="btn-secondary" style={{textDecoration: 'none', display: 'inline-flex'}}>
             See how it works
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M1 7h12M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -441,10 +441,10 @@ export default function Home() {
           Your experience doesn't change. The story you tell does. ModuleHire Labs makes every application feel like it was made just for that role.
         </p>
         <div style={{display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap'}}>
-          <Link href="/signin?signup=1" className="btn-primary" style={{fontSize:'15px', padding:'14px 28px', textDecoration: 'none'}}>
+          <Link href="/signin?signup=1" className="btn-primary" style={{fontSize:'15px', padding:'14px 28px', textDecoration: 'none', display: 'inline-flex'}}>
             Start free →
           </Link>
-          <Link href="/how-it-works" className="btn-secondary" style={{fontSize:'15px', padding:'14px 28px', textDecoration: 'none'}}>
+          <Link href="/how-it-works" className="btn-secondary" style={{fontSize:'15px', padding:'14px 28px', textDecoration: 'none', display: 'inline-flex'}}>
             View sample output
           </Link>
         </div>
