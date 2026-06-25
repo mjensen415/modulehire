@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { ScoreChip } from '@/components/ScoreGauge'
+import { computeStorageUsage, type StorageUsage } from '@/lib/plan'
 
 type GeneratedResume = {
   id: string
@@ -48,8 +49,13 @@ function timeUntilExpiry(expires_at: string) {
   return `expires in ${Math.floor(h / 24)}d`
 }
 
+function formatMB(bytes: number) {
+  return (bytes / (1024 * 1024)).toFixed(1)
+}
+
 export default function ResumesPage() {
   const [resumes, setResumes] = useState<GeneratedResume[]>([])
+  const [storage, setStorage] = useState<StorageUsage | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -59,10 +65,28 @@ export default function ResumesPage() {
       .then(data => {
         if (data.error) throw new Error(data.error)
         setResumes(data.resumes ?? [])
+        setStorage(data.storage ?? null)
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
+
+  async function handleDelete(id: string, title: string) {
+    if (!window.confirm(`Delete "${title}"? This can't be undone.`)) return
+    try {
+      const res = await fetch('/api/my-resumes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      if (!res.ok) throw new Error('Delete failed')
+      setResumes(prev => prev.filter(r => r.id !== id))
+      // Recompute the banner from the new count (bytes refresh on next load).
+      setStorage(prev => prev ? computeStorageUsage(Math.max(0, prev.resume_count - 1), prev.bytes) : prev)
+    } catch {
+      setError('Could not delete that resume. Please try again.')
+    }
+  }
 
   const active = resumes.filter(r => !r.expired)
   const expired = resumes.filter(r => r.expired)
@@ -80,6 +104,25 @@ export default function ResumesPage() {
       </div>
 
       <div className="dash-content">
+        {/* Storage usage notice — non-blocking; resumes are never auto-deleted */}
+        {storage?.near && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20,
+            padding: '12px 16px', borderRadius: 8,
+            border: `1px solid ${storage.over ? 'var(--rose)' : 'var(--border2)'}`,
+            background: 'var(--surface)',
+          }}>
+            <span style={{ fontSize: 16 }}>{storage.over ? '⚠️' : '📦'}</span>
+            <div style={{ flex: 1, fontSize: 13, color: 'var(--text2)', lineHeight: 1.5 }}>
+              <strong style={{ color: storage.over ? 'var(--rose)' : 'var(--text)' }}>
+                {storage.over ? 'You’ve reached your storage limit.' : 'You’re approaching your storage limit.'}
+              </strong>{' '}
+              {storage.resume_count}/{storage.count_limit} resumes · {formatMB(storage.bytes)}/{formatMB(storage.byte_limit)} MB used.
+              {' '}Your resumes are all still saved{storage.over ? ' — to free space, download and keep the ones you need locally.' : '.'}
+            </div>
+          </div>
+        )}
+
         {loading && <div style={{ color: 'var(--text3)', fontSize: 13 }}>Loading…</div>}
         {error && <div style={{ color: 'var(--rose)', fontSize: 13 }}>{error}</div>}
 
@@ -166,6 +209,15 @@ export default function ResumesPage() {
                         PDF
                       </button>
                     )}
+                    <button
+                      className="btn-ghost"
+                      style={{ fontSize: 12, padding: '5px 10px', color: 'var(--rose)' }}
+                      onClick={() => handleDelete(r.id, r.title)}
+                      title="Delete this resume"
+                      aria-label={`Delete ${r.title}`}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
               ))}
