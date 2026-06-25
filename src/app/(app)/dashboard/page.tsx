@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { moduleLimit, FREE_LIMIT } from '@/lib/plan';
+import { moduleLimit, isProTier, FREE_MONTHLY_GENERATIONS } from '@/lib/plan';
 
 // ─── ICONS ───
 function IconBlocks() {
@@ -177,7 +177,7 @@ export default async function Dashboard() {
       .is('deleted_at', null),
     supabase
       .from('users')
-      .select('plan, is_admin')
+      .select('plan, tier, is_admin')
       .eq('id', user!.id)
       .single(),
     supabase
@@ -228,12 +228,13 @@ export default async function Dashboard() {
 
   // Plan gate state
   const plan = (profileRow?.plan ?? 'free') as string;
+  const tier = (profileRow?.tier ?? 'free') as string;
   const isAdmin = profileRow?.is_admin ?? false;
   const currentModuleCount = moduleCount ?? 0;
   const resumesThisMonth = resumesThisMonthCount ?? 0;
 
-  const moduleCap = moduleLimit(plan);
-  const resumeCap = plan === 'pro' ? Infinity : FREE_LIMIT;
+  const moduleCap = moduleLimit(tier);
+  const resumeCap = isProTier(tier) ? Infinity : FREE_MONTHLY_GENERATIONS;
 
   const nearModuleLimit = !isAdmin && Number.isFinite(moduleCap) && currentModuleCount >= moduleCap - 2;
   const atModuleLimit = !isAdmin && Number.isFinite(moduleCap) && currentModuleCount >= moduleCap;
