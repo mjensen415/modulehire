@@ -44,7 +44,7 @@ export async function GET(req: Request) {
       const isExpired = r.expires_at && new Date(r.expires_at) < new Date()
       if (isExpired) return { ...r, docx_signed: null, pdf_signed: null, expired: true }
 
-      const bucket = r.is_temp ? 'temp' : 'resumes'
+      const bucket = 'temp' // TODO: update to 'resumes' once storage bucket is renamed
       const [docxSigned, pdfSigned] = await Promise.all([
         r.docx_url ? supabase.storage.from(bucket).createSignedUrl(r.docx_url, 3600) : Promise.resolve({ data: null }),
         r.pdf_url ? supabase.storage.from(bucket).createSignedUrl(r.pdf_url, 3600) : Promise.resolve({ data: null }),
