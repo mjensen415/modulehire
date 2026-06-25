@@ -9,7 +9,9 @@ import FaqItem from '@/components/ui/FaqItem';
 
 export default function HowItWorks() {
   const router = useRouter();
-  const [uploadHref, setUploadHref] = useState<string | null>(null);
+  // Default to the signup route so the zone is clickable immediately, before the
+  // auth check resolves. Logged-in users get re-pointed once /api/me returns.
+  const [uploadHref, setUploadHref] = useState<string>('/signin?signup=1');
 
   useEffect(() => {
     fetch('/api/me')
@@ -20,7 +22,7 @@ export default function HowItWorks() {
         } else if (!data.onboarding_complete) {
           setUploadHref('/onboarding');
         } else {
-          setUploadHref('/library');
+          setUploadHref('/generate');
         }
       })
       .catch(() => setUploadHref('/signin?signup=1'));
@@ -46,7 +48,7 @@ export default function HowItWorks() {
             <p className="step-desc">Drop in any resume. We handle the parsing — PDF, Word doc, or plain text. The raw text is what matters, not the formatting. Most resumes take under 10 seconds to process.</p>
           </div>
           <div className="step-visual">
-            <div className="upload-zone" style={{ cursor: uploadHref ? 'pointer' : 'default' }} onClick={() => uploadHref && router.push(uploadHref)}>
+            <div className="upload-zone" style={{ cursor: 'pointer' }} onClick={() => router.push(uploadHref)}>
               <div className="upload-icon">
                 <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M24 32V12M14 22l10-10 10 10M8 38h32" />
@@ -56,7 +58,7 @@ export default function HowItWorks() {
               <div className="upload-sub">PDF or Word doc · Processed in seconds</div>
               <div style={{ marginTop: 20 }}>
                 <Link
-                  href={uploadHref ?? '/signin?signup=1'}
+                  href={uploadHref}
                   onClick={e => e.stopPropagation()}
                   className="btn-primary"
                   style={{ display: 'inline-flex', textDecoration: 'none', fontSize: 14, padding: '10px 22px' }}
