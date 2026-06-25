@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 
 type Profile = {
   name: string
@@ -14,6 +16,14 @@ type Profile = {
 type EducationEntry = { school: string; degree: string; field: string; year: string }
 
 export default function MyInfoPage() {
+  const router = useRouter()
+
+  async function handleSignOut() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/')
+  }
+
   const [profile, setProfile] = useState<Profile | null>(null)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -106,11 +116,37 @@ export default function MyInfoPage() {
 
   return (
     <>
-      <div className="app-topbar">
+      <div className="app-topbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <span className="topbar-title">My Info</span>
           <span className="topbar-sub">— Used on every resume you generate</span>
         </div>
+        <button
+          onClick={handleSignOut}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 13,
+            color: 'var(--rose)',
+            background: 'transparent',
+            border: '1px solid var(--rose)',
+            borderRadius: 6,
+            padding: '6px 12px',
+            cursor: 'pointer',
+            opacity: 0.75,
+            transition: 'opacity 0.15s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+          onMouseLeave={e => (e.currentTarget.style.opacity = '0.75')}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          Sign out
+        </button>
       </div>
 
       <div className="dash-content" style={{ maxWidth: 560, padding: '40px 40px' }}>
