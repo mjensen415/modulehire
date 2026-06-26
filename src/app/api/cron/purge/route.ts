@@ -46,5 +46,16 @@ export async function GET(req: Request) {
     await supabase.storage.from('temp').remove(paths)
   }
 
-  return NextResponse.json({ purged: paths.length })
+  // Purge stale rate-limit rows (older than 1 day) so the table doesn't grow
+  // unbounded. Non-fatal: a failure here shouldn't fail the file purge above.
+  const rateLimitsCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const { count: rateLimitsPurged, error: rateLimitsError } = await supabase
+    .from('rate_limits')
+    .delete({ count: 'exact' })
+    .lt('created_at', rateLimitsCutoff)
+  if (rateLimitsError) {
+    console.error('[cron/purge] rate_limits delete failed:', rateLimitsError)
+  }
+
+  return NextResponse.json({ purged: paths.length, rate_limits_purged: rateLimitsPurged ?? 0 })
 }
