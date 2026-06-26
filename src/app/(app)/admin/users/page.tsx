@@ -21,7 +21,6 @@ export default async function AdminUsersPage() {
     .select('is_admin')
     .eq('id', user.id)
     .single()
-  console.log('[admin/users] access', { uid: user.id, email: user.email, is_admin: gate?.is_admin })
   if (!gate?.is_admin) redirect('/dashboard')
 
   const admin = await createAdminClient()

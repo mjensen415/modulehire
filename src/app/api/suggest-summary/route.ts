@@ -46,6 +46,7 @@ ROLE:
 - Key phrases to mirror where natural: ${phrases.join(', ') || '(none extracted)'}
 ${savedSummaryBlock}
 RULES:
+- CRITICAL: Preserve the candidate's exact job title and seniority level as written in their current summary or work history. Do not infer, upgrade, or change the title to match the job description. If the candidate is a 'Data Analyst', write 'Data Analyst' — not 'Data Scientist', 'Analytics Lead', or any other variation.
 - 3-4 sentences. No more.
 - Lead with a one-line positioning statement, then 2-3 sentences of relevant scope/impact.
 - Mirror 2-4 of the role's key themes or phrases naturally — never list them.

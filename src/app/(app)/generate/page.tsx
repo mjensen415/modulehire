@@ -1773,7 +1773,7 @@ export default function GeneratePage() {
                 </div>
                 {includeEducation && education.length === 0 && (
                   <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', paddingBottom: 8 }}>
-                    No education entries found. Add them in <a href="/profile" style={{ color: 'var(--teal)', textDecoration: 'none' }}>My Info</a>.
+                    No education entries found. Add them in <a href="/my-info" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--teal)', textDecoration: 'none' }}>My Info</a>.
                   </div>
                 )}
                 {includeEducation && education.map((e, i) => (
@@ -2376,7 +2376,7 @@ export default function GeneratePage() {
             <div className="config-section">
               <div className="config-section-title" style={{ marginBottom: 12 }}>Target level</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {(['Associate', 'Manager', 'Senior Manager', 'Director', 'VP', 'Executive'] as const).map(level => (
+                {(['Junior', 'Mid-level', 'Senior', 'Staff', 'Principal', 'Lead', 'Associate', 'Manager', 'Senior Manager', 'Director', 'VP', 'Executive'] as const).map(level => (
                   <button
                     key={level}
                     onClick={() => setJobLevel(jobLevel === level ? '' : level)}
@@ -2474,9 +2474,8 @@ export default function GeneratePage() {
                           </a>
                         )
                       ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 12, color: 'var(--text3)' }}>Download is a Pro feature.</span>
-                          <a href="/billing" style={{ fontSize: 12, color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>Upgrade to Pro →</a>
+                        <div style={{ fontSize: 13, color: 'var(--text2)', padding: '10px 14px', border: '1px solid var(--border2)', borderRadius: 8, background: 'var(--bg2)' }}>
+                          Cover letter generated. <a href="/billing" style={{ color: 'var(--teal)' }}>Upgrade to Pro to download →</a>
                         </div>
                       )}
                     </div>
@@ -2484,13 +2483,8 @@ export default function GeneratePage() {
                 )}
 
                 {/* Resume saved indicator */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 8 }}>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--teal)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="7" cy="7" r="6" />
-                    <path d="M4.5 7l2 2 3-3" />
-                  </svg>
-                  <span style={{ fontSize: 13, color: 'var(--teal)', fontWeight: 500 }}>Resume saved. </span>
-                  <a href="/resumes" style={{ fontSize: 13, color: 'var(--teal)', textDecoration: 'underline' }}>View in My Resumes →</a>
+                <div style={{ fontSize: 13, padding: '10px 14px', borderRadius: 8, border: '1px solid var(--teal-glow)', background: 'var(--teal-dim)', color: 'var(--teal)', marginBottom: 12 }}>
+                  ✓ Resume saved to your library. <a href="/resumes" style={{ color: 'var(--teal)' }}>View in My Resumes →</a>
                 </div>
 
                 {/* Actions */}
