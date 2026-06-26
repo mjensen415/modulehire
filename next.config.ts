@@ -6,26 +6,14 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/(.*)',
+        // X-Frame-Options, X-Content-Type-Options, Referrer-Policy, and
+        // X-DNS-Prefetch-Control now live in src/middleware.ts (single source of
+        // truth — avoids conflicting duplicate headers). HSTS stays here because
+        // the middleware does not set it.
         headers: [
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'origin-when-cross-origin',
-          },
           {
             key: 'Strict-Transport-Security',
             value: 'max-age=31536000; includeSubDomains; preload',
-          },
-          {
-            key: 'X-DNS-Prefetch-Control',
-            value: 'on',
           },
         ],
       },
