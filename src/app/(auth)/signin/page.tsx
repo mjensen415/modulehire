@@ -26,6 +26,12 @@ export default function SignIn() {
   const [signupEmail, setSignupEmail] = useState('')
   const [signupPassword, setSignupPassword] = useState('')
 
+  // Forgot password
+  const [forgotOpen, setForgotOpen] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotSent, setForgotSent] = useState(false)
+  const [forgotLoading, setForgotLoading] = useState(false)
+
   const router = useRouter()
   const supabase = createClient()
   const [signinNext, setSigninNext] = useState<string>('/dashboard')
@@ -64,7 +70,7 @@ export default function SignIn() {
   const handleSignUp = async () => {
     setError('')
     if (!signupEmail || !signupEmail.includes('@')) return setError('Please enter a valid email address.')
-    if (!signupPassword || signupPassword.length < 6) return setError('Password must be at least 6 characters.')
+    if (!signupPassword || signupPassword.length < 8) return setError('Password must be at least 8 characters.')
     setLoading(true)
     try {
       const res = await fetch('/api/auth/signup', {
@@ -85,6 +91,37 @@ export default function SignIn() {
       setError((e as Error).message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const openForgot = () => {
+    setForgotOpen(true)
+    setForgotSent(false)
+    setForgotEmail(email)
+    setError('')
+  }
+
+  const closeForgot = () => {
+    setForgotOpen(false)
+    setForgotSent(false)
+    setError('')
+  }
+
+  const handleForgot = async () => {
+    setError('')
+    if (!forgotEmail || !forgotEmail.includes('@')) return setError('Please enter a valid email address.')
+    setForgotLoading(true)
+    try {
+      await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail }),
+      })
+    } catch {
+      // Swallow — we always show the same neutral confirmation either way.
+    } finally {
+      setForgotLoading(false)
+      setForgotSent(true)
     }
   }
 
@@ -124,23 +161,68 @@ export default function SignIn() {
             <div className="card-logo-mark">MH</div>
           </div>
 
-          <div className="auth-tabs">
-            <button
-              className={`auth-tab ${activeTab === 'signin' ? 'active' : ''}`}
-              onClick={() => { setActiveTab('signin'); setError('') }}
-            >
-              Sign in
-            </button>
-            <button
-              className={`auth-tab ${activeTab === 'signup' ? 'active' : ''}`}
-              onClick={() => { setActiveTab('signup'); setError('') }}
-            >
-              Create account
-            </button>
-          </div>
+          {!forgotOpen && (
+            <div className="auth-tabs">
+              <button
+                className={`auth-tab ${activeTab === 'signin' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('signin'); setError('') }}
+              >
+                Sign in
+              </button>
+              <button
+                className={`auth-tab ${activeTab === 'signup' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('signup'); setError('') }}
+              >
+                Create account
+              </button>
+            </div>
+          )}
+
+          {/* ─── FORGOT PASSWORD ─── */}
+          {forgotOpen && (
+            <div className="auth-form-state">
+              <h1 className="auth-headline">Reset your password</h1>
+              <p className="auth-sub">Enter your email and we&apos;ll send you a reset link.</p>
+
+              {forgotSent ? (
+                <>
+                  <p style={{ fontSize: 13.5, color: 'var(--text2)', textAlign: 'center', marginBottom: 22, lineHeight: 1.6 }}>
+                    If an account exists for <strong>{forgotEmail}</strong>, you&apos;ll receive an email with a link to reset your password shortly.
+                  </p>
+                  <button className="btn-primary-full" onClick={closeForgot}>
+                    Back to sign in
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="forgotEmail">Email address</label>
+                    <input
+                      type="email" id="forgotEmail" className="form-input"
+                      placeholder="you@example.com" value={forgotEmail}
+                      onChange={e => { setForgotEmail(e.target.value); setError('') }}
+                      onKeyDown={e => e.key === 'Enter' && handleForgot()}
+                    />
+                  </div>
+
+                  {error && <p style={{ fontSize: 13, color: 'var(--rose)', marginBottom: 12 }}>{error}</p>}
+
+                  <button className="btn-primary-full" onClick={handleForgot} disabled={forgotLoading}>
+                    {forgotLoading ? 'Sending…' : 'Send reset link'}
+                  </button>
+                  <button
+                    type="button" onClick={closeForgot}
+                    style={{ display: 'block', margin: '14px auto 0', background: 'none', border: 'none', color: 'var(--text3)', fontSize: 13, cursor: 'pointer', fontFamily: 'var(--font)' }}
+                  >
+                    ← Back to sign in
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {/* ─── SIGN IN ─── */}
-          {activeTab === 'signin' && (
+          {!forgotOpen && activeTab === 'signin' && (
             <div className="auth-form-state">
               <h1 className="auth-headline">Welcome back</h1>
               <p className="auth-sub">Sign in to your library</p>
@@ -162,6 +244,15 @@ export default function SignIn() {
                   onChange={e => { setPassword(e.target.value); setError('') }}
                   onKeyDown={e => e.key === 'Enter' && handleSignIn()}
                 />
+              </div>
+
+              <div style={{ textAlign: 'right', marginTop: -6, marginBottom: 14 }}>
+                <button
+                  type="button" onClick={openForgot}
+                  style={{ background: 'none', border: 'none', color: 'var(--teal)', fontSize: 12.5, cursor: 'pointer', padding: 0, fontFamily: 'var(--font)' }}
+                >
+                  Forgot password?
+                </button>
               </div>
 
               {error && <p style={{ fontSize: 13, color: 'var(--rose)', marginBottom: 12 }}>{error}</p>}
@@ -198,7 +289,7 @@ export default function SignIn() {
           )}
 
           {/* ─── SIGN UP — open signup, no invite code ─── */}
-          {activeTab === 'signup' && (
+          {!forgotOpen && activeTab === 'signup' && (
             <div className="auth-form-state">
               <h1 className="auth-headline">Start free</h1>
               <p className="auth-sub">No credit card. Build your library in minutes.</p>
@@ -215,7 +306,7 @@ export default function SignIn() {
                 <label className="form-label" htmlFor="signupPassword">Password</label>
                 <input
                   type="password" id="signupPassword" className="form-input"
-                  placeholder="At least 6 characters" value={signupPassword}
+                  placeholder="At least 8 characters" value={signupPassword}
                   onChange={e => { setSignupPassword(e.target.value); setError('') }}
                   onKeyDown={e => e.key === 'Enter' && handleSignUp()}
                 />
