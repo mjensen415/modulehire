@@ -20,30 +20,31 @@ const SECURITY_HEADERS: Record<string, string> = {
 const CORS_METHODS = 'GET, POST, PATCH, DELETE, OPTIONS'
 const CORS_HEADERS = 'Content-Type, Authorization'
 
-// Report-Only Content-Security-Policy: collects violations without blocking, so
-// it's safe to ship. script-src is left permissive for now because enforcing a
-// nonce-based policy in App Router requires threading a per-request nonce through
-// updateSession (the Supabase auth helper) — a separate, browser-tested change.
-// The other directives already constrain real exfil/clickjacking surface. To
-// enforce: rename the header to 'Content-Security-Policy' and tighten script-src.
-const CSP_REPORT_ONLY = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-].join('; ')
+// Enforced Content-Security-Policy built around a per-request nonce.
+// 'strict-dynamic' + nonce covers Next's own scripts (Next reads the nonce from
+// the request CSP header) and the inline theme script in the root layout. Styles
+// allow 'unsafe-inline' because the app uses React inline style attributes
+// throughout (style-src-attr). connect-src is locked to self + Supabase.
+function buildCsp(nonce: string): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    "style-src 'self' 'unsafe-inline'",
+    "style-src-attr 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+  ].join('; ')
+}
 
 function applySecurityHeaders(res: NextResponse) {
   for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
     res.headers.set(key, value)
   }
-  res.headers.set('Content-Security-Policy-Report-Only', CSP_REPORT_ONLY)
 }
 
 // Set CORS headers only when an allowed origin hits /api/*; omit otherwise.
@@ -67,11 +68,15 @@ export async function proxy(request: NextRequest) {
     return res
   }
 
-  // Supabase auth + cookie refresh (may itself return a redirect for protected
-  // routes). Layer the security/CORS headers onto whatever response it returns —
-  // the auth cookies on it are preserved untouched.
-  const res = await updateSession(request)
+  // Per-request nonce; threaded through updateSession so Next applies it to its
+  // scripts and the root layout can read it. The Supabase cookie handling on the
+  // returned response is preserved untouched.
+  const nonce = btoa(crypto.randomUUID())
+  const csp = buildCsp(nonce)
+
+  const res = await updateSession(request, nonce, csp)
   applySecurityHeaders(res)
+  res.headers.set('Content-Security-Policy', csp)
   if (isApi) applyCors(res, origin)
   return res
 }
@@ -79,12 +84,16 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - images, icons, etc
+     * Match all request paths except static assets — and skip prefetch requests
+     * so a prefetch's nonce can't mismatch the real navigation's render under an
+     * enforced CSP.
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    {
+      source: '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+      missing: [
+        { type: 'header', key: 'next-router-prefetch' },
+        { type: 'header', key: 'purpose', value: 'prefetch' },
+      ],
+    },
   ],
 }
