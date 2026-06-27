@@ -440,11 +440,53 @@ export default function Home() {
         <p className="bottom-cta-sub">
           Your experience doesn't change. The story you tell does. ModuleHire Labs makes every application feel like it was made just for that role.
         </p>
-        <div style={{display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap'}}>
-          <Link href="/signin?signup=1" className="btn-primary" style={{fontSize:'15px', padding:'14px 28px', textDecoration: 'none', display: 'inline-flex'}}>
+        <div style={{
+          maxWidth: 560,
+          margin: '0 auto 40px',
+          padding: '20px 24px',
+          borderLeft: '3px solid var(--teal)',
+          textAlign: 'left',
+          background: 'var(--surface)',
+          borderRadius: '0 8px 8px 0',
+        }}>
+          <p style={{
+            fontSize: 15,
+            lineHeight: 1.65,
+            color: 'var(--text2)',
+            margin: '0 0 12px',
+            fontStyle: 'italic',
+          }}>
+            "It has been interesting this time around with the amount of noise about whether bespoke resumes are too polished or assumed to be fake. I have been using Claude to create resumes, which has been way better than ChatGPT, but they still tilt toward a level of puffery that I don't really like. Your setup lets the examples and data do the talking, which is more my speed."
+          </p>
+          <p style={{
+            fontSize: 13,
+            color: 'var(--text3)',
+            margin: 0,
+            fontWeight: 600,
+            letterSpacing: '0.02em',
+          }}>
+            — Job seeker
+          </p>
+        </div>
+        <div style={{
+          display: 'flex',
+          gap: 12,
+          justifyContent: 'center',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}>
+          <Link
+            href="/signin?signup=1"
+            className="btn-primary"
+            style={{ fontSize: 15, padding: '14px 32px', textDecoration: 'none', display: 'inline-flex', whiteSpace: 'nowrap', width: 'auto' }}
+          >
             Start free →
           </Link>
-          <Link href="/how-it-works" className="btn-secondary" style={{fontSize:'15px', padding:'14px 28px', textDecoration: 'none', display: 'inline-flex'}}>
+          <Link
+            href="/how-it-works"
+            className="btn-secondary"
+            style={{ fontSize: 15, padding: '14px 32px', textDecoration: 'none', display: 'inline-flex', whiteSpace: 'nowrap', width: 'auto' }}
+          >
             View sample output
           </Link>
         </div>
