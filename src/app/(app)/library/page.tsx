@@ -395,7 +395,7 @@ export default function LibraryPage() {
           )}
           {reparseState === 'confirm' && (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 12, color: 'var(--text3)' }}>This will delete and rebuild all your modules from scratch.</span>
+              <span style={{ fontSize: 12, color: 'var(--text3)', whiteSpace: 'nowrap' }}>Deletes and rebuilds all modules.</span>
               <button className="btn-primary" onClick={handleReparse} style={{ fontSize: 12, padding: '6px 12px' }}>Yes, re-parse</button>
               <button className="btn-ghost" onClick={() => setReparseState('idle')} style={{ fontSize: 12, padding: '6px 12px' }}>Cancel</button>
             </div>
@@ -404,10 +404,10 @@ export default function LibraryPage() {
             <button className="btn-ghost" disabled>Re-parsing…</button>
           )}
           {reparseState === 'done' && (
-            <span style={{ fontSize: 13, color: 'var(--teal)', fontWeight: 500 }}>{reparseMsg}</span>
+            <span style={{ fontSize: 13, color: 'var(--teal)', fontWeight: 500, whiteSpace: 'nowrap' }}>{reparseMsg}</span>
           )}
           {reparseState === 'error' && (
-            <span style={{ fontSize: 13, color: 'var(--rose)' }}>{reparseMsg}</span>
+            <span style={{ fontSize: 13, color: 'var(--rose)', whiteSpace: 'nowrap' }}>{reparseMsg}</span>
           )}
           <Link href="/upload" className="btn-ghost" style={{ textDecoration: 'none' }}>Upload resume</Link>
           <Link href="/library/new" className="btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
