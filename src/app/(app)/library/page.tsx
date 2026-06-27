@@ -64,6 +64,27 @@ export default function LibraryPage() {
   const [syncMessage, setSyncMessage] = useState('')
   const [loadTrigger, setLoadTrigger] = useState(0)
 
+  // Re-parse resume → wipe + rebuild all modules from the latest uploaded resume
+  const [reparseState, setReparseState] = useState<'idle' | 'confirm' | 'loading' | 'done' | 'error'>('idle')
+  const [reparseMsg, setReparseMsg] = useState('')
+
+  async function handleReparse() {
+    setReparseState('loading')
+    try {
+      const res = await fetch('/api/reparse-my-modules', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Re-parse failed')
+      setReparseMsg(`✓ Done — ${data.modules_created} modules rebuilt.`)
+      setReparseState('done')
+      setLoadTrigger(t => t + 1) // reload the library data
+      setTimeout(() => { setReparseState('idle'); setReparseMsg('') }, 4000)
+    } catch (e) {
+      setReparseMsg((e as Error).message)
+      setReparseState('error')
+      setTimeout(() => { setReparseState('idle'); setReparseMsg('') }, 5000)
+    }
+  }
+
   // Add job form
   const [showAddJob, setShowAddJob] = useState(false)
   const [newCompany, setNewCompany] = useState('')
@@ -368,6 +389,26 @@ export default function LibraryPage() {
           </span>
         </div>
         <div className="topbar-actions">
+          {/* Re-parse resume — inline confirm, no modal */}
+          {reparseState === 'idle' && (
+            <button className="btn-ghost" onClick={() => setReparseState('confirm')}>↺ Re-parse resume</button>
+          )}
+          {reparseState === 'confirm' && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 12, color: 'var(--text3)' }}>This will delete and rebuild all your modules from scratch.</span>
+              <button className="btn-primary" onClick={handleReparse} style={{ fontSize: 12, padding: '6px 12px' }}>Yes, re-parse</button>
+              <button className="btn-ghost" onClick={() => setReparseState('idle')} style={{ fontSize: 12, padding: '6px 12px' }}>Cancel</button>
+            </div>
+          )}
+          {reparseState === 'loading' && (
+            <button className="btn-ghost" disabled>Re-parsing…</button>
+          )}
+          {reparseState === 'done' && (
+            <span style={{ fontSize: 13, color: 'var(--teal)', fontWeight: 500 }}>{reparseMsg}</span>
+          )}
+          {reparseState === 'error' && (
+            <span style={{ fontSize: 13, color: 'var(--rose)' }}>{reparseMsg}</span>
+          )}
           <Link href="/upload" className="btn-ghost" style={{ textDecoration: 'none' }}>Upload resume</Link>
           <Link href="/library/new" className="btn-ghost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
             <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M5.5 1v9M1 5.5h9"/></svg>
