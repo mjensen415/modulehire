@@ -410,7 +410,14 @@ export default function GeneratePage() {
       .filter(m => selectedIds.includes(m.module_id))
       .map(m => (moduleContentOverrides[m.module_id] ?? m.content).toLowerCase())
       .join(' ')
-    return phrases.filter(p => !selectedContent.includes(p.toLowerCase()))
+    function isCovered(phrase: string, content: string): boolean {
+      if (content.includes(phrase.toLowerCase())) return true
+      const words = phrase.toLowerCase().split(/[\s\/\-,]+/).filter(w => w.length > 3)
+      if (words.length === 0) return content.includes(phrase.toLowerCase())
+      const matched = words.filter(w => content.includes(w))
+      return matched.length / words.length >= 0.6
+    }
+    return phrases.filter(p => !isCovered(p, selectedContent))
   }, [confirmedPhrases, jdData?.extracted_phrases, rankedModules, selectedIds, moduleContentOverrides])
 
   // ── Job title coverage check ─────────────────────────────────────────────────
@@ -1267,7 +1274,7 @@ export default function GeneratePage() {
                 </button>
               </div>
               <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8 }}>
-                Note: LinkedIn and some job boards block automated access — paste the text directly instead.
+                Most job boards (LinkedIn, Greenhouse, Lever, Workday) block automated access. If fetching fails, paste the job description text directly — that always works.
               </div>
             </div>
           )}
@@ -1899,6 +1906,12 @@ export default function GeneratePage() {
                 </div>
               )
             })()}
+
+            {selectedIds.length > 0 && (
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 16 }}>
+                Jobs appear most-recent first. To change which modules are included, go back to the building step.
+              </div>
+            )}
 
             {/* Job Title — what the resume gets saved as */}
             <div className="config-section">

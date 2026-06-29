@@ -201,6 +201,8 @@ export default function LibraryPage() {
 
   // ─── Derived state ──────────────────────────────────────────────────────────
   const selectedJob = jobs.find(j => j.id === selectedJobId) ?? null
+  const displayCompany = (company: string) =>
+    company?.toLowerCase() === 'self' ? 'Core Skills' : company
   const jobModules = (jobId: string) => modules.filter(m => mja.some(a => a.module_id === m.id && a.job_id === jobId))
   const jobsForModule = (moduleId: string) => jobs.filter(j => mja.some(a => a.module_id === moduleId && a.job_id === j.id))
   const skillsForJob = (jobId: string) => skills.filter(s => s.job_id === jobId)
@@ -453,7 +455,7 @@ export default function LibraryPage() {
                 onMouseLeave={e => { if (selectedJobId !== job.id) e.currentTarget.style.background = 'transparent' }}
               >
                 <div style={{ fontSize: 13, fontWeight: 600, color: selectedJobId === job.id ? 'var(--teal)' : 'var(--text)', marginBottom: 2 }}>
-                  {job.company}
+                  {displayCompany(job.company)}
                 </div>
                 <div style={{ fontSize: 11, color: selectedJobId === job.id ? 'var(--teal)' : 'var(--text3)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   {job.title && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{job.title}</span>}
@@ -590,7 +592,7 @@ export default function LibraryPage() {
                   ) : (
                     <>
                       <div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{selectedJob.company}{selectedJob.title ? ` — ${selectedJob.title}` : ''}</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{displayCompany(selectedJob.company)}{selectedJob.title ? ` — ${selectedJob.title}` : ''}</div>
                         <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
                           {[selectedJob.start_date, selectedJob.end_date].filter(Boolean).join('–')}
                           {selectedJob.location && ` · ${selectedJob.location}`}
@@ -625,7 +627,7 @@ export default function LibraryPage() {
                   <div style={{ borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
                       <span style={{ fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text3)', fontWeight: 600 }}>
-                        Modules at {selectedJob.company}
+                        Modules at {displayCompany(selectedJob.company)}
                       </span>
                       <span style={{ fontSize: 11, color: 'var(--text3)' }}>{selectedModules.length} total</span>
                     </div>
@@ -648,11 +650,11 @@ export default function LibraryPage() {
                               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 3 }}>{m.title}</div>
                               <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
                                 <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'var(--teal-dim)', color: 'var(--teal)', border: '1px solid var(--teal-glow)' }}>
-                                  {selectedJob.company}
+                                  {displayCompany(selectedJob.company)}
                                 </span>
                                 {otherJobs.map(j => (
                                   <span key={j.id} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'var(--surface)', color: 'var(--text3)', border: '1px solid var(--border2)' }}>
-                                    {j.company}
+                                    {displayCompany(j.company)}
                                   </span>
                                 ))}
                               </div>
@@ -686,7 +688,7 @@ export default function LibraryPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
                       <span style={{ fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text3)', fontWeight: 600 }}>
-                        Skills at {selectedJob.company}
+                        Skills at {displayCompany(selectedJob.company)}
                       </span>
                     </div>
                     <div style={{ overflowY: 'auto', flex: 1, padding: '8px 0' }}>
@@ -852,7 +854,7 @@ export default function LibraryPage() {
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ fontSize: 10, color: 'var(--text3)' }}>
                           {jobsOn.length > 0
-                            ? jobsOn.map(j => j.company).join(', ')
+                            ? jobsOn.map(j => displayCompany(j.company)).join(', ')
                             : <span style={{ fontStyle: 'italic', opacity: 0.7 }}>no job</span>
                           }
                         </div>

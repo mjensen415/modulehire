@@ -1102,6 +1102,24 @@ export async function POST(req: Request) {
       if (!jobGroups.has(k)) { jobGroups.set(k, []); jobOrder.push(k) }
       jobGroups.get(k)!.push(m)
     }
+
+    // Sort jobs chronologically (most recent first) before building experience groups.
+    const groupStartDate = (k: string): string => {
+      const isPresent = (v: unknown) => !v || String(v).toLowerCase() === 'present'
+      const starts = (jobGroups.get(k) ?? [])
+        .map(m => m.date_start as string | null)
+        .filter((s): s is string => Boolean(s) && !isPresent(s))
+      return starts.length ? [...starts].sort()[0] : ''
+    }
+    jobOrder.sort((a, b) => {
+      const da = groupStartDate(a)
+      const db = groupStartDate(b)
+      if (!da && !db) return 0
+      if (!da) return 1   // no date sinks to bottom
+      if (!db) return -1
+      return db.localeCompare(da)  // descending (most recent first)
+    })
+
     const sortedModules = jobOrder.flatMap(k => jobGroups.get(k)!)
 
     // Build pre-structured experience groups so the AI never has to decide which
