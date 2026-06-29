@@ -214,6 +214,8 @@ export default function GeneratePage() {
   const [editSaving, setEditSaving] = useState(false)
   // Content overrides: keyed by module_id, holds edited content for this session
   const [moduleContentOverrides, setModuleContentOverrides] = useState<Record<string, string>>({})
+  const [improveLoading, setImproveLoading] = useState<Record<string, boolean>>({})
+  const [improveSuggestions, setImproveSuggestions] = useState<Record<string, string>>({})
   const skillInputRef = useRef<HTMLInputElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -834,6 +836,43 @@ export default function GeneratePage() {
   function cancelModuleEdit() {
     setEditingModuleId(null)
     setEditingContent('')
+  }
+
+  // ── Module AI rewrite ("Improve ✦") ─────────────────────────────────────────
+
+  async function handleImprove(moduleId: string) {
+    if (!jdData?.jd_id) return
+    setImproveLoading(prev => ({ ...prev, [moduleId]: true }))
+    try {
+      const res = await fetch('/api/suggest-module-rewrite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ module_id: moduleId, jd_id: jdData.jd_id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not generate suggestion')
+      setImproveSuggestions(prev => ({ ...prev, [moduleId]: data.suggestion }))
+    } catch (e) {
+      alert((e as Error).message)
+    } finally {
+      setImproveLoading(prev => ({ ...prev, [moduleId]: false }))
+    }
+  }
+
+  async function handleAcceptImprove(moduleId: string, saveToLibrary: boolean) {
+    const suggestion = improveSuggestions[moduleId]
+    if (!suggestion) return
+    // Apply as local override for this resume
+    setModuleContentOverrides(prev => ({ ...prev, [moduleId]: suggestion }))
+    // Optionally write back to library
+    if (saveToLibrary) {
+      await fetch(`/api/modules/${moduleId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: suggestion }),
+      })
+    }
+    setImproveSuggestions(prev => { const n = { ...prev }; delete n[moduleId]; return n })
   }
 
   // ── Step 3: skills input ────────────────────────────────────────────────────
@@ -1544,6 +1583,25 @@ export default function GeneratePage() {
                               {isOverridden && !isEditing && (
                                 <span style={{ fontSize: 10, color: 'var(--teal)', background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>edited</span>
                               )}
+                              {on && jdData?.jd_id && !isEditing && (
+                                <button
+                                  onClick={() => handleImprove(m.module_id)}
+                                  disabled={improveLoading[m.module_id]}
+                                  style={{
+                                    fontSize: 11,
+                                    padding: '2px 8px',
+                                    border: '1px solid var(--border2)',
+                                    borderRadius: 4,
+                                    color: 'var(--text3)',
+                                    background: 'none',
+                                    cursor: improveLoading[m.module_id] ? 'default' : 'pointer',
+                                    fontFamily: 'var(--font)',
+                                    opacity: improveLoading[m.module_id] ? 0.6 : 1,
+                                  }}
+                                >
+                                  {improveLoading[m.module_id] ? 'Improving…' : 'Improve ✦'}
+                                </button>
+                              )}
                             </div>
 
                             {/* Content: full text when not editing */}
@@ -1735,6 +1793,38 @@ export default function GeneratePage() {
                                 }}
                               >
                                 Accept rewrite
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* AI "Improve ✦" suggestion panel */}
+                        {improveSuggestions[m.module_id] && (
+                          <div style={{ borderTop: '1px solid var(--border2)', padding: '12px 14px', background: 'var(--bg2)' }}>
+                            <div style={{ fontSize: 11, color: 'var(--teal)', marginBottom: 6 }}>Suggested rewrite</div>
+                            <div style={{ fontSize: 12, background: 'var(--bg2)', border: '1px solid var(--border)', color: 'var(--text)', lineHeight: 1.55, padding: '8px 12px', borderRadius: 6, marginBottom: 10, whiteSpace: 'pre-wrap' }}>
+                              {improveSuggestions[m.module_id]}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <button
+                                className="btn-primary"
+                                style={{ fontSize: 11 }}
+                                onClick={() => handleAcceptImprove(m.module_id, false)}
+                              >
+                                Use for this resume
+                              </button>
+                              <button
+                                className="btn-ghost"
+                                style={{ fontSize: 11 }}
+                                onClick={() => handleAcceptImprove(m.module_id, true)}
+                              >
+                                Use + save to library
+                              </button>
+                              <button
+                                onClick={() => setImproveSuggestions(prev => { const n = { ...prev }; delete n[m.module_id]; return n })}
+                                style={{ fontSize: 11, background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', textDecoration: 'underline', fontFamily: 'var(--font)' }}
+                              >
+                                Dismiss
                               </button>
                             </div>
                           </div>
