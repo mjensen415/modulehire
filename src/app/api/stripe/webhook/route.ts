@@ -140,11 +140,11 @@ export async function POST(req: Request) {
         const credits = sku ? SKU_CREDITS[sku] : undefined;
 
         if (credits) {
-          const { error } = await supabase.rpc('increment_generations_remaining', {
+          const { error } = await supabase.rpc('increment_resume_credits', {
             p_user_id: userId,
             p_amount: credits,
           });
-          if (error) console.error('[stripe webhook] increment_generations_remaining failed:', error);
+          if (error) console.error('[stripe webhook] increment_resume_credits failed:', error);
         } else {
           // Legacy path — older checkouts encoded credits via metadata.type/credits
           // and incremented the deprecated resume_credits column. Still honour
@@ -170,15 +170,19 @@ export async function POST(req: Request) {
         ).toISOString();
         const priceId = subscription.items.data[0]?.price.id;
         const plan = planFromPriceId(priceId);
+        const currentTier = await getCurrentTier(supabase, userId);
+
+        const update: Record<string, unknown> = {
+          plan,
+          stripe_subscription_id: subscription.id,
+          plan_period_end: periodEnd,
+        };
+        // Promote to pro, but never overwrite a complimentary beta_pro grant.
+        if (currentTier !== 'beta_pro') update.tier = 'pro';
 
         await supabase
           .from('users')
-          .update({
-            tier: 'pro',
-            plan,
-            stripe_subscription_id: subscription.id,
-            plan_period_end: periodEnd,
-          })
+          .update(update)
           .eq('id', userId);
       }
 

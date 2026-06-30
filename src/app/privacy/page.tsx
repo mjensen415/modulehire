@@ -7,7 +7,7 @@ export const metadata = {
   description: 'How ModuleHire collects, uses, and protects your personal information.',
 }
 
-const EFFECTIVE_DATE = 'April 30, 2026'
+const EFFECTIVE_DATE = 'June 30, 2026'
 const CONTACT_EMAIL = 'privacy@modulehire.com'
 
 export default function PrivacyPage() {

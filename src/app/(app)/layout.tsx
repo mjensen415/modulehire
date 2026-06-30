@@ -12,22 +12,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/signin');
   }
 
-  let plan: string = 'free';
+  let tier: string = 'free';
   let isAdmin: boolean = false;
 
   if (user) {
     const { data: profile } = await supabase
       .from('users')
-      .select('plan, is_admin')
+      .select('tier, is_admin')
       .eq('id', user.id)
       .single();
-    plan = profile?.plan ?? 'free';
+    tier = profile?.tier ?? 'free';
     isAdmin = profile?.is_admin ?? false;
   }
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <AppSidebar plan={plan} isAdmin={isAdmin} footer={<AppSidebarUser />} />
+      <AppSidebar tier={tier} isAdmin={isAdmin} footer={<AppSidebarUser />} />
       <main className="app-main">
         {children}
       </main>

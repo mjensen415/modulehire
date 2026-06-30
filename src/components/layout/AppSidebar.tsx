@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import ModuleHireLogo from '@/components/ModuleHireLogo';
 import FeedbackModal from '@/components/FeedbackModal';
 import ThemeToggle from '@/components/ThemeToggle';
+import { isProTier } from '@/lib/plan';
 
 function IconGrid() {
   return (
@@ -91,7 +92,7 @@ function IconPerson() {
     </svg>
   );
 }
-export default function AppSidebar({ footer, plan, isAdmin }: { footer?: React.ReactNode; plan?: string; isAdmin?: boolean }) {
+export default function AppSidebar({ footer, tier, isAdmin }: { footer?: React.ReactNode; tier?: string; isAdmin?: boolean }) {
   const pathname = usePathname();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
@@ -138,7 +139,7 @@ export default function AppSidebar({ footer, plan, isAdmin }: { footer?: React.R
           <span className="nav-item-icon"><IconSettings /></span>
           Account
         </Link>
-        {plan !== 'pro' && (
+        {!isProTier(tier) && (
           <Link href="/billing" className={`nav-item${pathname === '/billing' ? ' active' : ''}`}>
             <span className="nav-item-icon"><IconUpgrade /></span>
             Upgrade

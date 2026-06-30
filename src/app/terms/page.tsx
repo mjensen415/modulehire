@@ -7,7 +7,7 @@ export const metadata = {
   description: 'The terms governing your use of the ModuleHire service.',
 }
 
-const EFFECTIVE_DATE = 'April 30, 2026'
+const EFFECTIVE_DATE = 'June 30, 2026'
 const CONTACT_EMAIL = 'legal@modulehire.com'
 
 export default function TermsPage() {

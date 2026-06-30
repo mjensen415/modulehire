@@ -104,7 +104,7 @@ CREATE INDEX IF NOT EXISTS users_stripe_subscription_id_idx ON public.users(stri
 ## 4. Install Stripe SDK
 
 ```bash
-cd ~/Desktop/codex/projects/modulehire
+cd ~/Desktop/alcove/projects/modulehire
 npm install stripe @stripe/stripe-js
 ```
 

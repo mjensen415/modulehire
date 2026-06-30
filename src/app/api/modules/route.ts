@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requiredString, optionalString, ValidationError } from '@/lib/validate'
-import { moduleLimit } from '@/lib/plan'
+import { moduleLimit, isProTier } from '@/lib/plan'
 
 const VALID_WEIGHTS = new Set(['anchor', 'strong', 'supporting'])
 const VALID_TYPES = new Set(['experience', 'skill', 'story', 'positioning'])
@@ -13,20 +13,20 @@ export async function POST(req: Request) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // Plan module-cap gate (skipped for pro)
+    // Module-cap gate (skipped for pro/beta_pro)
     const { data: profileRow } = await supabase
       .from('users')
-      .select('plan')
+      .select('tier')
       .eq('id', user.id)
       .single()
-    const plan = (profileRow?.plan ?? 'free') as string
-    if (plan !== 'pro') {
+    const tier = (profileRow?.tier ?? 'free') as string
+    if (!isProTier(tier)) {
       const { count: existingCount } = await supabase
         .from('modules')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .is('deleted_at', null)
-      const cap = moduleLimit(plan)
+      const cap = moduleLimit(tier)
       if ((existingCount ?? 0) >= cap) {
         return NextResponse.json(
           { error: 'Module limit reached for your plan.', code: 'MODULE_LIMIT_REACHED', limit: cap },

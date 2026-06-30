@@ -1,15 +1,17 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Job = { id: string; company: string; title: string | null; start_date: string | null; end_date: string | null; location: string | null; employment_type: string | null }
 type Module = { id: string; title: string; weight: string | null; themes: string[] | null; type: string | null; source_company: string | null }
 type MJA = { module_id: string; job_id: string }
-type Skill = { id: string; job_id: string; name: string }
-type SMA = { skill_id: string; module_id: string }
+// NB: live schema uses job_id + name (not job_experience_id + skill).
+type SkillCategory = 'technical' | 'domain' | 'leadership' | null
+type Skill = { id: string; job_id: string; name: string; category: SkillCategory; source: 'user' | 'parsed' }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function moduleColor(m: Module) {
@@ -48,14 +50,30 @@ function Pips({ weight }: { weight: string | null }) {
   )
 }
 
+// Inline sparkle (Tabler isn't installed; the page uses inline SVGs throughout).
+function SparkleIcon({ size = 11 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+      <path d="M12 2l1.7 6.1a3 3 0 002.2 2.2L22 12l-6.1 1.7a3 3 0 00-2.2 2.2L12 22l-1.7-6.1a3 3 0 00-2.2-2.2L2 12l6.1-1.7a3 3 0 002.2-2.2z" />
+    </svg>
+  )
+}
+
+const SKILL_GROUPS: { key: SkillCategory; label: string }[] = [
+  { key: 'technical', label: 'Technical' },
+  { key: 'domain', label: 'Domain' },
+  { key: 'leadership', label: 'Leadership' },
+  { key: null, label: 'General' },
+]
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function LibraryPage() {
   const router = useRouter()
+  const supabase = useMemo(() => createSupabaseBrowser(), [])
   const [jobs, setJobs] = useState<Job[]>([])
   const [modules, setModules] = useState<Module[]>([])
   const [mja, setMja] = useState<MJA[]>([])       // module-job assignments
   const [skills, setSkills] = useState<Skill[]>([])
-  const [sma, setSma] = useState<SMA[]>([])         // skill-module assignments
   const [loading, setLoading] = useState(true)
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
 
@@ -118,10 +136,15 @@ export default function LibraryPage() {
   // Add skill
   const [newSkillName, setNewSkillName] = useState('')
   const [savingSkill, setSavingSkill] = useState(false)
+  const [addingSkill, setAddingSkill] = useState(false)
 
-  // Module picker for skills (which skill is open)
-  const [pickingModuleForSkill, setPickingModuleForSkill] = useState<string | null>(null)
-  const pickerRef = useRef<HTMLDivElement>(null)
+  // Skill auto-population
+  const [extracting, setExtracting] = useState(false)
+  const [skillToast, setSkillToast] = useState('')
+  const [armedDeleteSkillId, setArmedDeleteSkillId] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [skillsOnboardedAt, setSkillsOnboardedAt] = useState<string | null>(null)
+  const [bannerDismissed, setBannerDismissed] = useState(false)
 
   // Repository
   const [repoSearch, setRepoSearch] = useState('')
@@ -131,34 +154,34 @@ export default function LibraryPage() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [jobsRes, modulesRes, mjaRes, skillsRes, smaRes] = await Promise.all([
+      const [jobsRes, modulesRes, mjaRes, skillsRes] = await Promise.all([
         fetch('/api/job-experiences').then(r => r.json()),
         fetch('/api/my-modules').then(r => r.json()),
         fetch('/api/module-job-assignments').then(r => r.json()),
         fetch('/api/job-skills').then(r => r.json()),
-        fetch('/api/skill-module-assignments').then(r => r.json()),
       ])
       setJobs(jobsRes.jobs ?? [])
       setModules(modulesRes.modules ?? [])
       setMja(mjaRes.assignments ?? [])
       setSkills(skillsRes.skills ?? [])
-      setSma(smaRes.assignments ?? [])
       if (jobsRes.jobs?.length > 0) setSelectedJobId(jobsRes.jobs[0].id)
+
+      // Profile flag that gates the skill-onboarding banner.
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setUserId(user.id)
+        const { data: profile } = await supabase
+          .from('users')
+          .select('skills_onboarded_at')
+          .eq('id', user.id)
+          .single()
+        setSkillsOnboardedAt(profile?.skills_onboarded_at ?? null)
+      }
+
       setLoading(false)
     }
     load()
-  }, [loadTrigger])
-
-  // Close picker on outside click
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setPickingModuleForSkill(null)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  }, [loadTrigger, supabase])
 
   // ─── Module edit modal actions ──────────────────────────────────────────────
   async function openEditModal(moduleId: string) {
@@ -206,16 +229,17 @@ export default function LibraryPage() {
   const jobModules = (jobId: string) => modules.filter(m => mja.some(a => a.module_id === m.id && a.job_id === jobId))
   const jobsForModule = (moduleId: string) => jobs.filter(j => mja.some(a => a.module_id === moduleId && a.job_id === j.id))
   const skillsForJob = (jobId: string) => skills.filter(s => s.job_id === jobId)
-  const modulesForSkill = (skillId: string) => modules.filter(m => sma.some(a => a.skill_id === skillId && a.module_id === m.id))
 
   const selectedModules = selectedJobId ? jobModules(selectedJobId) : []
   const selectedSkills = selectedJobId ? skillsForJob(selectedJobId) : []
 
-  // Suggested skills from module themes not yet added as skills for this job
-  const existingSkillNames = new Set(selectedSkills.map(s => s.name.toLowerCase()))
-  const suggestedSkills = Array.from(
-    new Set(selectedModules.flatMap(m => m.themes ?? []))
-  ).filter(t => !existingSkillNames.has(t.toLowerCase())).slice(0, 5)
+  // Cluster skills by category (technical → domain → leadership → General), dropping empty groups.
+  const skillGroups = SKILL_GROUPS
+    .map(g => ({ ...g, items: selectedSkills.filter(s => (s.category ?? null) === g.key) }))
+    .filter(g => g.items.length > 0)
+  const hasParsedSkill = selectedSkills.some(s => s.source === 'parsed')
+  const allParsed = selectedSkills.length > 0 && selectedSkills.every(s => s.source === 'parsed')
+  const showOnboardBanner = hasParsedSkill && !skillsOnboardedAt && !bannerDismissed
 
   // Repository filtered modules
   const repoModules = modules.filter(m => {
@@ -260,9 +284,6 @@ export default function LibraryPage() {
 
   async function unassignModuleFromJob(moduleId: string, jobId: string) {
     setMja(prev => prev.filter(a => !(a.module_id === moduleId && a.job_id === jobId)))
-    // Also remove skill-module assignments for skills at this job
-    const jobSkillIds = new Set(skills.filter(s => s.job_id === jobId).map(s => s.id))
-    setSma(prev => prev.filter(a => !(jobSkillIds.has(a.skill_id) && a.module_id === moduleId)))
     await fetch('/api/module-job-assignments', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -282,33 +303,50 @@ export default function LibraryPage() {
     if (data.skill) {
       setSkills(prev => [...prev, data.skill])
       setNewSkillName('')
+      setAddingSkill(false)
     }
     setSavingSkill(false)
   }
 
   async function deleteSkill(skillId: string) {
     setSkills(prev => prev.filter(s => s.id !== skillId))
-    setSma(prev => prev.filter(a => a.skill_id !== skillId))
+    setArmedDeleteSkillId(prev => (prev === skillId ? null : prev))
     await fetch(`/api/job-skills/${skillId}`, { method: 'DELETE' })
   }
 
-  async function assignModuleToSkill(skillId: string, moduleId: string) {
-    setSma(prev => [...prev, { skill_id: skillId, module_id: moduleId }])
-    setPickingModuleForSkill(null)
-    await fetch('/api/skill-module-assignments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ skill_id: skillId, module_id: moduleId }),
-    })
+  // Extract skills from this job's modules (existing users, no full reparse).
+  async function extractSkills() {
+    if (!selectedJobId || extracting) return
+    setExtracting(true)
+    try {
+      const res = await fetch('/api/extract-skills-from-modules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_experience_id: selectedJobId }),
+      })
+      if (res.ok) {
+        const skillsRes = await fetch('/api/job-skills').then(r => r.json())
+        setSkills(skillsRes.skills ?? [])
+        setSkillToast('Skills extracted — review and confirm them below.')
+        setTimeout(() => setSkillToast(''), 4000)
+      }
+    } finally {
+      setExtracting(false)
+    }
   }
 
-  async function unassignModuleFromSkill(skillId: string, moduleId: string) {
-    setSma(prev => prev.filter(a => !(a.skill_id === skillId && a.module_id === moduleId)))
-    await fetch('/api/skill-module-assignments', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ skill_id: skillId, module_id: moduleId }),
-    })
+  // Promote an AI-suggested skill to confirmed (RLS lets a user update their own rows).
+  async function confirmSkill(skill: Skill) {
+    setSkills(prev => prev.map(s => (s.id === skill.id ? { ...s, source: 'user' } : s)))
+    await supabase.from('job_skills').update({ source: 'user' }).eq('id', skill.id)
+  }
+
+  async function dismissOnboardBanner() {
+    setBannerDismissed(true)
+    if (!userId) return
+    const now = new Date().toISOString()
+    setSkillsOnboardedAt(now)
+    await supabase.from('users').update({ skills_onboarded_at: now }).eq('id', userId)
   }
 
   function startEditJob(job: Job) {
@@ -691,107 +729,155 @@ export default function LibraryPage() {
                         Skills at {displayCompany(selectedJob.company)}
                       </span>
                     </div>
-                    <div style={{ overflowY: 'auto', flex: 1, padding: '8px 0' }}>
+                    <div style={{ overflowY: 'auto', flex: 1, padding: '14px 16px' }}>
 
-                      {selectedSkills.map(skill => {
-                        const assignedModules = modulesForSkill(skill.id)
-                        const unassignedJobModules = selectedModules.filter(m => !sma.some(a => a.skill_id === skill.id && a.module_id === m.id))
-                        return (
-                          <div key={skill.id} style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                              <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--teal)', flexShrink: 0 }} />
-                              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', flex: 1 }}>{skill.name}</div>
+                      {selectedSkills.length === 0 ? (
+                        /* ── Empty state ── */
+                        <div style={{ padding: '36px 16px', textAlign: 'center' }}>
+                          <div style={{ color: 'var(--teal)', display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+                            <SparkleIcon size={26} />
+                          </div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>No skills mapped yet</div>
+                          <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5, maxWidth: 260, margin: '0 auto 16px' }}>
+                            Extract skills from your modules to build a complete picture of this role.
+                          </div>
+                          <button
+                            onClick={extractSkills}
+                            disabled={extracting}
+                            className="btn-primary"
+                            style={{ fontSize: 12, padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 7, opacity: extracting ? 0.7 : 1, cursor: extracting ? 'default' : 'pointer' }}
+                          >
+                            {extracting ? (
+                              <>
+                                <svg className="spinner" width="12" height="12" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="5.5" cy="5.5" r="4" strokeDasharray="8 18" opacity="0.4" /><path d="M5.5 1.5A4 4 0 019.5 5.5" /></svg>
+                                Extracting…
+                              </>
+                            ) : (
+                              <>Extract skills ✦</>
+                            )}
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Onboarding banner */}
+                          {showOnboardBanner && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', marginBottom: 14, borderRadius: 8, background: 'rgba(29,158,117,0.10)', border: '1px solid var(--teal-glow)' }}>
+                              <span style={{ fontSize: 12, color: 'var(--teal)', fontWeight: 500, flex: 1, lineHeight: 1.4 }}>
+                                ✦ We suggested skills from your resume — tap any to confirm them.
+                              </span>
                               <button
-                                onClick={() => deleteSkill(skill.id)}
-                                style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer' }}
-                                title="Delete skill"
+                                onClick={dismissOnboardBanner}
+                                title="Dismiss"
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--teal)', fontSize: 16, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
                               >×</button>
                             </div>
-                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-                              {assignedModules.map(m => (
-                                <span
-                                  key={m.id}
-                                  onClick={() => unassignModuleFromSkill(skill.id, m.id)}
-                                  title="Click to remove"
-                                  style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: 'var(--surface)', color: 'var(--text2)', border: '1px solid var(--border2)', cursor: 'pointer', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                >
-                                  {m.title} ×
-                                </span>
-                              ))}
-                              {/* Picker trigger */}
-                              {unassignedJobModules.length > 0 && (
-                                <div style={{ position: 'relative' }} ref={pickingModuleForSkill === skill.id ? pickerRef : undefined}>
-                                  <button
-                                    onClick={() => setPickingModuleForSkill(pickingModuleForSkill === skill.id ? null : skill.id)}
-                                    style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: 'none', color: 'var(--teal)', border: '1px dashed var(--teal-glow)', cursor: 'pointer' }}
-                                  >
-                                    + assign module
-                                  </button>
-                                  {pickingModuleForSkill === skill.id && (
-                                    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 50, background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 8, minWidth: 200, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
-                                      {unassignedJobModules.map(m => (
-                                        <button
-                                          key={m.id}
-                                          onClick={() => assignModuleToSkill(skill.id, m.id)}
-                                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text)', fontFamily: 'var(--font)' }}
-                                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg3)'}
-                                          onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                          )}
+
+                          {/* Lighter nudge when nothing has been confirmed yet */}
+                          {!showOnboardBanner && allParsed && (
+                            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, lineHeight: 1.4 }}>
+                              Review your AI-suggested skills and confirm the ones that fit.
+                            </div>
+                          )}
+
+                          {/* Clustered groups */}
+                          {skillGroups.map((group, gi) => {
+                            const isLast = gi === skillGroups.length - 1
+                            return (
+                              <div key={String(group.key)} style={{ marginBottom: 16 }}>
+                                <div style={{ fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text3)', fontWeight: 600, marginBottom: 8 }}>
+                                  {group.label}
+                                </div>
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                                  {group.items.map(skill =>
+                                    skill.source === 'user' ? (
+                                      /* Confirmed pill */
+                                      <span
+                                        key={skill.id}
+                                        onClick={() => setArmedDeleteSkillId(armedDeleteSkillId === skill.id ? null : skill.id)}
+                                        title="Click to remove"
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, padding: '4px 10px', borderRadius: 20, background: 'rgba(29,158,117,0.10)', color: 'var(--teal)', border: '1px solid var(--teal-glow)', cursor: 'pointer' }}
+                                      >
+                                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M2.5 6.5l2.5 2.5 4.5-5" /></svg>
+                                        {skill.name}
+                                        {armedDeleteSkillId === skill.id && (
+                                          <button
+                                            onClick={e => { e.stopPropagation(); deleteSkill(skill.id) }}
+                                            title="Delete skill"
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--teal)', fontSize: 14, lineHeight: 1, padding: 0, marginLeft: 1 }}
+                                          >×</button>
+                                        )}
+                                      </span>
+                                    ) : (
+                                      /* Suggested pill */
+                                      <span
+                                        key={skill.id}
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, padding: '4px 8px 4px 10px', borderRadius: 20, background: 'var(--indigo-dim)', color: 'var(--indigo)', border: '1px solid var(--indigo)' }}
+                                      >
+                                        <span
+                                          onClick={() => confirmSkill(skill)}
+                                          title="Click to confirm"
+                                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}
                                         >
-                                          {m.title}
+                                          <SparkleIcon size={10} />
+                                          {skill.name}
+                                        </span>
+                                        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.05em', padding: '1px 4px', borderRadius: 4, background: 'var(--indigo)', color: '#fff', flexShrink: 0 }}>AI</span>
+                                        <button
+                                          onClick={() => deleteSkill(skill.id)}
+                                          title="Dismiss"
+                                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--indigo)', fontSize: 14, lineHeight: 1, padding: 0 }}
+                                        >×</button>
+                                      </span>
+                                    )
+                                  )}
+
+                                  {/* + Add skill pill (after the last group) */}
+                                  {isLast && (
+                                    addingSkill ? (
+                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                        <input
+                                          autoFocus
+                                          className="form-input"
+                                          style={{ fontSize: 12, padding: '4px 10px', width: 140 }}
+                                          placeholder="Skill name…"
+                                          value={newSkillName}
+                                          onChange={e => setNewSkillName(e.target.value)}
+                                          onKeyDown={e => {
+                                            if (e.key === 'Enter') addSkill(newSkillName)
+                                            if (e.key === 'Escape') { setAddingSkill(false); setNewSkillName('') }
+                                          }}
+                                        />
+                                        <button
+                                          className="btn-primary"
+                                          style={{ fontSize: 11, padding: '5px 10px', whiteSpace: 'nowrap' }}
+                                          onClick={() => addSkill(newSkillName)}
+                                          disabled={savingSkill || !newSkillName.trim()}
+                                        >
+                                          {savingSkill ? '…' : 'Add'}
                                         </button>
-                                      ))}
-                                    </div>
+                                      </span>
+                                    ) : (
+                                      <button
+                                        onClick={() => setAddingSkill(true)}
+                                        style={{ fontSize: 12, padding: '4px 12px', borderRadius: 20, background: 'none', color: 'var(--text3)', border: '1px dashed var(--border2)', cursor: 'pointer', fontFamily: 'var(--font)' }}
+                                      >
+                                        + Add skill
+                                      </button>
+                                    )
                                   )}
                                 </div>
-                              )}
+                              </div>
+                            )
+                          })}
+
+                          {skillToast && (
+                            <div style={{ marginTop: 4, fontSize: 12, color: 'var(--teal)', fontWeight: 500 }}>
+                              {skillToast}
                             </div>
-                          </div>
-                        )
-                      })}
-
-                      {selectedSkills.length === 0 && suggestedSkills.length === 0 && (
-                        <div style={{ padding: '24px 16px', textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>
-                          No skills yet. Add one below or they&apos;ll be suggested from your module themes.
-                        </div>
+                          )}
+                        </>
                       )}
-
-                      {/* Suggestions */}
-                      {suggestedSkills.length > 0 && (
-                        <div style={{ padding: '8px 16px' }}>
-                          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>Suggested from your modules</div>
-                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                            {suggestedSkills.map(t => (
-                              <button
-                                key={t}
-                                onClick={() => addSkill(t)}
-                                style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: 'none', color: 'var(--text3)', border: '1px dashed var(--border2)', cursor: 'pointer', fontFamily: 'var(--font)' }}
-                              >
-                                + {t}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Add skill input */}
-                      <div style={{ padding: '8px 16px', display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <input
-                          className="form-input"
-                          style={{ flex: 1, fontSize: 12, padding: '6px 10px' }}
-                          placeholder="Add a skill…"
-                          value={newSkillName}
-                          onChange={e => setNewSkillName(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && addSkill(newSkillName)}
-                        />
-                        <button
-                          className="btn-primary"
-                          style={{ fontSize: 11, padding: '6px 12px', whiteSpace: 'nowrap' }}
-                          onClick={() => addSkill(newSkillName)}
-                          disabled={savingSkill || !newSkillName.trim()}
-                        >
-                          {savingSkill ? '…' : 'Add'}
-                        </button>
-                      </div>
                     </div>
                   </div>
 

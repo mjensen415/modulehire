@@ -25,6 +25,56 @@ function getAdminClient() {
 const VALID_TYPES = new Set(['experience', 'skill', 'story', 'positioning'])
 const VALID_WEIGHTS = new Set(['anchor', 'strong', 'supporting'])
 const VALID_EMP_TYPES = new Set(['full-time', 'consulting', 'contract', 'board', 'volunteer'])
+const VALID_SKILL_CATEGORIES = new Set(['technical', 'domain', 'leadership'])
+
+export type SkillCategory = 'technical' | 'domain' | 'leadership' | null
+export type ExtractedSkill = { skill: string; category: SkillCategory }
+
+const SKILL_EXTRACTION_PROMPT =
+  "Extract 5–8 distinct professional skills demonstrated in the following resume bullet points. " +
+  "Return ONLY a JSON array. Each item: { skill: string (2–4 words max, title case), " +
+  "category: 'technical' | 'domain' | 'leadership' }. Focus on skills a hiring manager would " +
+  "care about. No duplicates, no generic terms like 'communication'."
+
+/**
+ * Extract a small set of professional skills from joined resume/module content.
+ * Returns [] when the model produces no usable array. May throw on malformed JSON
+ * (callers wrap this so a skill failure never breaks the surrounding flow).
+ */
+export async function extractSkillsFromContent(content: string): Promise<ExtractedSkill[]> {
+  const raw = await aiComplete(
+    [
+      { role: 'system', content: SKILL_EXTRACTION_PROMPT },
+      { role: 'user', content },
+    ],
+    600
+  )
+
+  const stripped = raw.replace(/```json/g, '').replace(/```/g, '').trim()
+  const start = stripped.indexOf('[')
+  const end = stripped.lastIndexOf(']')
+  if (start === -1 || end === -1) return []
+
+  const parsed = JSON.parse(jsonrepair(stripped.slice(start, end + 1)))
+  if (!Array.isArray(parsed)) return []
+
+  const seen = new Set<string>()
+  const skills: ExtractedSkill[] = []
+  for (const item of parsed) {
+    if (!item || typeof item !== 'object') continue
+    const r = item as Record<string, unknown>
+    const skill = typeof r.skill === 'string' ? r.skill.trim() : ''
+    if (!skill) continue
+    const dedupeKey = skill.toLowerCase()
+    if (seen.has(dedupeKey)) continue
+    seen.add(dedupeKey)
+    const category: SkillCategory = VALID_SKILL_CATEGORIES.has(r.category as string)
+      ? (r.category as Exclude<SkillCategory, null>)
+      : null
+    skills.push({ skill, category })
+  }
+  return skills
+}
 
 const MONTH_MAP: Record<string, string> = {
   jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
@@ -227,6 +277,8 @@ JSON array:`
 
   // Additive: upsert job_experiences and module_job_assignments using admin client (bypasses RLS).
   let jobSyncError: string | undefined
+  // job_id → joined module content, used by the skill-extraction step below.
+  const jobContentMap = new Map<string, string[]>()
   try {
     const admin = getAdminClient()
 
@@ -294,7 +346,15 @@ JSON array:`
         const dateStart = mod.date_start ? `${String(mod.date_start).trim()}-01` : ''
         const k = `${company}||${roleTitle}||${dateStart}`
         const jobId = jobLookup.get(k)
-        if (jobId) assignments.push({ module_id: String(mod.id), job_id: jobId })
+        if (jobId) {
+          assignments.push({ module_id: String(mod.id), job_id: jobId })
+          const content = String(mod.content ?? '').trim()
+          if (content) {
+            const existing = jobContentMap.get(jobId) ?? []
+            existing.push(content)
+            jobContentMap.set(jobId, existing)
+          }
+        }
       }
 
       if (assignments.length > 0) {
@@ -307,6 +367,40 @@ JSON array:`
   } catch (err) {
     console.error('[parseModules] job_experience/assignment upsert failed:', err)
     jobSyncError = (err as Error).message
+  }
+
+  // Auto-populate skills per job from its module content. Best-effort: a failure
+  // here must never break the parse, so the whole block is guarded.
+  try {
+    const admin = getAdminClient()
+    for (const [jobId, contents] of jobContentMap) {
+      try {
+        const joined = contents.join('\n\n')
+        if (!joined.trim()) continue
+        const skills = await extractSkillsFromContent(joined)
+        if (skills.length === 0) continue
+
+        // ON CONFLICT DO NOTHING on (job_id, name) so user-confirmed skills win.
+        const { error } = await admin
+          .from('job_skills')
+          .upsert(
+            skills.map(s => ({
+              user_id: userId,
+              job_id: jobId,
+              name: s.skill,
+              category: s.category,
+              source: 'parsed',
+            })),
+            { onConflict: 'job_id,name', ignoreDuplicates: true }
+          )
+        if (error) throw error
+      } catch (jobErr) {
+        // One job failing shouldn't stop the others.
+        console.error(`[parse-modules/skills] extraction failed for job ${jobId}:`, jobErr)
+      }
+    }
+  } catch (err) {
+    console.error('[parse-modules/skills] skill auto-population failed:', err)
   }
 
   // Extract contact info + summary + education from the resume (small fast call)

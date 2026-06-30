@@ -71,6 +71,24 @@ function weightColor(w: string) {
   return 'c-amber'
 }
 
+// Fuzzy coverage: exact substring match, or ≥60% of a phrase's significant words
+// present. NOTE: `content` must already be lowercased by the caller.
+function isCovered(phrase: string, content: string): boolean {
+  if (content.includes(phrase.toLowerCase())) return true
+  const words = phrase.toLowerCase().split(/[\s\/\-,]+/).filter(w => w.length > 3)
+  if (words.length === 0) return content.includes(phrase.toLowerCase())
+  const matched = words.filter(w => content.includes(w))
+  return matched.length / words.length >= 0.6
+}
+
+// Skill categories, in cluster display order (mirrors the library skills panel).
+const SKILL_GROUP_ORDER: { key: string | null; label: string }[] = [
+  { key: 'technical', label: 'Technical' },
+  { key: 'domain', label: 'Domain' },
+  { key: 'leadership', label: 'Leadership' },
+  { key: null, label: 'General' },
+]
+
 // ─── STEP INDICATOR ───────────────────────────────────────────────────────────
 
 const STEPS: Step[] = ['input', 'building', 'configuring', 'done']
@@ -207,6 +225,10 @@ export default function GeneratePage() {
   // Building step UI state
   const [collapsedJobs, setCollapsedJobs] = useState<Record<string, boolean>>({})
   const [openSuggestion, setOpenSuggestion] = useState<string | null>(null)
+  // Skills match section (building step)
+  type UserSkill = { name: string; category: string | null; job_id: string }
+  const [skillsData, setSkillsData] = useState<{ jd_skills: string[]; user_skills: UserSkill[] } | null>(null)
+  const [skillsExpanded, setSkillsExpanded] = useState(false)
   // Inline module editing
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
@@ -412,15 +434,17 @@ export default function GeneratePage() {
       .filter(m => selectedIds.includes(m.module_id))
       .map(m => (moduleContentOverrides[m.module_id] ?? m.content).toLowerCase())
       .join(' ')
-    function isCovered(phrase: string, content: string): boolean {
-      if (content.includes(phrase.toLowerCase())) return true
-      const words = phrase.toLowerCase().split(/[\s\/\-,]+/).filter(w => w.length > 3)
-      if (words.length === 0) return content.includes(phrase.toLowerCase())
-      const matched = words.filter(w => content.includes(w))
-      return matched.length / words.length >= 0.6
-    }
     return phrases.filter(p => !isCovered(p, selectedContent))
   }, [confirmedPhrases, jdData?.extracted_phrases, rankedModules, selectedIds, moduleContentOverrides])
+
+  // Lowercased content of each currently-selected module (for skills-match coverage).
+  const selectedModuleContents = useMemo(() =>
+    rankedModules
+      .filter(m => selectedIds.includes(m.module_id))
+      .map(m => (moduleContentOverrides[m.module_id] ?? m.content).toLowerCase()),
+    [rankedModules, selectedIds, moduleContentOverrides]
+  )
+  const allSelectedContent = useMemo(() => selectedModuleContents.join(' '), [selectedModuleContents])
 
   // ── Job title coverage check ─────────────────────────────────────────────────
   const jobTitleCovered = useMemo(() => {
@@ -606,6 +630,25 @@ export default function GeneratePage() {
       .finally(() => setAlignmentLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, jdData?.jd_id])
+
+  // Skills match: load JD + confirmed skills whenever the selected JD changes.
+  useEffect(() => {
+    const jdId = jdData?.jd_id
+    if (!jdId) { setSkillsData(null); return }
+    let cancelled = false
+    setSkillsData(null)
+    fetch(`/api/my-skills?jd_id=${encodeURIComponent(jdId)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return
+        setSkillsData({
+          jd_skills: data.jd_skills ?? [],
+          user_skills: data.user_skills ?? [],
+        })
+      })
+      .catch(() => { if (!cancelled) setSkillsData({ jd_skills: [], user_skills: [] }) })
+    return () => { cancelled = true }
+  }, [jdData?.jd_id])
 
   // ── Step 1: fetch URL ───────────────────────────────────────────────────────
 
@@ -1857,6 +1900,114 @@ export default function GeneratePage() {
                 ))}
               </div>
             )}
+
+            {/* ── Skills match (collapsible) ── */}
+            {jdData && (() => {
+              const jdSkills = skillsData?.jd_skills ?? []
+              const userSkills = skillsData?.user_skills ?? []
+              const totalSelected = selectedModuleContents.length
+              const coveredCount = jdSkills.filter(sk => isCovered(sk, allSelectedContent)).length
+              const total = jdSkills.length
+              const badgeColor = total > 0 && coveredCount === total ? '#1d9e75'
+                : coveredCount > 0 ? 'var(--amber)'
+                : 'var(--text3)'
+              const skillGroups = SKILL_GROUP_ORDER
+                .map(g => ({ ...g, items: userSkills.filter(s => (s.category ?? null) === g.key) }))
+                .filter(g => g.items.length > 0)
+              return (
+                <div style={{ marginTop: 24, borderTop: '1px solid var(--border2)' }}>
+                  {/* Header row */}
+                  <button
+                    onClick={() => setSkillsExpanded(v => !v)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '16px 0', textAlign: 'left' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="#1d9e75" style={{ flexShrink: 0 }}>
+                      <path d="M12 2l1.7 6.1a3 3 0 002.2 2.2L22 12l-6.1 1.7a3 3 0 00-2.2 2.2L12 22l-1.7-6.1a3 3 0 00-2.2-2.2L2 12l6.1-1.7a3 3 0 002.2-2.2z" />
+                    </svg>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Skills match</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: badgeColor, background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 999, padding: '2px 9px' }}>
+                      {coveredCount} / {total} covered
+                    </span>
+                    <span style={{ flex: 1 }} />
+                    <svg
+                      width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="var(--text3)" strokeWidth="1.6"
+                      style={{ transform: skillsExpanded ? 'none' : 'rotate(-90deg)', transition: 'transform 0.15s', flexShrink: 0 }}
+                    >
+                      <path d="M1 2l4 4 4-4" />
+                    </svg>
+                  </button>
+
+                  {skillsExpanded && (
+                    <div style={{ paddingBottom: 12 }}>
+                      {skillsData === null ? (
+                        /* Loading skeleton */
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text3)', padding: '8px 0 16px' }}>
+                          <Spinner />
+                          <span>Loading skills…</span>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Section 1: JD requirements */}
+                          <div style={{ marginBottom: 22 }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>JD requirements</div>
+                            {jdSkills.length === 0 ? (
+                              <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', lineHeight: 1.4 }}>
+                                No skills extracted from this JD yet. Re-analyze it from the configure step.
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {jdSkills.map(sk => {
+                                  const matching = selectedModuleContents.filter(c => isCovered(sk, c)).length
+                                  const covered = isCovered(sk, allSelectedContent)
+                                  const pct = covered
+                                    ? Math.max(15, totalSelected > 0 ? Math.round((matching / totalSelected) * 100) : 15)
+                                    : 0
+                                  return (
+                                    <div key={sk} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                      <span style={{ fontSize: 12, color: 'var(--text2)', flex: '0 0 38%', lineHeight: 1.3 }}>{sk}</span>
+                                      <div style={{ flex: 1, height: 6, borderRadius: 999, overflow: 'hidden', background: covered ? 'var(--bg3)' : 'rgba(239,68,68,0.10)' }}>
+                                        <div style={{ height: '100%', width: `${pct}%`, background: '#1d9e75', borderRadius: 999, transition: 'width 0.3s' }} />
+                                      </div>
+                                      <span style={{ fontSize: 11, fontWeight: 600, flex: '0 0 52px', textAlign: 'right', color: covered ? '#1d9e75' : 'var(--text3)' }}>
+                                        {covered ? 'Covered' : 'Missing'}
+                                      </span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Section 2: Your confirmed skills */}
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Your confirmed skills</div>
+                            {userSkills.length === 0 ? (
+                              <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.4 }}>
+                                No confirmed skills yet.{' '}
+                                <a href="/library" style={{ color: '#1d9e75', textDecoration: 'none', fontWeight: 600 }}>Add them in your library</a>
+                              </div>
+                            ) : (
+                              skillGroups.map(group => (
+                                <div key={String(group.key)} style={{ marginBottom: 12 }}>
+                                  <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{group.label}</div>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                    {group.items.map((s, i) => (
+                                      <span key={`${s.job_id}-${s.name}-${i}`} style={{ fontSize: 12, fontWeight: 600, borderRadius: 999, padding: '3px 10px', background: 'rgba(29,158,117,0.10)', color: '#1d9e75', border: '1px solid var(--teal-glow)' }}>
+                                        {s.name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* ── Sections: Education + Skills ── */}
             <div style={{ marginTop: 32, borderTop: '1px solid var(--border2)', paddingTop: 24 }}>
