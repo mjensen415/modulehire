@@ -68,6 +68,7 @@ export async function POST(req: Request) {
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         customer: customerId,
+        client_reference_id: user.id,
         line_items: [{ price: item.priceId, quantity: 1 }],
         success_url: `${appUrl}/dashboard?credits=true`,
         cancel_url:  `${appUrl}/pricing`,
@@ -98,6 +99,7 @@ export async function POST(req: Request) {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer: customerId,
+      client_reference_id: user.id,
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${appUrl}/dashboard?upgraded=true`,
       cancel_url:  `${appUrl}/pricing`,
