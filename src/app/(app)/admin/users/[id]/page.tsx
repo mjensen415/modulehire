@@ -1,6 +1,7 @@
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import TierControl from './TierControl'
 
 type ModuleRow = {
   id: string
@@ -86,6 +87,9 @@ export default async function AdminUserDetailPage({
       </div>
 
       <div className="dash-content">
+        {/* PLAN / TIER */}
+        <TierControl userId={profile.id} currentTier={profile.tier} />
+
         {/* MODULES BY JOB */}
         <div className="section-card" style={{ marginBottom: 24 }}>
           <div className="section-head">
