@@ -217,6 +217,12 @@ export default function ModuleReview() {
     setLoaded(true)
   }, [router])
 
+  useEffect(() => {
+    const main = document.querySelector('.app-main')
+    if (main) main.classList.add('app-main-fullbleed')
+    return () => { if (main) main.classList.remove('app-main-fullbleed') }
+  }, [])
+
   if (!loaded) {
     return (
       <div style={{ padding: 40, color: 'var(--text3)', fontSize: 14 }}>Loading modules…</div>
@@ -288,7 +294,7 @@ export default function ModuleReview() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', margin: '-36px -40px', minHeight: '100vh' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0 }}>
 
       {/* TOP BAR */}
       <div className="top-bar">
