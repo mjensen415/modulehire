@@ -230,6 +230,7 @@ export default function GeneratePage() {
   type UserSkill = { name: string; category: string | null; job_id: string }
   const [skillsData, setSkillsData] = useState<{ jd_skills: string[]; user_skills: UserSkill[] } | null>(null)
   const [skillsExpanded, setSkillsExpanded] = useState(false)
+  const [jdTextExpanded, setJdTextExpanded] = useState(false)
   // Inline module editing
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
@@ -446,6 +447,51 @@ export default function GeneratePage() {
     [rankedModules, selectedIds, moduleContentOverrides]
   )
   const allSelectedContent = useMemo(() => selectedModuleContents.join(' '), [selectedModuleContents])
+
+  // Highlight JD skill phrases inside the raw JD text: teal when the selected
+  // modules (or a confirmed user skill) cover the phrase, amber when it's a gap.
+  // Locating uses simple case-insensitive substring matching, longest phrase
+  // first so "data visualization" wins over "data" at the same position.
+  function highlightJdText(text: string, jdSkills: string[], userSkills: string[]): React.ReactNode {
+    if (!text) return null
+    const userSet = new Set(userSkills.map(u => u.toLowerCase()))
+    const isMatched = (phrase: string) =>
+      isCovered(phrase, allSelectedContent) || userSet.has(phrase.toLowerCase())
+    const phrases = Array.from(new Set(jdSkills.filter(Boolean)))
+      .sort((a, b) => b.length - a.length)
+    const lower = text.toLowerCase()
+    const nodes: React.ReactNode[] = []
+    let i = 0
+    let plainStart = 0
+    let key = 0
+    const flushPlain = (end: number) => { if (end > plainStart) nodes.push(text.slice(plainStart, end)) }
+    while (i < text.length) {
+      const match = phrases.find(p => p.length > 0 && lower.startsWith(p.toLowerCase(), i))
+      if (match) {
+        flushPlain(i)
+        const matched = isMatched(match)
+        nodes.push(
+          <span
+            key={key++}
+            style={{
+              background: matched ? 'rgba(29,158,117,0.18)' : 'rgba(186,117,23,0.15)',
+              color: matched ? '#085041' : '#633806',
+              borderRadius: 3,
+              padding: '0 2px',
+            }}
+          >
+            {text.slice(i, i + match.length)}
+          </span>
+        )
+        i += match.length
+        plainStart = i
+      } else {
+        i++
+      }
+    }
+    flushPlain(text.length)
+    return nodes
+  }
 
   // ── Job title coverage check ─────────────────────────────────────────────────
   const jobTitleCovered = useMemo(() => {
@@ -1979,6 +2025,50 @@ export default function GeneratePage() {
                               </div>
                             )}
                           </div>
+
+                          {/* Section 1.5: Job description text with highlights (collapsible) */}
+                          {jdText.trim().length > 0 && (
+                            <div style={{ marginBottom: 22 }}>
+                              <button
+                                onClick={() => setJdTextExpanded(v => !v)}
+                                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', marginBottom: jdTextExpanded ? 10 : 0 }}
+                              >
+                                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Job description</span>
+                                {/* Legend */}
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text3)' }}>
+                                  <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(29,158,117,0.18)', border: '1px solid rgba(29,158,117,0.4)', display: 'inline-block' }} />
+                                  Matched
+                                </span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text3)' }}>
+                                  <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(186,117,23,0.15)', border: '1px solid rgba(186,117,23,0.4)', display: 'inline-block' }} />
+                                  Gap
+                                </span>
+                                <span style={{ flex: 1 }} />
+                                <svg
+                                  width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="var(--text3)" strokeWidth="1.6"
+                                  style={{ transform: jdTextExpanded ? 'none' : 'rotate(-90deg)', transition: 'transform 0.15s', flexShrink: 0 }}
+                                >
+                                  <path d="M1 2l4 4 4-4" />
+                                </svg>
+                              </button>
+                              {jdTextExpanded && (
+                                <div style={{
+                                  maxHeight: 260,
+                                  overflowY: 'auto',
+                                  fontSize: 13,
+                                  lineHeight: 1.85,
+                                  color: 'var(--text-secondary, var(--text2))',
+                                  whiteSpace: 'pre-wrap',
+                                  background: 'var(--surface)',
+                                  border: '1px solid var(--border2)',
+                                  borderRadius: 8,
+                                  padding: '12px 14px',
+                                }}>
+                                  {highlightJdText(jdText, jdSkills, userSkills.map(s => s.name))}
+                                </div>
+                              )}
+                            </div>
+                          )}
 
                           {/* Section 2: Your confirmed skills */}
                           <div>
