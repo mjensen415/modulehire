@@ -34,6 +34,57 @@ type CombinationData = {
   awards?: string
 }
 
+// ─── EXPERIENCE GROUPING (stacked roles) ──────────────────────────────────────
+// Group experience entries by company so multiple roles at the same employer
+// render under a single company header with roles stacked beneath — the format
+// Taleo/Workday/Greenhouse/Lever parse correctly for multi-role tenure.
+
+type ExpEntry = { title: string; company: string; dates: string; bullets: string[] }
+type CompanyGroup = { company: string; tenure: string; roles: ExpEntry[] }
+
+const MONTH_TOKENS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+
+// Split a formatted range like "Jan 2020 – Present" / "2018 - 2021" into [start, end].
+function splitDates(dates: string): [string, string] {
+  const parts = (dates ?? '').split(/\s*[–—-]\s*/)
+  return [(parts[0] ?? '').trim(), (parts[1] ?? '').trim()]
+}
+
+// Sortable key from the start of a range (higher = more recent). 0 if unparseable.
+function startKey(dates: string): number {
+  const start = splitDates(dates)[0].toLowerCase()
+  const year = start.match(/\d{4}/)
+  if (!year) return 0
+  const monthIdx = MONTH_TOKENS.findIndex(m => start.includes(m))
+  return parseInt(year[0], 10) * 12 + (monthIdx >= 0 ? monthIdx : 0)
+}
+
+// Group by normalized company (trim+lowercase), preserving first-seen display casing.
+// Roles within a group sort by start DESC; groups sort by their most-recent start DESC.
+// Company tenure = earliest start across roles → latest end (or "Present" if any role is open).
+function groupExperienceByCompany(experience: ExpEntry[]): CompanyGroup[] {
+  const map = new Map<string, ExpEntry[]>()
+  const displayName = new Map<string, string>()
+  const order: string[] = []
+  for (const e of experience) {
+    const key = (e.company ?? '').trim().toLowerCase()
+    if (!map.has(key)) { map.set(key, []); displayName.set(key, e.company ?? ''); order.push(key) }
+    map.get(key)!.push(e)
+  }
+  const groups: CompanyGroup[] = order.map(key => {
+    const roles = [...map.get(key)!].sort((a, b) => startKey(b.dates) - startKey(a.dates))
+    const oldest = roles[roles.length - 1]
+    const newest = roles[0]
+    const start = splitDates(oldest.dates)[0]
+    const anyPresent = roles.some(r => /present|current/i.test(splitDates(r.dates)[1] || r.dates))
+    const end = anyPresent ? 'Present' : splitDates(newest.dates)[1]
+    const tenure = start && end ? `${start} – ${end}` : (newest.dates ?? '')
+    return { company: displayName.get(key)!, tenure, roles }
+  })
+  groups.sort((a, b) => startKey(b.roles[0].dates) - startKey(a.roles[0].dates))
+  return groups
+}
+
 // ─── HTML PREVIEW ─────────────────────────────────────────────────────────────
 
 // Renders a bullet list honoring the chosen prefix glyph. An empty bulletStyle
@@ -46,15 +97,37 @@ function htmlBullets(bullets: string[], liStyle: string, bulletStyle: string, ul
 function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeFormat, bulletStyle: string): string {
   const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
 
-  const renderJobs = (jobs: NonNullable<StructuredData['experience']>, fonts: { body: string; size: string }) =>
-    jobs.map(job => `
+  const renderJobs = (jobs: NonNullable<StructuredData['experience']>, fonts: { body: string; size: string }) => {
+    const liStyle = `font-family:${fonts.body};font-size:${fonts.size};line-height:1.6;color:#333;margin-bottom:1px`
+    return groupExperienceByCompany(jobs).map(group => {
+      if (group.roles.length === 1) {
+        const job = group.roles[0]
+        return `
       <div style="margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
           <span style="font-family:${fonts.body};font-size:${fonts.size};font-weight:700;color:#222">${job.title} · ${job.company}</span>
           <span style="font-family:${fonts.body};font-size:${fonts.size};color:#888;font-style:italic;white-space:nowrap;margin-left:8px">${job.dates}</span>
         </div>
-        ${htmlBullets(job.bullets, `font-family:${fonts.body};font-size:${fonts.size};line-height:1.6;color:#333;margin-bottom:1px`, bulletStyle)}
-      </div>`).join('')
+        ${htmlBullets(job.bullets, liStyle, bulletStyle)}
+      </div>`
+      }
+      const roles = group.roles.map(job => `
+        <div style="margin:6px 0 0 12px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-family:${fonts.body};font-size:${fonts.size};font-weight:600;color:#333">${job.title}</span>
+            <span style="font-family:${fonts.body};font-size:${fonts.size};color:#888;font-style:italic;white-space:nowrap;margin-left:8px">${job.dates}</span>
+          </div>
+          ${htmlBullets(job.bullets, liStyle, bulletStyle)}
+        </div>`).join('')
+      return `
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-family:${fonts.body};font-size:${fonts.size};font-weight:700;color:#222">${group.company}</span>
+          <span style="font-family:${fonts.body};font-size:${fonts.size};color:#888;font-style:italic;white-space:nowrap;margin-left:8px">${group.tenure}</span>
+        </div>${roles}
+      </div>`
+    }).join('')
+  }
 
   // ── Classic ──
   if (format === 'classic') {
@@ -91,15 +164,36 @@ function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeF
       `<span style="font-family:${mono};font-weight:700;color:${BLUE};font-size:12px;line-height:1">#</span>` +
       `<span style="font-family:${f};font-size:11px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#111">${label}</span>` +
       `</div>`
+    const techLi = `font-family:${f};font-size:${sz};line-height:1.6;color:#333;margin-bottom:2px`
     const renderTechJobs = (jobs: NonNullable<StructuredData['experience']>) =>
-      jobs.map(job => `
+      groupExperienceByCompany(jobs).map(group => {
+        if (group.roles.length === 1) {
+          const job = group.roles[0]
+          return `
         <div style="margin-bottom:13px">
           <div style="display:flex;justify-content:space-between;align-items:baseline">
             <span style="font-family:${f};font-size:12.5px;font-weight:700;color:#111">${job.title} · ${job.company}</span>
             <span style="font-family:${mono};font-size:10px;color:#555;white-space:nowrap;margin-left:8px">${job.dates}</span>
           </div>
-          ${htmlBullets(job.bullets, `font-family:${f};font-size:${sz};line-height:1.6;color:#333;margin-bottom:2px`, bulletStyle)}
-        </div>`).join('')
+          ${htmlBullets(job.bullets, techLi, bulletStyle)}
+        </div>`
+        }
+        const roles = group.roles.map(job => `
+          <div style="margin:6px 0 0 12px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-family:${f};font-size:12px;font-weight:600;color:#222">${job.title}</span>
+              <span style="font-family:${mono};font-size:10px;color:#555;white-space:nowrap;margin-left:8px">${job.dates}</span>
+            </div>
+            ${htmlBullets(job.bullets, techLi, bulletStyle)}
+          </div>`).join('')
+        return `
+        <div style="margin-bottom:13px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-family:${f};font-size:12.5px;font-weight:700;color:#111">${group.company}</span>
+            <span style="font-family:${mono};font-size:10px;color:#555;white-space:nowrap;margin-left:8px">${group.tenure}</span>
+          </div>${roles}
+        </div>`
+      }).join('')
     const contactItems = [contact.email, contact.phone, contact.linkedin, contact.location].filter(Boolean).join('  ·  ')
     const sections = [
       data.summary ? `${sectionHead('Summary')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#333;margin:0 0 0 0">${data.summary}</p>` : '',
@@ -147,16 +241,37 @@ function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeF
     const f = "'Helvetica Neue',Helvetica,Arial,sans-serif", sz = '12px'
     const sectionHead = (label: string) =>
       `<div style="font-family:${f};font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#aaa;margin:22px 0 6px 0;padding-bottom:4px;border-bottom:0.5px solid #f0f0f0">${label}</div>`
+    const minimalLi = `font-family:${f};font-size:${sz};line-height:1.65;color:#444;margin-bottom:1px`
     const renderMinimalJobs = (jobs: NonNullable<StructuredData['experience']>) =>
-      jobs.map(job => `
+      groupExperienceByCompany(jobs).map(group => {
+        if (group.roles.length === 1) {
+          const job = group.roles[0]
+          return `
       <div style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
           <span style="font-family:${f};font-size:12.5px;font-weight:500;color:#111">${job.company}</span>
           <span style="font-family:${f};font-size:10px;color:#aaa;white-space:nowrap;margin-left:8px">${job.dates}</span>
         </div>
         <div style="font-family:${f};font-size:11px;color:#666;margin-bottom:4px">${job.title}</div>
-        ${htmlBullets(job.bullets, `font-family:${f};font-size:${sz};line-height:1.65;color:#444;margin-bottom:1px`, bulletStyle)}
-      </div>`).join('')
+        ${htmlBullets(job.bullets, minimalLi, bulletStyle)}
+      </div>`
+        }
+        const roles = group.roles.map(job => `
+        <div style="margin:6px 0 0 12px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-family:${f};font-size:11px;color:#666">${job.title}</span>
+            <span style="font-family:${f};font-size:10px;color:#aaa;white-space:nowrap;margin-left:8px">${job.dates}</span>
+          </div>
+          ${htmlBullets(job.bullets, minimalLi, bulletStyle)}
+        </div>`).join('')
+        return `
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-family:${f};font-size:12.5px;font-weight:500;color:#111">${group.company}</span>
+          <span style="font-family:${f};font-size:10px;color:#aaa;white-space:nowrap;margin-left:8px">${group.tenure}</span>
+        </div>${roles}
+      </div>`
+      }).join('')
     const sections = [
       data.summary ? `${sectionHead('Summary')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#444;margin:0">${data.summary}</p>` : '',
       data.experience?.length ? `${sectionHead('Experience')}${renderMinimalJobs(data.experience)}` : '',
@@ -216,18 +331,44 @@ function buildDocx(contact: Contact, data: StructuredData, format: ResumeFormat,
       ...(data.summary ? [sectionHead('Summary'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.summary, size: 22, font })], spacing: { after: 120, line: 276 } })] : []),
       ...(data.experience?.length ? [
         sectionHead('Work Experience'),
-        ...data.experience.flatMap(job => [
-          new docx.Paragraph({
-            spacing: { before: 140, after: 40, line: 276 },
-            tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
-            children: [
-              new docx.TextRun({ text: `${job.company}`, bold: true, size: 22, font }),
-              new docx.TextRun({ text: '\t' + job.dates, size: 20, font, color: '777777', italics: true }),
-            ],
-          }),
-          new docx.Paragraph({ children: [new docx.TextRun({ text: job.title, size: 21, font, italics: true })], spacing: { after: 40 } }),
-          ...job.bullets.map(b => bul(b, 22, font)),
-        ]),
+        ...groupExperienceByCompany(data.experience).flatMap(group => {
+          if (group.roles.length === 1) {
+            const job = group.roles[0]
+            return [
+              new docx.Paragraph({
+                spacing: { before: 140, after: 40, line: 276 },
+                tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+                children: [
+                  new docx.TextRun({ text: `${job.company}`, bold: true, size: 22, font }),
+                  new docx.TextRun({ text: '\t' + job.dates, size: 20, font, color: '777777', italics: true }),
+                ],
+              }),
+              new docx.Paragraph({ children: [new docx.TextRun({ text: job.title, size: 21, font, italics: true })], spacing: { after: 40 } }),
+              ...job.bullets.map(b => bul(b, 22, font)),
+            ]
+          }
+          return [
+            new docx.Paragraph({
+              spacing: { before: 140, after: 40, line: 276 },
+              tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+              children: [
+                new docx.TextRun({ text: group.company, bold: true, size: 22, font }),
+                new docx.TextRun({ text: '\t' + group.tenure, size: 20, font, color: '777777', italics: true }),
+              ],
+            }),
+            ...group.roles.flatMap(job => [
+              new docx.Paragraph({
+                spacing: { before: 40, after: 40 },
+                tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+                children: [
+                  new docx.TextRun({ text: job.title, size: 21, font, italics: true }),
+                  new docx.TextRun({ text: '\t' + job.dates, size: 19, font, color: '777777', italics: true }),
+                ],
+              }),
+              ...job.bullets.map(b => bul(b, 22, font)),
+            ]),
+          ]
+        }),
       ] : []),
       ...(data.skills ? [sectionHead('Skills'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.skills, size: 22, font })], spacing: { after: 120, line: 276 } })] : []),
       ...(data.education ? [sectionHead('Education'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.education, size: 22, font })], spacing: { after: 120, line: 276 } })] : []),
@@ -260,17 +401,44 @@ function buildDocx(contact: Contact, data: StructuredData, format: ResumeFormat,
     ...(data.summary ? [sectionHead('Summary'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.summary, size: 21, font })], spacing: { after: 120, line: 276 } })] : []),
     ...(data.experience?.length ? [
       sectionHead('Work Experience'),
-      ...data.experience.flatMap(job => [
-        new docx.Paragraph({
-          spacing: { before: 140, after: 30, line: 276 },
-          tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
-          children: [
-            new docx.TextRun({ text: `${job.title} · ${job.company}`, bold: true, size: 22, font }),
-            new docx.TextRun({ text: '\t' + job.dates, size: 18, font: 'Courier New', color: '555555' }),
-          ],
-        }),
-        ...job.bullets.map(b => bul(b, 21, font)),
-      ]),
+      ...groupExperienceByCompany(data.experience).flatMap(group => {
+        if (group.roles.length === 1) {
+          const job = group.roles[0]
+          return [
+            new docx.Paragraph({
+              spacing: { before: 140, after: 30, line: 276 },
+              tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+              children: [
+                new docx.TextRun({ text: `${job.title} · ${job.company}`, bold: true, size: 22, font }),
+                new docx.TextRun({ text: '\t' + job.dates, size: 18, font: 'Courier New', color: '555555' }),
+              ],
+            }),
+            ...job.bullets.map(b => bul(b, 21, font)),
+          ]
+        }
+        return [
+          new docx.Paragraph({
+            spacing: { before: 140, after: 30, line: 276 },
+            tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+            children: [
+              new docx.TextRun({ text: group.company, bold: true, size: 22, font }),
+              new docx.TextRun({ text: '\t' + group.tenure, size: 18, font: 'Courier New', color: '555555' }),
+            ],
+          }),
+          ...group.roles.flatMap(job => [
+            new docx.Paragraph({
+              spacing: { before: 40, after: 20, line: 276 },
+              indent: { left: 180 },
+              tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+              children: [
+                new docx.TextRun({ text: job.title, bold: true, size: 21, font }),
+                new docx.TextRun({ text: '\t' + job.dates, size: 18, font: 'Courier New', color: '555555' }),
+              ],
+            }),
+            ...job.bullets.map(b => bul(b, 21, font)),
+          ]),
+        ]
+      }),
     ] : []),
     ...(data.skills ? [sectionHead('Skills'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.skills, size: 21, font })], spacing: { after: 100, line: 276 } })] : []),
     ...(data.education ? [sectionHead('Education'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.education, size: 21, font })], spacing: { after: 100, line: 276 } })] : []),
@@ -319,17 +487,44 @@ function buildDocxExecutiveOrMinimal(contact: Contact, data: StructuredData, for
       ...(data.summary ? [sectionHead('Summary'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.summary, size: 22, font })], spacing: { after: 120, line: 276 } })] : []),
       ...(data.experience?.length ? [
         sectionHead('Experience'),
-        ...data.experience.flatMap(job => [
-          new docx.Paragraph({
-            tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
-            spacing: { before: 140, after: 40 },
-            children: [
-              new docx.TextRun({ text: `${job.title} · ${job.company}`, bold: true, size: 22, font }),
-              new docx.TextRun({ text: `\t${job.dates}`, size: 18, font, color: '888888', italics: true }),
-            ],
-          }),
-          ...job.bullets.map(b => bul(b, 22, font)),
-        ]),
+        ...groupExperienceByCompany(data.experience).flatMap(group => {
+          if (group.roles.length === 1) {
+            const job = group.roles[0]
+            return [
+              new docx.Paragraph({
+                tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+                spacing: { before: 140, after: 40 },
+                children: [
+                  new docx.TextRun({ text: `${job.title} · ${job.company}`, bold: true, size: 22, font }),
+                  new docx.TextRun({ text: `\t${job.dates}`, size: 18, font, color: '888888', italics: true }),
+                ],
+              }),
+              ...job.bullets.map(b => bul(b, 22, font)),
+            ]
+          }
+          return [
+            new docx.Paragraph({
+              tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+              spacing: { before: 140, after: 40 },
+              children: [
+                new docx.TextRun({ text: group.company, bold: true, size: 22, font }),
+                new docx.TextRun({ text: `\t${group.tenure}`, size: 18, font, color: '888888', italics: true }),
+              ],
+            }),
+            ...group.roles.flatMap(job => [
+              new docx.Paragraph({
+                tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+                spacing: { before: 40, after: 30 },
+                indent: { left: 180 },
+                children: [
+                  new docx.TextRun({ text: job.title, bold: true, size: 21, font, italics: true }),
+                  new docx.TextRun({ text: `\t${job.dates}`, size: 18, font, color: '888888', italics: true }),
+                ],
+              }),
+              ...job.bullets.map(b => bul(b, 22, font)),
+            ]),
+          ]
+        }),
       ] : []),
       ...(data.skills ? [sectionHead('Skills'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.skills, size: 22, font })], spacing: { after: 120, line: 276 } })] : []),
       ...(data.education ? [sectionHead('Education'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.education, size: 22, font })], spacing: { after: 120, line: 276 } })] : []),
@@ -363,18 +558,45 @@ function buildDocxExecutiveOrMinimal(contact: Contact, data: StructuredData, for
     ...(data.summary ? [sectionHead('Summary'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.summary, size: 22, font, color: '444444' })], spacing: { after: 120, line: 276 } })] : []),
     ...(data.experience?.length ? [
       sectionHead('Experience'),
-      ...data.experience.flatMap(job => [
-        new docx.Paragraph({
-          tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
-          spacing: { before: 120, after: 20 },
-          children: [
-            new docx.TextRun({ text: job.company, bold: true, size: 22, font }),
-            new docx.TextRun({ text: `\t${job.dates}`, size: 18, font, color: 'aaaaaa' }),
-          ],
-        }),
-        new docx.Paragraph({ spacing: { before: 0, after: 40 }, children: [new docx.TextRun({ text: job.title, size: 20, font, color: '666666', italics: true })] }),
-        ...job.bullets.map(b => bul(b, 21, font)),
-      ]),
+      ...groupExperienceByCompany(data.experience).flatMap(group => {
+        if (group.roles.length === 1) {
+          const job = group.roles[0]
+          return [
+            new docx.Paragraph({
+              tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+              spacing: { before: 120, after: 20 },
+              children: [
+                new docx.TextRun({ text: job.company, bold: true, size: 22, font }),
+                new docx.TextRun({ text: `\t${job.dates}`, size: 18, font, color: 'aaaaaa' }),
+              ],
+            }),
+            new docx.Paragraph({ spacing: { before: 0, after: 40 }, children: [new docx.TextRun({ text: job.title, size: 20, font, color: '666666', italics: true })] }),
+            ...job.bullets.map(b => bul(b, 21, font)),
+          ]
+        }
+        return [
+          new docx.Paragraph({
+            tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+            spacing: { before: 120, after: 20 },
+            children: [
+              new docx.TextRun({ text: group.company, bold: true, size: 22, font }),
+              new docx.TextRun({ text: `\t${group.tenure}`, size: 18, font, color: 'aaaaaa' }),
+            ],
+          }),
+          ...group.roles.flatMap(job => [
+            new docx.Paragraph({
+              tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+              spacing: { before: 40, after: 30 },
+              indent: { left: 180 },
+              children: [
+                new docx.TextRun({ text: job.title, size: 20, font, color: '666666', italics: true }),
+                new docx.TextRun({ text: `\t${job.dates}`, size: 18, font, color: 'aaaaaa' }),
+              ],
+            }),
+            ...job.bullets.map(b => bul(b, 21, font)),
+          ]),
+        ]
+      }),
     ] : []),
     ...(data.skills ? [sectionHead('Skills'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.skills, size: 21, font, color: '444444' })], spacing: { after: 100, line: 276 } })] : []),
     ...(data.education ? [sectionHead('Education'), new docx.Paragraph({ children: [new docx.TextRun({ text: data.education, size: 21, font, color: '444444' })], spacing: { after: 100, line: 276 } })] : []),
@@ -472,22 +694,50 @@ function buildDocxCombination(contact: Contact, data: CombinationData, bulletSty
 
         sectionHeader('WORK EXPERIENCE'),
         spacer(80),
-        ...data.work_experience.flatMap(job => [
-          new docx.Paragraph({
-            spacing: { before: 120, after: 40 },
-            tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
-            children: [
-              new docx.TextRun({ text: job.title, bold: true, size: 21, font: 'Calibri', color: '222222' }),
-              new docx.TextRun({ text: '\t' + job.dates, size: 19, font: 'Calibri', color: '777777', italics: true }),
-            ],
-          }),
-          new docx.Paragraph({
-            spacing: { before: 0, after: 60 },
-            children: [new docx.TextRun({ text: job.company, size: 19, font: 'Calibri', color: '666666' })],
-          }),
-          ...job.bullets.map(b => bullet(b)),
-          spacer(100),
-        ]),
+        ...groupExperienceByCompany(data.work_experience).flatMap(group => {
+          if (group.roles.length === 1) {
+            const job = group.roles[0]
+            return [
+              new docx.Paragraph({
+                spacing: { before: 120, after: 40 },
+                tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+                children: [
+                  new docx.TextRun({ text: job.title, bold: true, size: 21, font: 'Calibri', color: '222222' }),
+                  new docx.TextRun({ text: '\t' + job.dates, size: 19, font: 'Calibri', color: '777777', italics: true }),
+                ],
+              }),
+              new docx.Paragraph({
+                spacing: { before: 0, after: 60 },
+                children: [new docx.TextRun({ text: job.company, size: 19, font: 'Calibri', color: '666666' })],
+              }),
+              ...job.bullets.map(b => bullet(b)),
+              spacer(100),
+            ]
+          }
+          return [
+            new docx.Paragraph({
+              spacing: { before: 120, after: 40 },
+              tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+              children: [
+                new docx.TextRun({ text: group.company, bold: true, size: 21, font: 'Calibri', color: '222222' }),
+                new docx.TextRun({ text: '\t' + group.tenure, size: 19, font: 'Calibri', color: '777777', italics: true }),
+              ],
+            }),
+            ...group.roles.flatMap(job => [
+              new docx.Paragraph({
+                spacing: { before: 40, after: 40 },
+                indent: { left: 180 },
+                tabStops: [{ type: docx.TabStopType.RIGHT, position: docx.TabStopPosition.MAX }],
+                children: [
+                  new docx.TextRun({ text: job.title, bold: true, size: 20, font: 'Calibri', color: '444444' }),
+                  new docx.TextRun({ text: '\t' + job.dates, size: 19, font: 'Calibri', color: '777777', italics: true }),
+                ],
+              }),
+              ...job.bullets.map(b => bullet(b)),
+            ]),
+            spacer(100),
+          ]
+        }),
 
         ...(data.education.length > 0 ? [
           sectionHeader('EDUCATION'),
@@ -554,21 +804,44 @@ const ResumePDFClassic = ({ contact, data, bulletStyle }: { contact: Contact; da
         {data.experience?.length ? (
           <View style={{ marginBottom: 10 }}>
             <SectionH title="Work Experience" />
-            {data.experience.map((job, i) => (
-              <View key={i} style={{ marginTop: 8, marginBottom: 4 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
-                  <Text style={{ fontSize: 10, fontFamily: 'Times-Bold', color: '#222222' }}>{job.company}</Text>
-                  <Text style={{ fontSize: 9, fontFamily: 'Times-Italic', color: '#777777' }}>{job.dates}</Text>
+            {groupExperienceByCompany(data.experience).map((group, i) => {
+              const bullets = (job: ExpEntry) => job.bullets.map((b, j) => (
+                <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
+                  {bulletStyle !== '' && <Text style={{ fontSize: 9.5, fontFamily: 'Times-Roman', color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
+                  <Text style={{ fontSize: 9.5, fontFamily: 'Times-Roman', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
                 </View>
-                <Text style={{ fontSize: 9.5, fontFamily: 'Times-Italic', color: '#444444', marginBottom: 3 }}>{job.title}</Text>
-                {job.bullets.map((b, j) => (
-                  <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
-                    {bulletStyle !== '' && <Text style={{ fontSize: 9.5, fontFamily: 'Times-Roman', color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
-                    <Text style={{ fontSize: 9.5, fontFamily: 'Times-Roman', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
+              ))
+              if (group.roles.length === 1) {
+                const job = group.roles[0]
+                return (
+                  <View key={i} style={{ marginTop: 8, marginBottom: 4 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                      <Text style={{ fontSize: 10, fontFamily: 'Times-Bold', color: '#222222' }}>{job.company}</Text>
+                      <Text style={{ fontSize: 9, fontFamily: 'Times-Italic', color: '#777777' }}>{job.dates}</Text>
+                    </View>
+                    <Text style={{ fontSize: 9.5, fontFamily: 'Times-Italic', color: '#444444', marginBottom: 3 }}>{job.title}</Text>
+                    {bullets(job)}
                   </View>
-                ))}
-              </View>
-            ))}
+                )
+              }
+              return (
+                <View key={i} style={{ marginTop: 8, marginBottom: 4 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                    <Text style={{ fontSize: 10, fontFamily: 'Times-Bold', color: '#222222' }}>{group.company}</Text>
+                    <Text style={{ fontSize: 9, fontFamily: 'Times-Italic', color: '#777777' }}>{group.tenure}</Text>
+                  </View>
+                  {group.roles.map((job, r) => (
+                    <View key={r} style={{ marginLeft: 10, marginTop: 3 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                        <Text style={{ fontSize: 9.5, fontFamily: 'Times-Italic', color: '#444444' }}>{job.title}</Text>
+                        <Text style={{ fontSize: 9, fontFamily: 'Times-Italic', color: '#777777' }}>{job.dates}</Text>
+                      </View>
+                      {bullets(job)}
+                    </View>
+                  ))}
+                </View>
+              )
+            })}
           </View>
         ) : null}
         {data.skills ? (
@@ -620,20 +893,43 @@ const ResumePDFTech = ({ contact, data, bulletStyle }: { contact: Contact; data:
         {data.experience?.length ? (
           <View style={{ marginBottom: 10 }}>
             <SectionH title="Work Experience" />
-            {data.experience.map((job, i) => (
-              <View key={i} style={{ marginTop: 8, marginBottom: 4 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 3 }}>
-                  <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', color: '#111111' }}>{job.title} · {job.company}</Text>
-                  <Text style={{ fontSize: 9, fontFamily: 'Courier', color: '#555555' }}>{job.dates}</Text>
+            {groupExperienceByCompany(data.experience).map((group, i) => {
+              const bullets = (job: ExpEntry) => job.bullets.map((b, j) => (
+                <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
+                  {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
+                  <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
                 </View>
-                {job.bullets.map((b, j) => (
-                  <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
-                    {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
-                    <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
+              ))
+              if (group.roles.length === 1) {
+                const job = group.roles[0]
+                return (
+                  <View key={i} style={{ marginTop: 8, marginBottom: 4 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 3 }}>
+                      <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', color: '#111111' }}>{job.title} · {job.company}</Text>
+                      <Text style={{ fontSize: 9, fontFamily: 'Courier', color: '#555555' }}>{job.dates}</Text>
+                    </View>
+                    {bullets(job)}
                   </View>
-                ))}
-              </View>
-            ))}
+                )
+              }
+              return (
+                <View key={i} style={{ marginTop: 8, marginBottom: 4 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 3 }}>
+                    <Text style={{ fontSize: 10.5, fontFamily: 'Helvetica-Bold', color: '#111111' }}>{group.company}</Text>
+                    <Text style={{ fontSize: 9, fontFamily: 'Courier', color: '#555555' }}>{group.tenure}</Text>
+                  </View>
+                  {group.roles.map((job, r) => (
+                    <View key={r} style={{ marginLeft: 10, marginBottom: 2 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 2 }}>
+                        <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#222222' }}>{job.title}</Text>
+                        <Text style={{ fontSize: 9, fontFamily: 'Courier', color: '#555555' }}>{job.dates}</Text>
+                      </View>
+                      {bullets(job)}
+                    </View>
+                  ))}
+                </View>
+              )
+            })}
           </View>
         ) : null}
         {data.skills ? (
@@ -696,21 +992,44 @@ const ResumePDFCombination = ({ contact, data, bulletStyle }: { contact: Contact
           ))}
           <View style={{ marginTop: 10 }}>
             <SectionBanner title="Work Experience" />
-            {data.work_experience.map((job, i) => (
-              <View key={i} style={{ marginBottom: 10 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
-                  <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#222222' }}>{job.title}</Text>
-                  <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Oblique', color: '#777777' }}>{job.dates}</Text>
+            {groupExperienceByCompany(data.work_experience).map((group, i) => {
+              const bullets = (job: ExpEntry) => job.bullets.map((b, j) => (
+                <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
+                  {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
+                  <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
                 </View>
-                <Text style={{ fontSize: 9.5, color: '#666666', marginBottom: 3 }}>{job.company}</Text>
-                {job.bullets.map((b, j) => (
-                  <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
-                    {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
-                    <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
+              ))
+              if (group.roles.length === 1) {
+                const job = group.roles[0]
+                return (
+                  <View key={i} style={{ marginBottom: 10 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                      <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#222222' }}>{job.title}</Text>
+                      <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Oblique', color: '#777777' }}>{job.dates}</Text>
+                    </View>
+                    <Text style={{ fontSize: 9.5, color: '#666666', marginBottom: 3 }}>{job.company}</Text>
+                    {bullets(job)}
                   </View>
-                ))}
-              </View>
-            ))}
+                )
+              }
+              return (
+                <View key={i} style={{ marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                    <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#222222' }}>{group.company}</Text>
+                    <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Oblique', color: '#777777' }}>{group.tenure}</Text>
+                  </View>
+                  {group.roles.map((job, r) => (
+                    <View key={r} style={{ marginLeft: 10, marginTop: 3 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                        <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold', color: '#444444' }}>{job.title}</Text>
+                        <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Oblique', color: '#777777' }}>{job.dates}</Text>
+                      </View>
+                      {bullets(job)}
+                    </View>
+                  ))}
+                </View>
+              )
+            })}
           </View>
           {data.education.length > 0 ? (
             <View style={{ marginTop: 8 }}>
@@ -767,20 +1086,43 @@ const ResumePDFExecutive = ({ contact, data, bulletStyle }: { contact: Contact; 
           {data.experience?.length ? (
             <View>
               <SectionHead title="Experience" />
-              {data.experience.map((job, i) => (
-                <View key={i} style={{ marginBottom: 9 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
-                    <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111', flex: 1 }}>{job.title} · {job.company}</Text>
-                    <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Oblique', color: '#888888' }}>{job.dates}</Text>
+              {groupExperienceByCompany(data.experience).map((group, i) => {
+                const bullets = (job: ExpEntry) => job.bullets.map((b, j) => (
+                  <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
+                    {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
+                    <Text style={{ ...body, flex: 1 }}>{b}</Text>
                   </View>
-                  {job.bullets.map((b, j) => (
-                    <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
-                      {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
-                      <Text style={{ ...body, flex: 1 }}>{b}</Text>
+                ))
+                if (group.roles.length === 1) {
+                  const job = group.roles[0]
+                  return (
+                    <View key={i} style={{ marginBottom: 9 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                        <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111', flex: 1 }}>{job.title} · {job.company}</Text>
+                        <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Oblique', color: '#888888' }}>{job.dates}</Text>
+                      </View>
+                      {bullets(job)}
                     </View>
-                  ))}
-                </View>
-              ))}
+                  )
+                }
+                return (
+                  <View key={i} style={{ marginBottom: 9 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                      <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111', flex: 1 }}>{group.company}</Text>
+                      <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Oblique', color: '#888888' }}>{group.tenure}</Text>
+                    </View>
+                    {group.roles.map((job, r) => (
+                      <View key={r} style={{ marginLeft: 10, marginTop: 3 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                          <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold', color: '#333333', flex: 1 }}>{job.title}</Text>
+                          <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Oblique', color: '#888888' }}>{job.dates}</Text>
+                        </View>
+                        {bullets(job)}
+                      </View>
+                    ))}
+                  </View>
+                )
+              })}
             </View>
           ) : null}
           {data.skills ? (
@@ -832,21 +1174,44 @@ const ResumePDFMinimal = ({ contact, data, bulletStyle }: { contact: Contact; da
         {data.experience?.length ? (
           <View>
             <SectionHead title="Experience" />
-            {data.experience.map((job, i) => (
-              <View key={i} style={{ marginBottom: 10 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
-                  <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111' }}>{job.company}</Text>
-                  <Text style={{ fontSize: 9, color: '#aaaaaa' }}>{job.dates}</Text>
+            {groupExperienceByCompany(data.experience).map((group, i) => {
+              const bullets = (job: ExpEntry) => job.bullets.map((b, j) => (
+                <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
+                  {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#aaaaaa', marginRight: 4 }}>{bulletStyle}</Text>}
+                  <Text style={{ ...body, flex: 1 }}>{b}</Text>
                 </View>
-                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Oblique', color: '#666666', marginBottom: 3 }}>{job.title}</Text>
-                {job.bullets.map((b, j) => (
-                  <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
-                    {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#aaaaaa', marginRight: 4 }}>{bulletStyle}</Text>}
-                    <Text style={{ ...body, flex: 1 }}>{b}</Text>
+              ))
+              if (group.roles.length === 1) {
+                const job = group.roles[0]
+                return (
+                  <View key={i} style={{ marginBottom: 10 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                      <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111' }}>{job.company}</Text>
+                      <Text style={{ fontSize: 9, color: '#aaaaaa' }}>{job.dates}</Text>
+                    </View>
+                    <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Oblique', color: '#666666', marginBottom: 3 }}>{job.title}</Text>
+                    {bullets(job)}
                   </View>
-                ))}
-              </View>
-            ))}
+                )
+              }
+              return (
+                <View key={i} style={{ marginBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                    <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111' }}>{group.company}</Text>
+                    <Text style={{ fontSize: 9, color: '#aaaaaa' }}>{group.tenure}</Text>
+                  </View>
+                  {group.roles.map((job, r) => (
+                    <View key={r} style={{ marginLeft: 10, marginTop: 3 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                        <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Oblique', color: '#666666' }}>{job.title}</Text>
+                        <Text style={{ fontSize: 9, color: '#aaaaaa' }}>{job.dates}</Text>
+                      </View>
+                      {bullets(job)}
+                    </View>
+                  ))}
+                </View>
+              )
+            })}
           </View>
         ) : null}
         {data.skills ? (
@@ -934,21 +1299,42 @@ const ResumePDFTwoColumn = ({ contact, data, bulletStyle }: { contact: Contact; 
           {data.experience?.length ? (
             <View>
               <MainHead title="Experience" />
-              {data.experience.map((job, i) => (
-                <View key={i} style={{ marginBottom: 10 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
-                    <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111', flex: 1 }}>{job.title}</Text>
-                    <Text style={{ fontSize: 9, color: '#888888', fontFamily: 'Helvetica-Oblique' }}>{job.dates}</Text>
+              {groupExperienceByCompany(data.experience).map((group, i) => {
+                const bullets = (job: ExpEntry) => job.bullets.map((b, j) => (
+                  <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
+                    {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
+                    <Text style={{ ...body, flex: 1 }}>{b}</Text>
                   </View>
-                  <Text style={{ fontSize: 9.5, color: '#666666', marginBottom: 3 }}>{job.company}</Text>
-                  {job.bullets.map((b, j) => (
-                    <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
-                      {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
-                      <Text style={{ ...body, flex: 1 }}>{b}</Text>
+                ))
+                if (group.roles.length === 1) {
+                  const job = group.roles[0]
+                  return (
+                    <View key={i} style={{ marginBottom: 10 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                        <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111', flex: 1 }}>{job.title}</Text>
+                        <Text style={{ fontSize: 9, color: '#888888', fontFamily: 'Helvetica-Oblique' }}>{job.dates}</Text>
+                      </View>
+                      <Text style={{ fontSize: 9.5, color: '#666666', marginBottom: 3 }}>{job.company}</Text>
+                      {bullets(job)}
                     </View>
-                  ))}
-                </View>
-              ))}
+                  )
+                }
+                return (
+                  <View key={i} style={{ marginBottom: 10 }}>
+                    <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111', marginBottom: 1 }}>{group.company}</Text>
+                    <Text style={{ fontSize: 9, color: '#888888', fontFamily: 'Helvetica-Oblique', marginBottom: 3 }}>{group.tenure}</Text>
+                    {group.roles.map((job, r) => (
+                      <View key={r} style={{ marginLeft: 8, marginBottom: 3 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 1 }}>
+                          <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold', color: '#333333', flex: 1 }}>{job.title}</Text>
+                          <Text style={{ fontSize: 9, color: '#888888', fontFamily: 'Helvetica-Oblique' }}>{job.dates}</Text>
+                        </View>
+                        {bullets(job)}
+                      </View>
+                    ))}
+                  </View>
+                )
+              })}
             </View>
           ) : null}
         </View>
@@ -1281,12 +1667,26 @@ ${JSON.stringify(experienceGroups)}
           <div style="font-weight:700;font-size:12px;color:#7A4A4E;margin-bottom:4px">${sec.category}</div>
           ${htmlBullets(sec.bullets, comboLi, bullet_style, '0')}
         </div>`).join('')
-      const expHtml = comboData.work_experience.map(job => `
+      const expHtml = groupExperienceByCompany(comboData.work_experience).map(group => {
+        if (group.roles.length === 1) {
+          const job = group.roles[0]
+          return `
         <div style="margin-bottom:14px">
           <div style="display:flex;justify-content:space-between"><span style="font-weight:700;font-size:12px">${job.title}</span><span style="font-size:11px;color:#888;font-style:italic">${job.dates}</span></div>
           <div style="font-size:11px;color:#666;margin-bottom:4px">${job.company}</div>
           ${htmlBullets(job.bullets, comboLi, bullet_style, '0')}
-        </div>`).join('')
+        </div>`
+        }
+        const roles = group.roles.map(job => `
+          <div style="margin:6px 0 0 12px">
+            <div style="display:flex;justify-content:space-between"><span style="font-weight:600;font-size:11.5px;color:#444">${job.title}</span><span style="font-size:11px;color:#888;font-style:italic">${job.dates}</span></div>
+            ${htmlBullets(job.bullets, comboLi, bullet_style, '0')}
+          </div>`).join('')
+        return `
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between"><span style="font-weight:700;font-size:12px">${group.company}</span><span style="font-size:11px;color:#888;font-style:italic">${group.tenure}</span></div>${roles}
+        </div>`
+      }).join('')
       resumeHtml = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff;font-family:Calibri,Candara,sans-serif">
         <div style="background:#C49098;padding:28px 48px 24px;text-align:center">
           <div style="font-size:26px;font-weight:700;color:#fff;margin-bottom:4px">${contact.name}</div>
