@@ -186,6 +186,7 @@ export default function GeneratePage() {
   const [jobTitleSaving, setJobTitleSaving] = useState(false)
   const [jobLevel, setJobLevel] = useState('')
   const [resumeFormat, setResumeFormat] = useState<'classic' | 'tech' | 'combination' | 'executive' | 'minimal' | 'two-column'>('classic')
+  const [bulletStyle, setBulletStyle] = useState<string>('•')
   const [includeCoverLetter, setIncludeCoverLetter] = useState(false)
   const [coverLetterTone, setCoverLetterTone] = useState<'professional' | 'warm' | 'direct'>('professional')
   const [coverLetterNotes, setCoverLetterNotes] = useState('')
@@ -1083,6 +1084,7 @@ export default function GeneratePage() {
             : { include: false, tone: coverLetterTone },
           job_level: jobLevel || undefined,
           format: resumeFormat,
+          bullet_style: bulletStyle,
           confirmed_phrases: confirmedPhrases,
           confirmed_themes: confirmedThemes,
         }),
@@ -2343,6 +2345,42 @@ export default function GeneratePage() {
                     {f.preview}
                   </label>
                 ))}
+              </div>
+            </div>
+
+            {/* Bullet style */}
+            <div className="config-section">
+              <div className="config-section-title" style={{ marginBottom: 12 }}>Bullet style</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {([
+                  { value: '•', label: '•  Bullet' },
+                  { value: '—', label: '—  Dash' },
+                  { value: '›', label: '›  Arrow' },
+                  { value: '◆', label: '◆  Diamond' },
+                  { value: '', label: 'None' },
+                ]).map(opt => {
+                  const active = bulletStyle === opt.value
+                  return (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      onClick={() => setBulletStyle(opt.value)}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: 999,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
+                        background: active ? 'rgba(29,158,117,0.12)' : 'var(--surface-1, var(--surface))',
+                        color: active ? '#0F6E56' : 'var(--text3)',
+                        border: `1px solid ${active ? 'rgba(29,158,117,0.4)' : 'var(--border2)'}`,
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
               </div>
             </div>
 

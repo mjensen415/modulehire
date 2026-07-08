@@ -6,6 +6,7 @@ import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 // canGenerate removed — generation is always allowed; download is gated client-side via canDownload.
 import { FREE_MONTHLY_GENERATIONS, isProTier } from '@/lib/plan'
+import { needsEmailVerification } from '@/lib/email-verification'
 import * as docx from 'docx'
 import { renderToBuffer, Document as PdfDoc, Page, Text, View } from '@react-pdf/renderer'
 import React from 'react'
@@ -36,7 +37,14 @@ type CombinationData = {
 
 // ─── HTML PREVIEW ─────────────────────────────────────────────────────────────
 
-function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeFormat): string {
+// Renders a bullet list honoring the chosen prefix glyph. An empty bulletStyle
+// means "no marker" — plain lines with no leading glyph or space.
+function htmlBullets(bullets: string[], liStyle: string, bulletStyle: string, ulMargin = '4px 0 0 0'): string {
+  const prefix = bulletStyle === '' ? '' : `${bulletStyle} `
+  return `<ul style="list-style:none;margin:${ulMargin};padding-left:0">${bullets.map(b => `<li style="${liStyle}">${prefix}${b}</li>`).join('')}</ul>`
+}
+
+function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeFormat, bulletStyle: string): string {
   const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
 
   const renderJobs = (jobs: NonNullable<StructuredData['experience']>, fonts: { body: string; size: string }) =>
@@ -46,7 +54,7 @@ function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeF
           <span style="font-family:${fonts.body};font-size:${fonts.size};font-weight:700;color:#222">${job.title} · ${job.company}</span>
           <span style="font-family:${fonts.body};font-size:${fonts.size};color:#888;font-style:italic;white-space:nowrap;margin-left:8px">${job.dates}</span>
         </div>
-        <ul style="margin:4px 0 0 0;padding-left:18px">${job.bullets.map(b => `<li style="font-family:${fonts.body};font-size:${fonts.size};line-height:1.6;color:#333;margin-bottom:1px">${b}</li>`).join('')}</ul>
+        ${htmlBullets(job.bullets, `font-family:${fonts.body};font-size:${fonts.size};line-height:1.6;color:#333;margin-bottom:1px`, bulletStyle)}
       </div>`).join('')
 
   // ── Classic ──
@@ -91,7 +99,7 @@ function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeF
             <span style="font-family:${f};font-size:12.5px;font-weight:700;color:#111">${job.title} · ${job.company}</span>
             <span style="font-family:${mono};font-size:10px;color:#555;white-space:nowrap;margin-left:8px">${job.dates}</span>
           </div>
-          <ul style="margin:4px 0 0 0;padding-left:18px">${job.bullets.map(b => `<li style="font-family:${f};font-size:${sz};line-height:1.6;color:#333;margin-bottom:2px">${b}</li>`).join('')}</ul>
+          ${htmlBullets(job.bullets, `font-family:${f};font-size:${sz};line-height:1.6;color:#333;margin-bottom:2px`, bulletStyle)}
         </div>`).join('')
     const contactItems = [contact.email, contact.phone, contact.linkedin, contact.location].filter(Boolean).join('  ·  ')
     const sections = [
@@ -148,7 +156,7 @@ function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeF
           <span style="font-family:${f};font-size:10px;color:#aaa;white-space:nowrap;margin-left:8px">${job.dates}</span>
         </div>
         <div style="font-family:${f};font-size:11px;color:#666;margin-bottom:4px">${job.title}</div>
-        <ul style="margin:4px 0 0 0;padding-left:16px">${job.bullets.map(b => `<li style="font-family:${f};font-size:${sz};line-height:1.65;color:#444;margin-bottom:1px">${b}</li>`).join('')}</ul>
+        ${htmlBullets(job.bullets, `font-family:${f};font-size:${sz};line-height:1.65;color:#444;margin-bottom:1px`, bulletStyle)}
       </div>`).join('')
     const sections = [
       data.summary ? `${sectionHead('Summary')}<p style="font-family:${f};font-size:${sz};line-height:1.65;color:#444;margin:0">${data.summary}</p>` : '',
@@ -172,12 +180,14 @@ function buildResumeHtml(contact: Contact, data: StructuredData, format: ResumeF
 
 // ─── DOCX BUILDERS ────────────────────────────────────────────────────────────
 
-function buildDocx(contact: Contact, data: StructuredData, format: ResumeFormat, contactLine: string): docx.Document {
+function buildDocx(contact: Contact, data: StructuredData, format: ResumeFormat, contactLine: string, bulletStyle: string): docx.Document {
   const twip = (inches: number) => Math.round(inches * 1440)
+  const useBullet = bulletStyle !== ''
   const bulletRef = 'body-bullets'
-  const bulletConfig = [{ reference: bulletRef, levels: [{ level: 0, format: docx.LevelFormat.BULLET, text: '\u2022', alignment: docx.AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 220 } } } }] }]
+  const bulletConfig = [{ reference: bulletRef, levels: [{ level: 0, format: docx.LevelFormat.BULLET, text: bulletStyle || '\u2022', alignment: docx.AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 220 } } } }] }]
+  // Empty bulletStyle \u2192 plain paragraph, no marker, no hanging indent.
   const bul = (text: string, size: number, font: string) => new docx.Paragraph({
-    numbering: { reference: bulletRef, level: 0 },
+    ...(useBullet ? { numbering: { reference: bulletRef, level: 0 } } : {}),
     spacing: { before: 40, after: 40, line: 276 },
     children: [new docx.TextRun({ text, size, font })],
   })
@@ -270,12 +280,13 @@ function buildDocx(contact: Contact, data: StructuredData, format: ResumeFormat,
   return new docx.Document({ creator: contact.name, numbering: { config: bulletConfig }, sections: [{ properties: { page: { margin: { top: twip(0.85), right: twip(0.85), bottom: twip(0.85), left: twip(0.85) } } }, children }] })
 }
 
-function buildDocxExecutiveOrMinimal(contact: Contact, data: StructuredData, format: 'executive' | 'minimal', contactLine: string): docx.Document {
+function buildDocxExecutiveOrMinimal(contact: Contact, data: StructuredData, format: 'executive' | 'minimal', contactLine: string, bulletStyle: string): docx.Document {
   const twip = (inches: number) => Math.round(inches * 1440)
+  const useBullet = bulletStyle !== ''
   const bulletRef = 'body-bullets'
-  const bulletConfig = [{ reference: bulletRef, levels: [{ level: 0, format: docx.LevelFormat.BULLET, text: '•', alignment: docx.AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 220 } } } }] }]
+  const bulletConfig = [{ reference: bulletRef, levels: [{ level: 0, format: docx.LevelFormat.BULLET, text: bulletStyle || '•', alignment: docx.AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 220 } } } }] }]
   const bul = (text: string, size: number, font: string) => new docx.Paragraph({
-    numbering: { reference: bulletRef, level: 0 },
+    ...(useBullet ? { numbering: { reference: bulletRef, level: 0 } } : {}),
     spacing: { before: 40, after: 40, line: 276 },
     children: [new docx.TextRun({ text, size, font })],
   })
@@ -376,8 +387,9 @@ function buildDocxExecutiveOrMinimal(contact: Contact, data: StructuredData, for
 
 // ─── COMBINATION DOCX BUILDER ────────────────────────────────────────────────
 
-function buildDocxCombination(contact: Contact, data: CombinationData): docx.Document {
+function buildDocxCombination(contact: Contact, data: CombinationData, bulletStyle: string): docx.Document {
   const twip = (inches: number) => Math.round(inches * 1440)
+  const useBullet = bulletStyle !== ''
   const HEADER_FILL  = 'C49098'
   const SECTION_FILL = 'EDD5D7'
   const CONTACT_FILL = 'F2F2F2'
@@ -421,7 +433,7 @@ function buildDocxCombination(contact: Contact, data: CombinationData): docx.Doc
   })
 
   const bullet = (text: string) => new docx.Paragraph({
-    numbering: { reference: 'combo-bullets', level: 0 },
+    ...(useBullet ? { numbering: { reference: 'combo-bullets', level: 0 } } : {}),
     spacing: { before: 40, after: 40, line: 276 },
     children: [new docx.TextRun({ text, size: 20, font: 'Calibri', color: '222222' })],
   })
@@ -432,7 +444,7 @@ function buildDocxCombination(contact: Contact, data: CombinationData): docx.Doc
     numbering: {
       config: [{
         reference: 'combo-bullets',
-        levels: [{ level: 0, format: docx.LevelFormat.BULLET, text: '\u2022', alignment: docx.AlignmentType.LEFT,
+        levels: [{ level: 0, format: docx.LevelFormat.BULLET, text: bulletStyle || '\u2022', alignment: docx.AlignmentType.LEFT,
           style: { paragraph: { indent: { left: 360, hanging: 220 } } } }]
       }]
     },
@@ -519,7 +531,7 @@ type EducationEntry = { school: string; degree: string; field: string; year: str
 type CoverLetterConfig = { include: boolean; tone: 'professional' | 'warm' | 'direct'; notes?: string }
 
 // ── Classic PDF: Times-Roman serif, small-caps section headers ──────────────
-const ResumePDFClassic = ({ contact, data }: { contact: Contact; data: StructuredData }) => {
+const ResumePDFClassic = ({ contact, data, bulletStyle }: { contact: Contact; data: StructuredData; bulletStyle: string }) => {
   const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
   const body = { fontSize: 10, fontFamily: 'Times-Roman', lineHeight: 1.5, color: '#333333' }
   const SectionH = ({ title }: { title: string }) => (
@@ -552,7 +564,7 @@ const ResumePDFClassic = ({ contact, data }: { contact: Contact; data: Structure
                 <Text style={{ fontSize: 9.5, fontFamily: 'Times-Italic', color: '#444444', marginBottom: 3 }}>{job.title}</Text>
                 {job.bullets.map((b, j) => (
                   <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
-                    <Text style={{ fontSize: 9.5, fontFamily: 'Times-Roman', color: '#555555', marginRight: 4 }}>•</Text>
+                    {bulletStyle !== '' && <Text style={{ fontSize: 9.5, fontFamily: 'Times-Roman', color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
                     <Text style={{ fontSize: 9.5, fontFamily: 'Times-Roman', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
                   </View>
                 ))}
@@ -584,7 +596,7 @@ const ResumePDFClassic = ({ contact, data }: { contact: Contact; data: Structure
 }
 
 // ── Tech PDF: Helvetica body, Courier contact/dates, blue "#" section markers ──
-const ResumePDFTech = ({ contact, data }: { contact: Contact; data: StructuredData }) => {
+const ResumePDFTech = ({ contact, data, bulletStyle }: { contact: Contact; data: StructuredData; bulletStyle: string }) => {
   const contactItems = [contact.email, contact.phone, contact.linkedin, contact.location].filter(Boolean).join('  ·  ')
   const BLUE = '#1F6FEB'
   const body = { fontSize: 10, fontFamily: 'Helvetica', lineHeight: 1.5, color: '#333333' }
@@ -617,7 +629,7 @@ const ResumePDFTech = ({ contact, data }: { contact: Contact; data: StructuredDa
                 </View>
                 {job.bullets.map((b, j) => (
                   <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
-                    <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>•</Text>
+                    {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
                     <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
                   </View>
                 ))}
@@ -649,7 +661,7 @@ const ResumePDFTech = ({ contact, data }: { contact: Contact; data: StructuredDa
 }
 
 // ── Combination PDF: rose/pink theme, skill sections + work experience ───────
-const ResumePDFCombination = ({ contact, data }: { contact: Contact; data: CombinationData }) => {
+const ResumePDFCombination = ({ contact, data, bulletStyle }: { contact: Contact; data: CombinationData; bulletStyle: string }) => {
   const contactItems = [contact.phone, contact.location, contact.linkedin, contact.email].filter(Boolean).join('  |  ')
   const HEADER = '#C49098', SECTION = '#EDD5D7', DARK = '#3D2B2D'
   const SectionBanner = ({ title }: { title: string }) => (
@@ -677,7 +689,7 @@ const ResumePDFCombination = ({ contact, data }: { contact: Contact; data: Combi
               <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: DARK, marginBottom: 3 }}>{sec.category}</Text>
               {sec.bullets.map((b, j) => (
                 <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
-                  <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>•</Text>
+                  {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
                   <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
                 </View>
               ))}
@@ -694,7 +706,7 @@ const ResumePDFCombination = ({ contact, data }: { contact: Contact; data: Combi
                 <Text style={{ fontSize: 9.5, color: '#666666', marginBottom: 3 }}>{job.company}</Text>
                 {job.bullets.map((b, j) => (
                   <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
-                    <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>•</Text>
+                    {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
                     <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.45, flex: 1 }}>{b}</Text>
                   </View>
                 ))}
@@ -728,7 +740,7 @@ const ResumePDFCombination = ({ contact, data }: { contact: Contact; data: Combi
 }
 
 // ── Executive PDF ──────────────────────────────────────────────────────────────
-const ResumePDFExecutive = ({ contact, data }: { contact: Contact; data: StructuredData }) => {
+const ResumePDFExecutive = ({ contact, data, bulletStyle }: { contact: Contact; data: StructuredData; bulletStyle: string }) => {
   const contactItems = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join('  ·  ')
   const body = { fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.5 }
   const SectionHead = ({ title }: { title: string }) => (
@@ -764,7 +776,7 @@ const ResumePDFExecutive = ({ contact, data }: { contact: Contact; data: Structu
                   </View>
                   {job.bullets.map((b, j) => (
                     <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
-                      <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>•</Text>
+                      {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
                       <Text style={{ ...body, flex: 1 }}>{b}</Text>
                     </View>
                   ))}
@@ -797,7 +809,7 @@ const ResumePDFExecutive = ({ contact, data }: { contact: Contact; data: Structu
 }
 
 // ── Minimal PDF ─────────────────────────────────────────────────────────────────
-const ResumePDFMinimal = ({ contact, data }: { contact: Contact; data: StructuredData }) => {
+const ResumePDFMinimal = ({ contact, data, bulletStyle }: { contact: Contact; data: StructuredData; bulletStyle: string }) => {
   const contactItems = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join('  ·  ')
   const body = { fontSize: 9.5, fontFamily: 'Helvetica', color: '#444444', lineHeight: 1.6 }
   const SectionHead = ({ title }: { title: string }) => (
@@ -830,7 +842,7 @@ const ResumePDFMinimal = ({ contact, data }: { contact: Contact; data: Structure
                 <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Oblique', color: '#666666', marginBottom: 3 }}>{job.title}</Text>
                 {job.bullets.map((b, j) => (
                   <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
-                    <Text style={{ fontSize: 9.5, color: '#aaaaaa', marginRight: 4 }}>–</Text>
+                    {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#aaaaaa', marginRight: 4 }}>{bulletStyle}</Text>}
                     <Text style={{ ...body, flex: 1 }}>{b}</Text>
                   </View>
                 ))}
@@ -862,7 +874,7 @@ const ResumePDFMinimal = ({ contact, data }: { contact: Contact; data: Structure
 }
 
 // ── Two-column PDF ──────────────────────────────────────────────────────────────
-const ResumePDFTwoColumn = ({ contact, data }: { contact: Contact; data: StructuredData }) => {
+const ResumePDFTwoColumn = ({ contact, data, bulletStyle }: { contact: Contact; data: StructuredData; bulletStyle: string }) => {
   const SIDEBAR = '#f8fafc', ACCENT = '#1d9e75'
   const body = { fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.5 }
   const sideBody = { fontSize: 9, fontFamily: 'Helvetica', color: '#555555', lineHeight: 1.5 }
@@ -932,7 +944,7 @@ const ResumePDFTwoColumn = ({ contact, data }: { contact: Contact; data: Structu
                   <Text style={{ fontSize: 9.5, color: '#666666', marginBottom: 3 }}>{job.company}</Text>
                   {job.bullets.map((b, j) => (
                     <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
-                      <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>•</Text>
+                      {bulletStyle !== '' && <Text style={{ fontSize: 9.5, color: '#555555', marginRight: 4 }}>{bulletStyle}</Text>}
                       <Text style={{ ...body, flex: 1 }}>{b}</Text>
                     </View>
                   ))}
@@ -971,6 +983,21 @@ export async function POST(req: Request) {
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // ── Email-verification gate (P1.2) ──────────────────────────────────────
+    // Generation is the paid action; block it for unverified emails when
+    // verification is enabled. Users can still browse and build their library.
+    // No-op unless REQUIRE_EMAIL_VERIFICATION === 'true'; existing users are all
+    // already confirmed, so this only affects new unverified signups.
+    if (needsEmailVerification(user)) {
+      return NextResponse.json(
+        {
+          error: 'Please confirm your email to generate resumes. Check your inbox for the confirmation link.',
+          code: 'email_unverified',
+        },
+        { status: 403 },
+      )
     }
 
     const limit = await checkAndLog(supabase, user.id, 'rl_generate_resume', 20, 3600)
@@ -1035,6 +1062,7 @@ export async function POST(req: Request) {
       cover_letter,
       job_level,
       format = 'classic',
+      bullet_style = '•',
       confirmed_phrases,
       confirmed_themes,
       module_augmentations,
@@ -1054,6 +1082,7 @@ export async function POST(req: Request) {
       cover_letter?: CoverLetterConfig
       job_level?: string
       format?: ResumeFormat
+      bullet_style?: string
       confirmed_phrases?: string[]
       confirmed_themes?: string[]
       module_augmentations?: Record<string, string>
@@ -1257,21 +1286,22 @@ ${JSON.stringify(experienceGroups)}
       if (cs === -1 || ce === -1) throw new Error(`Combination template: model did not return JSON. Got: ${strippedCombo.slice(0, 200)}`)
       const comboData: CombinationData = JSON.parse(strippedCombo.slice(cs, ce + 1).replace(/,(\s*[}\]])/g, '$1'))
 
-      const comboDoc = buildDocxCombination(contact, comboData)
+      const comboDoc = buildDocxCombination(contact, comboData, bullet_style)
       docxBuffer = await docx.Packer.toBuffer(comboDoc) as Buffer
-      pdfBuffer = await renderToBuffer(<ResumePDFCombination contact={contact} data={comboData} />)
+      pdfBuffer = await renderToBuffer(<ResumePDFCombination contact={contact} data={comboData} bulletStyle={bullet_style} />)
 
       // HTML preview for combination: simple representation
+      const comboLi = 'font-size:11.5px;color:#333;line-height:1.6;margin-bottom:2px'
       const skillsHtml = comboData.skill_sections.map(sec => `
         <div style="margin-bottom:14px">
           <div style="font-weight:700;font-size:12px;color:#7A4A4E;margin-bottom:4px">${sec.category}</div>
-          <ul style="margin:0;padding-left:18px">${sec.bullets.map(b => `<li style="font-size:11.5px;color:#333;line-height:1.6;margin-bottom:2px">${b}</li>`).join('')}</ul>
+          ${htmlBullets(sec.bullets, comboLi, bullet_style, '0')}
         </div>`).join('')
       const expHtml = comboData.work_experience.map(job => `
         <div style="margin-bottom:14px">
           <div style="display:flex;justify-content:space-between"><span style="font-weight:700;font-size:12px">${job.title}</span><span style="font-size:11px;color:#888;font-style:italic">${job.dates}</span></div>
           <div style="font-size:11px;color:#666;margin-bottom:4px">${job.company}</div>
-          <ul style="margin:0;padding-left:18px">${job.bullets.map(b => `<li style="font-size:11.5px;color:#333;line-height:1.6;margin-bottom:2px">${b}</li>`).join('')}</ul>
+          ${htmlBullets(job.bullets, comboLi, bullet_style, '0')}
         </div>`).join('')
       resumeHtml = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#fff;font-family:Calibri,Candara,sans-serif">
         <div style="background:#C49098;padding:28px 48px 24px;text-align:center">
@@ -1345,23 +1375,23 @@ ${JSON.stringify(experienceGroups)}`
       }
 
       const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
-      resumeHtml = buildResumeHtml(contact, structuredData, format)
+      resumeHtml = buildResumeHtml(contact, structuredData, format, bullet_style)
       // Two-column is PDF-only — use a lightweight placeholder DOCX
       if (format === 'two-column') {
-        const placeholderDoc = buildDocx(contact, structuredData, 'classic', contactLine)
+        const placeholderDoc = buildDocx(contact, structuredData, 'classic', contactLine, bullet_style)
         docxBuffer = await docx.Packer.toBuffer(placeholderDoc) as Buffer
       } else if (format === 'executive' || format === 'minimal') {
-        const formatDoc = buildDocxExecutiveOrMinimal(contact, structuredData, format, contactLine)
+        const formatDoc = buildDocxExecutiveOrMinimal(contact, structuredData, format, contactLine, bullet_style)
         docxBuffer = await docx.Packer.toBuffer(formatDoc) as Buffer
       } else {
-        const formatDoc = buildDocx(contact, structuredData, format, contactLine)
+        const formatDoc = buildDocx(contact, structuredData, format, contactLine, bullet_style)
         docxBuffer = await docx.Packer.toBuffer(formatDoc) as Buffer
       }
-      const pdfEl = format === 'tech' ? <ResumePDFTech contact={contact} data={structuredData} />
-        : format === 'executive' ? <ResumePDFExecutive contact={contact} data={structuredData} />
-        : format === 'minimal' ? <ResumePDFMinimal contact={contact} data={structuredData} />
-        : format === 'two-column' ? <ResumePDFTwoColumn contact={contact} data={structuredData} />
-        : <ResumePDFClassic contact={contact} data={structuredData} />
+      const pdfEl = format === 'tech' ? <ResumePDFTech contact={contact} data={structuredData} bulletStyle={bullet_style} />
+        : format === 'executive' ? <ResumePDFExecutive contact={contact} data={structuredData} bulletStyle={bullet_style} />
+        : format === 'minimal' ? <ResumePDFMinimal contact={contact} data={structuredData} bulletStyle={bullet_style} />
+        : format === 'two-column' ? <ResumePDFTwoColumn contact={contact} data={structuredData} bulletStyle={bullet_style} />
+        : <ResumePDFClassic contact={contact} data={structuredData} bulletStyle={bullet_style} />
       pdfBuffer = await renderToBuffer(pdfEl)
     }
 
