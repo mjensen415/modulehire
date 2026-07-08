@@ -6,7 +6,6 @@ import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 // canGenerate removed — generation is always allowed; download is gated client-side via canDownload.
 import { FREE_MONTHLY_GENERATIONS, isProTier } from '@/lib/plan'
-import { needsEmailVerification } from '@/lib/email-verification'
 import * as docx from 'docx'
 import { renderToBuffer, Document as PdfDoc, Page, Text, View } from '@react-pdf/renderer'
 import React from 'react'
@@ -983,21 +982,6 @@ export async function POST(req: Request) {
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // ── Email-verification gate (P1.2) ──────────────────────────────────────
-    // Generation is the paid action; block it for unverified emails when
-    // verification is enabled. Users can still browse and build their library.
-    // No-op unless REQUIRE_EMAIL_VERIFICATION === 'true'; existing users are all
-    // already confirmed, so this only affects new unverified signups.
-    if (needsEmailVerification(user)) {
-      return NextResponse.json(
-        {
-          error: 'Please confirm your email to generate resumes. Check your inbox for the confirmation link.',
-          code: 'email_unverified',
-        },
-        { status: 403 },
-      )
     }
 
     const limit = await checkAndLog(supabase, user.id, 'rl_generate_resume', 20, 3600)
