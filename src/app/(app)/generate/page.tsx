@@ -229,6 +229,7 @@ export default function GeneratePage() {
   type UserSkill = { name: string; category: string | null; job_id: string }
   const [skillsData, setSkillsData] = useState<{ jd_skills: string[]; user_skills: UserSkill[] } | null>(null)
   const [skillsExpanded, setSkillsExpanded] = useState(false)
+  const [fastTrackLoading, setFastTrackLoading] = useState(false)
   // Inline module editing
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState('')
@@ -721,10 +722,37 @@ export default function GeneratePage() {
         setSkills(skillModules.map(m => m.title))
       }
 
-      setStep('building')
+      // Land on the fast-track / manual fork (rendered in the input step once
+      // jdData is set) rather than jumping straight into the building step.
+      setStep('input')
     } catch (e) {
       setErrorMessage((e as Error).message)
       setStep('input')
+    }
+  }
+
+  // ── Fast track: auto-pick modules and generate in one step ──────────────────
+  async function handleFastTrack() {
+    if (!jdData || fastTrackLoading) return
+    setFastTrackLoading(true)
+    setErrorMessage('')
+    try {
+      const res = await fetch('/api/auto-select-modules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jd_id: jdData.jd_id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not auto-select modules')
+      const ids: string[] = data.module_ids ?? []
+      if (ids.length === 0) throw new Error('No matching modules found — build manually instead.')
+      setSelectedIds(ids)
+      // Skip the building step: generate directly with the auto-selected modules.
+      await handleGenerate(ids)
+    } catch (e) {
+      setErrorMessage((e as Error).message)
+    } finally {
+      setFastTrackLoading(false)
     }
   }
 
@@ -1040,14 +1068,17 @@ export default function GeneratePage() {
 
   // ── Step 4: generate ────────────────────────────────────────────────────────
 
-  async function handleGenerate() {
+  async function handleGenerate(explicitIds?: string[]) {
     setErrorMessage('')
     setShowOveragePrompt(false)
 
     // Generation is always allowed — free users get a preview, download is gated separately.
     setStep('generating')
     try {
-      const orderedIds = rankedModules
+      // Fast track passes an explicit ordered id list (its picks may include
+      // modules outside rankedModules); the manual flow derives them from the
+      // ranked list filtered by the user's selection.
+      const orderedIds = explicitIds ?? rankedModules
         .filter(m => selectedIds.includes(m.module_id))
         .map(m => m.module_id)
 
@@ -1179,7 +1210,7 @@ export default function GeneratePage() {
           {step === 'configuring' && (
             <>
               <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep('building')}>← Back</button>
-              <button className="btn-primary" onClick={handleGenerate} disabled={!contact.name || !contact.email}>
+              <button className="btn-primary" onClick={() => handleGenerate()} disabled={!contact.name || !contact.email}>
                 Generate resume →
               </button>
             </>
@@ -1295,6 +1326,74 @@ export default function GeneratePage() {
             </div>
           )}
 
+          {/* ── Path fork: shown once a JD is analyzed (jdData set) ── */}
+          {jdData && step === 'input' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 8 }}>
+              <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>
+                Analyzed <strong style={{ color: 'var(--text)' }}>{jdData.extracted_company ?? 'this role'}</strong>{jdData.extracted_role_type ? ` · ${jdData.extracted_role_type}` : ''}. How do you want to build it?
+              </div>
+
+              {/* Fast track */}
+              <button
+                type="button"
+                onClick={handleFastTrack}
+                disabled={fastTrackLoading}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', width: '100%',
+                  background: 'var(--teal-dim)', border: '1.5px solid var(--teal)', borderRadius: 12,
+                  padding: '18px 20px', cursor: fastTrackLoading ? 'default' : 'pointer',
+                  fontFamily: 'var(--font)', transition: 'all 0.15s', opacity: fastTrackLoading ? 0.85 : 1,
+                }}
+              >
+                <span style={{ flexShrink: 0, display: 'inline-flex', width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 9, background: 'var(--teal)', color: '#fff' }}>
+                  {fastTrackLoading ? <Spinner /> : (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" /></svg>
+                  )}
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: 'var(--teal)', marginBottom: 3 }}>Fast track ✦</span>
+                  <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.45 }}>
+                    {fastTrackLoading ? 'Picking your best modules and generating…' : 'AI picks your best modules for this role. Generate in one click.'}
+                  </span>
+                </span>
+                <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 600, color: 'var(--text3)' }}>~10 sec</span>
+              </button>
+
+              {/* Build manually */}
+              <button
+                type="button"
+                onClick={() => setStep('building')}
+                disabled={fastTrackLoading}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', width: '100%',
+                  background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 12,
+                  padding: '16px 20px', cursor: fastTrackLoading ? 'default' : 'pointer',
+                  fontFamily: 'var(--font)', transition: 'all 0.15s',
+                }}
+              >
+                <span style={{ flexShrink: 0, display: 'inline-flex', width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 9, background: 'var(--bg3)', color: 'var(--text2)' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4 5.5l1.2 1.2L7.5 4.3" /><path d="M4 11.5l1.2 1.2L7.5 10.3" /><path d="M4 17.5l1.2 1.2L7.5 16.3" /></svg>
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 3 }}>Build manually</span>
+                  <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text3)', lineHeight: 1.45 }}>Choose modules, review the match, fine-tune before generating.</span>
+                </span>
+                <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 600, color: 'var(--text3)' }}>~2 min</span>
+              </button>
+
+              {errorMessage && (
+                <div style={{ background: 'var(--rose-dim, oklch(0.4 0.18 10 / 0.15))', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)' }}>
+                  {errorMessage}
+                </div>
+              )}
+
+              <button className="btn-ghost" style={{ fontSize: 12, alignSelf: 'flex-start', marginTop: 2 }} onClick={reset} disabled={fastTrackLoading}>
+                ← Use a different job description
+              </button>
+            </div>
+          )}
+
+          {!jdData && (<>
           {/* Tab switcher */}
           <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid var(--border2)' }}>
             {(['paste', 'url'] as const).map(tab => (
@@ -1379,6 +1478,7 @@ export default function GeneratePage() {
               </button>
             </div>
           )}
+          </>)}
         </div>
       )}
 
