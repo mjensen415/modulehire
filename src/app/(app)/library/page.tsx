@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
@@ -142,6 +142,10 @@ export default function LibraryPage() {
   const [extracting, setExtracting] = useState(false)
   const [skillToast, setSkillToast] = useState('')
   const [armedDeleteSkillId, setArmedDeleteSkillId] = useState<string | null>(null)
+  const [editingSkillId, setEditingSkillId] = useState<string | null>(null)
+  const [editingSkillName, setEditingSkillName] = useState('')
+  // Guards the Escape→blur sequence: Escape sets this so the subsequent blur cancels instead of saving.
+  const skillEditCancelRef = useRef(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [skillsOnboardedAt, setSkillsOnboardedAt] = useState<string | null>(null)
   const [bannerDismissed, setBannerDismissed] = useState(false)
@@ -339,6 +343,26 @@ export default function LibraryPage() {
   async function confirmSkill(skill: Skill) {
     setSkills(prev => prev.map(s => (s.id === skill.id ? { ...s, source: 'user' } : s)))
     await supabase.from('job_skills').update({ source: 'user' }).eq('id', skill.id)
+  }
+
+  // Inline rename of a confirmed skill (source='user' only).
+  function startEditSkill(skill: Skill) {
+    skillEditCancelRef.current = false
+    setArmedDeleteSkillId(null)
+    setEditingSkillId(skill.id)
+    setEditingSkillName(skill.name)
+  }
+
+  async function saveSkillRename(skillId: string) {
+    if (skillEditCancelRef.current) { skillEditCancelRef.current = false; return }
+    const original = skills.find(s => s.id === skillId)?.name ?? ''
+    const next = editingSkillName.trim()
+    setEditingSkillId(null)
+    if (!next || next === original) return
+    // Optimistic local update, revert on error.
+    setSkills(prev => prev.map(s => (s.id === skillId ? { ...s, name: next } : s)))
+    const { error } = await supabase.from('job_skills').update({ name: next }).eq('id', skillId)
+    if (error) setSkills(prev => prev.map(s => (s.id === skillId ? { ...s, name: original } : s)))
   }
 
   async function dismissOnboardBanner() {
@@ -791,6 +815,22 @@ export default function LibraryPage() {
                                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                                   {group.items.map(skill =>
                                     skill.source === 'user' ? (
+                                      editingSkillId === skill.id ? (
+                                        /* Inline rename input — same pill shape/colors */
+                                        <input
+                                          key={skill.id}
+                                          autoFocus
+                                          value={editingSkillName}
+                                          onChange={e => setEditingSkillName(e.target.value)}
+                                          onFocus={e => e.target.select()}
+                                          onKeyDown={e => {
+                                            if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+                                            else if (e.key === 'Escape') { skillEditCancelRef.current = true; setEditingSkillId(null) }
+                                          }}
+                                          onBlur={() => saveSkillRename(skill.id)}
+                                          style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20, background: 'rgba(29,158,117,0.10)', color: 'var(--teal)', border: '1px solid var(--teal-glow)', outline: 'none', fontFamily: 'var(--font)', width: `${Math.max(6, editingSkillName.length + 2)}ch` }}
+                                        />
+                                      ) : (
                                       /* Confirmed pill */
                                       <span
                                         key={skill.id}
@@ -800,6 +840,13 @@ export default function LibraryPage() {
                                       >
                                         <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M2.5 6.5l2.5 2.5 4.5-5" /></svg>
                                         {skill.name}
+                                        <button
+                                          onClick={e => { e.stopPropagation(); startEditSkill(skill) }}
+                                          title="Rename skill"
+                                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--teal)', padding: 0, display: 'inline-flex', alignItems: 'center', opacity: 0.7, flexShrink: 0 }}
+                                        >
+                                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                                        </button>
                                         {armedDeleteSkillId === skill.id && (
                                           <button
                                             onClick={e => { e.stopPropagation(); deleteSkill(skill.id) }}
@@ -808,6 +855,7 @@ export default function LibraryPage() {
                                           >×</button>
                                         )}
                                       </span>
+                                      )
                                     ) : (
                                       /* Suggested pill */
                                       <span
