@@ -57,10 +57,13 @@ Return ONLY a JSON array of duplicate pairs, no prose:
 [{ "new_id": "<id from NEW>", "existing_id": "<id from EXISTING>", "confidence": "high" | "medium", "reason": "<short reason>" }]
 
 Rules:
-- "high" = almost certainly the same job: same company (allowing name variants), overlapping/identical dates, similar title.
-- "medium" = plausibly the same: same company with a different title that could be a promotion/retitle, OR same title with fuzzy dates.
+- "high" = almost certainly the same job: same company (allowing name variants) AND overlapping/identical dates AND a similar or promotion-related title.
+- "medium" = plausibly the same job, but ONLY when BOTH of these hold: (a) the company names are similar or variants of each other, AND (b) the date ranges overlap. A differing title (possible promotion/retitle) may keep confidence at medium, but it NEVER removes the date-overlap requirement.
+- Company similarity ALONE is not enough. Two roles at the same company with non-overlapping date ranges are DIFFERENT jobs (e.g. two separate consulting engagements) — never flag them.
+- If a pair lacks usable dates on either side to confirm overlap, do NOT flag it.
 - Only include pairs with confidence high or medium. Omit weak guesses.
 - Company matching is FUZZY: "33 Crickets" matches "33 Crickets / Sharpen Consulting", "Sharpen Consulting - Coraigen", etc. Match on the shared/anchor company token.
+- If in doubt, do NOT return the pair — it is better to miss a duplicate than to incorrectly flag two different jobs at the same company (e.g. two separate consulting engagements).
 - Each new_id must come from NEW and each existing_id from EXISTING.
 - If there are no duplicates, return [].`
 
