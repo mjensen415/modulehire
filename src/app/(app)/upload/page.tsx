@@ -2,8 +2,9 @@
 
 import { useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import MergeConfirmModal, { type MergeExperience } from '@/components/MergeConfirmModal'
 
-type Stage = 'idle' | 'uploading' | 'extracting' | 'parsing' | 'done' | 'error'
+type Stage = 'idle' | 'uploading' | 'extracting' | 'parsing' | 'done' | 'error' | 'duplicates'
 
 type ContactInfo = {
   full_name: string | null
@@ -12,6 +13,16 @@ type ContactInfo = {
   linkedin_url: string | null
   location: string | null
 }
+
+type DupPair = {
+  new_id: string
+  existing_id: string
+  confidence: 'high' | 'medium'
+  reason: string
+  new: MergeExperience
+  existing: MergeExperience
+}
+const pairKey = (p: DupPair) => `${p.new_id}|${p.existing_id}`
 
 // ---------------------------------------------------------------------------
 // Resume parse animation
@@ -296,6 +307,32 @@ export default function Upload() {
   const [pasteText, setPasteText] = useState('')
   const [pendingContact, setPendingContact] = useState<ContactInfo | null>(null)
   const [showProfileModal, setShowProfileModal] = useState(false)
+  const [parsedJobIds, setParsedJobIds] = useState<string[]>([])
+  const [dupPairs, setDupPairs] = useState<DupPair[]>([])
+  const [dupResolved, setDupResolved] = useState<Record<string, 'merged' | 'kept'>>({})
+  const [mergePair, setMergePair] = useState<DupPair | null>(null)
+
+  // After a parse, check for duplicate experiences before landing on review.
+  async function goToReview() {
+    if (parsedJobIds.length > 0) {
+      try {
+        const res = await fetch('/api/detect-duplicate-experiences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ new_experience_ids: parsedJobIds }),
+        })
+        const data = await res.json()
+        if (res.ok && Array.isArray(data.pairs) && data.pairs.length > 0) {
+          setDupPairs(data.pairs)
+          setDupResolved({})
+          setShowProfileModal(false)
+          setStage('duplicates')
+          return
+        }
+      } catch { /* detection is best-effort — fall through to review */ }
+    }
+    goToReview()
+  }
   const [dontAskAgain, setDontAskAgain] = useState(false)
   const [profileUpdating, setProfileUpdating] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -349,7 +386,7 @@ export default function Upload() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resume_id: uploadData.resume_id, raw_text: uploadData.raw_text }),
       })
-      let parseData: { error?: string; module_count?: number; modules?: unknown[]; profileUpdated?: boolean; contact?: ContactInfo } = {}
+      let parseData: { error?: string; module_count?: number; modules?: unknown[]; profileUpdated?: boolean; contact?: ContactInfo; job_experience_ids?: string[] } = {}
       try { parseData = await parseRes.json() } catch { /* non-JSON 504 */ }
       if (!parseRes.ok) {
         if (parseRes.status === 504) throw new Error('AI parse timed out — model took too long. Try again or paste a shorter resume.')
@@ -357,6 +394,7 @@ export default function Upload() {
       }
 
       setModuleCount(parseData.module_count ?? 0)
+      setParsedJobIds(parseData.job_experience_ids ?? [])
       sessionStorage.setItem('pendingModules', JSON.stringify({
         resume_id: uploadData.resume_id,
         modules: parseData.modules,
@@ -369,7 +407,7 @@ export default function Upload() {
         setPendingContact(parseData.contact!)
         setShowProfileModal(true)
       } else {
-        setTimeout(() => router.push('/module-review'), 1500)
+        setTimeout(() => { goToReview() }, 1500)
       }
     } catch (e) {
       setErrorMessage((e as Error).message)
@@ -401,7 +439,7 @@ export default function Upload() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resume_id: uploadData.resume_id, raw_text: uploadData.raw_text }),
       })
-      let parseData: { error?: string; module_count?: number; modules?: unknown[]; profileUpdated?: boolean; contact?: ContactInfo } = {}
+      let parseData: { error?: string; module_count?: number; modules?: unknown[]; profileUpdated?: boolean; contact?: ContactInfo; job_experience_ids?: string[] } = {}
       try { parseData = await parseRes.json() } catch { /* non-JSON 504 */ }
       if (!parseRes.ok) {
         if (parseRes.status === 504) throw new Error('AI parse timed out — model took too long. Try again or paste a shorter resume.')
@@ -409,6 +447,7 @@ export default function Upload() {
       }
 
       setModuleCount(parseData.module_count ?? 0)
+      setParsedJobIds(parseData.job_experience_ids ?? [])
       sessionStorage.setItem('pendingModules', JSON.stringify({
         resume_id: uploadData.resume_id,
         modules: parseData.modules,
@@ -421,7 +460,7 @@ export default function Upload() {
         setPendingContact(parseData.contact!)
         setShowProfileModal(true)
       } else {
-        setTimeout(() => router.push('/module-review'), 1500)
+        setTimeout(() => { goToReview() }, 1500)
       }
     } catch (e) {
       setErrorMessage((e as Error).message)
@@ -452,12 +491,12 @@ export default function Upload() {
         })
       }
     }
-    router.push('/module-review')
+    goToReview()
   }
 
   function handleProfileSkip() {
     if (dontAskAgain) localStorage.setItem('mh-profile-sync-skip', 'true')
-    router.push('/module-review')
+    goToReview()
   }
 
   return (
@@ -675,6 +714,69 @@ export default function Upload() {
           )}
         </div>
       </div>
+
+      {/* Duplicate resolution step (post-parse, before review) */}
+      {stage === 'duplicates' && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'var(--bg)', overflowY: 'auto', padding: '40px 20px' }}>
+          <div style={{ maxWidth: 640, margin: '0 auto' }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>Possible duplicate experiences</div>
+            <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 24, lineHeight: 1.5 }}>Some entries from this resume look like jobs already in your library. Merge them into one clean entry, or keep both.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {dupPairs.map(pair => {
+                const key = pairKey(pair)
+                const state = dupResolved[key]
+                return (
+                  <div key={key} style={{ border: '1px solid var(--border2)', borderRadius: 12, padding: 18, background: 'var(--surface)', opacity: state ? 0.65 : 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: state ? 0 : 14 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: state === 'merged' ? 'var(--teal)' : 'var(--text)' }}>
+                        {state === 'merged' ? '✓ Merged' : state === 'kept' ? 'Kept both' : 'Possible duplicate found'}
+                      </span>
+                      {!state && (
+                        <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '2px 8px', borderRadius: 999, background: pair.confidence === 'high' ? 'rgba(29,158,117,0.15)' : 'rgba(186,117,23,0.15)', color: pair.confidence === 'high' ? 'var(--teal)' : 'var(--amber)' }}>{pair.confidence}</span>
+                      )}
+                    </div>
+                    {!state && (
+                      <>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                          {([['NEW', pair.new], ['EXISTING', pair.existing]] as const).map(([label, e]) => (
+                            <div key={label}>
+                              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text3)', marginBottom: 4 }}>{label}</div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{e.company}</div>
+                              {e.title && <div style={{ fontSize: 12, color: 'var(--text2)' }}>{e.title}</div>}
+                              <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)', marginTop: 2 }}>{[e.start_date, e.end_date].filter(Boolean).join(' – ') || '—'}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{e.moduleCount} module{e.moduleCount === 1 ? '' : 's'}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setMergePair(pair)}>Merge →</button>
+                          <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setDupResolved(r => ({ ...r, [key]: 'kept' }))}>Keep both</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {dupPairs.every(p => dupResolved[pairKey(p)]) && (
+              <button className="btn-primary" style={{ marginTop: 24, fontSize: 13 }} onClick={() => router.push('/module-review')}>Done →</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Merge confirmation for a flagged pair (reuses the shared modal) */}
+      {mergePair && (
+        <MergeConfirmModal
+          experiences={[mergePair.new, mergePair.existing]}
+          defaultPrimaryId={mergePair.existing.id}
+          onCancel={() => setMergePair(null)}
+          onMerged={() => {
+            setDupResolved(r => ({ ...r, [pairKey(mergePair)]: 'merged' }))
+            setMergePair(null)
+          }}
+        />
+      )}
     </>
   )
 }

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
+import MergeConfirmModal from '@/components/MergeConfirmModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Job = { id: string; company: string; title: string | null; start_date: string | null; end_date: string | null; location: string | null; employment_type: string | null }
@@ -158,10 +159,6 @@ export default function LibraryPage() {
   const [mergeMode, setMergeMode] = useState(false)
   const [mergeSelected, setMergeSelected] = useState<string[]>([])
   const [mergeConfirm, setMergeConfirm] = useState(false)
-  const [mergePrimary, setMergePrimary] = useState<string | null>(null)
-  const [mergeCompany, setMergeCompany] = useState('')
-  const [mergeTitle, setMergeTitle] = useState('')
-  const [merging, setMerging] = useState(false)
   const [mergeToast, setMergeToast] = useState('')
 
   // ─── Load all data ──────────────────────────────────────────────────────────
@@ -430,71 +427,23 @@ export default function LibraryPage() {
     setMergeMode(false)
     setMergeSelected([])
     setMergeConfirm(false)
-    setMergePrimary(null)
   }
 
   function toggleMergeSelect(id: string) {
     setMergeSelected(sel => sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id])
   }
 
-  function primaryFill(id: string) {
-    setMergePrimary(id)
-    const j = jobs.find(x => x.id === id)
-    setMergeCompany(j?.company ?? '')
-    setMergeTitle(j?.title ?? '')
-  }
-
   function openMergeConfirm() {
     if (mergeSelected.length < 2) return
-    primaryFill(mergeSelected[0])
     setMergeConfirm(true)
   }
 
-  async function confirmMerge() {
-    if (!mergePrimary || mergeSelected.length < 2 || merging) return
-    const keepId = mergePrimary
-    const mergeIds = mergeSelected.filter(id => id !== keepId)
-    setMerging(true)
-    try {
-      const res = await fetch('/api/merge-experiences', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keep_id: keepId, merge_ids: mergeIds }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Merge failed')
-
-      // Optional rename of the kept entry. PATCH overwrites all fields, so carry
-      // the kept entry's existing dates/location through.
-      const kept = jobs.find(x => x.id === keepId)
-      const newCompany = mergeCompany.trim() || kept?.company || ''
-      const newTitle = mergeTitle.trim() || null
-      if (kept && (newCompany !== kept.company || newTitle !== kept.title)) {
-        await fetch(`/api/job-experiences/${keepId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            company: newCompany,
-            title: newTitle,
-            start_date: kept.start_date,
-            end_date: kept.end_date,
-            location: kept.location,
-          }),
-        }).catch(() => {})
-      }
-
-      const count = data.merged_count ?? mergeIds.length
-      setSelectedJobId(keepId)   // move selection to the kept entry
-      exitMergeMode()
-      setLoadTrigger(t => t + 1) // refresh jobs / modules / assignments / skills
-      setMergeToast(`Merged ${count} ${count === 1 ? 'entry' : 'entries'}`)
-      setTimeout(() => setMergeToast(''), 4000)
-    } catch (e) {
-      setMergeToast((e as Error).message)
-      setTimeout(() => setMergeToast(''), 5000)
-    } finally {
-      setMerging(false)
-    }
+  function onMergeComplete(keepId: string, count: number) {
+    setSelectedJobId(keepId)   // move selection to the kept entry
+    exitMergeMode()
+    setLoadTrigger(t => t + 1) // refresh jobs / modules / assignments / skills
+    setMergeToast(`Merged ${count} ${count === 1 ? 'entry' : 'entries'}`)
+    setTimeout(() => setMergeToast(''), 4000)
   }
 
   async function deleteJob(jobId: string) {
@@ -571,49 +520,16 @@ export default function LibraryPage() {
       ) : (
         <div style={{ display: 'flex', height: 'calc(100vh - 56px)', overflow: 'hidden' }}>
 
-          {/* Merge confirmation modal */}
+          {/* Merge confirmation modal (shared component) */}
           {mergeConfirm && (
-            <div
-              style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-              onClick={() => { if (!merging) setMergeConfirm(false) }}
-            >
-              <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 12, padding: 22, width: '100%', maxWidth: 440, boxShadow: '0 12px 40px rgba(0,0,0,0.4)' }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Which entry should be the primary?</div>
-                <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, lineHeight: 1.5 }}>Modules and skills from the others move into this one; the rest are removed.</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
-                  {mergeSelected.map(id => {
-                    const j = jobs.find(x => x.id === id)
-                    if (!j) return null
-                    const isPrimary = mergePrimary === id
-                    const count = jobModules(id).length
-                    return (
-                      <label key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', border: `1px solid ${isPrimary ? 'var(--teal-glow)' : 'var(--border2)'}`, background: isPrimary ? 'var(--teal-dim)' : 'transparent' }}>
-                        <input type="radio" name="mergePrimary" checked={isPrimary} onChange={() => primaryFill(id)} style={{ accentColor: 'var(--teal)', flexShrink: 0 }} />
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: isPrimary ? 'var(--teal)' : 'var(--text)' }}>{displayCompany(j.company)}</span>
-                          {j.title && <span style={{ fontSize: 12, color: 'var(--text3)' }}> — {j.title}</span>}
-                        </span>
-                        <span style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0 }}>{count} module{count === 1 ? '' : 's'}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 3 }}>Company</div>
-                    <input className="form-input" style={{ fontSize: 13, padding: '7px 10px' }} value={mergeCompany} onChange={e => setMergeCompany(e.target.value)} placeholder="Company name" />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 3 }}>Title</div>
-                    <input className="form-input" style={{ fontSize: 13, padding: '7px 10px' }} value={mergeTitle} onChange={e => setMergeTitle(e.target.value)} placeholder="Title (optional)" />
-                  </div>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                  <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setMergeConfirm(false)} disabled={merging}>Cancel</button>
-                  <button className="btn-primary" style={{ fontSize: 12 }} onClick={confirmMerge} disabled={merging || !mergePrimary}>{merging ? 'Merging…' : 'Confirm merge'}</button>
-                </div>
-              </div>
-            </div>
+            <MergeConfirmModal
+              experiences={mergeSelected
+                .map(id => jobs.find(x => x.id === id))
+                .filter((j): j is Job => Boolean(j))
+                .map(j => ({ id: j.id, company: displayCompany(j.company), title: j.title, start_date: j.start_date, end_date: j.end_date, location: j.location, moduleCount: jobModules(j.id).length }))}
+              onCancel={() => setMergeConfirm(false)}
+              onMerged={onMergeComplete}
+            />
           )}
 
           {/* Merge result toast */}

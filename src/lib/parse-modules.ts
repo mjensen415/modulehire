@@ -277,6 +277,8 @@ JSON array:`
 
   // Additive: upsert job_experiences and module_job_assignments using admin client (bypasses RLS).
   let jobSyncError: string | undefined
+  // job_experience ids touched by this parse (for post-parse duplicate detection).
+  let jobExperienceIds: string[] = []
   // job_id → joined module content, used by the skill-extraction step below.
   const jobContentMap = new Map<string, string[]>()
   try {
@@ -337,6 +339,13 @@ JSON array:`
         const k = `${je.company}||${je.title ?? ''}||${je.start_date ?? ''}`
         jobLookup.set(k, je.id)
       }
+
+      // Ids of the experiences this parse produced (new or matched-existing).
+      jobExperienceIds = [...new Set(
+        uniqueExperiences
+          .map(e => jobLookup.get(`${e.company}||${e.title ?? ''}||${e.start_date ?? ''}`))
+          .filter((id): id is string => Boolean(id)),
+      )]
 
       // 5. Map each inserted module to its job and collect assignments
       const assignments: { module_id: string; job_id: string }[] = []
@@ -481,5 +490,5 @@ JSON:`
     // Contact extraction is best-effort — don't fail the whole parse
   }
 
-  return { modules: insertedModules, contact, jobSyncError }
+  return { modules: insertedModules, contact, jobSyncError, jobExperienceIds }
 }
