@@ -154,6 +154,16 @@ export default function LibraryPage() {
   const [repoSearch, setRepoSearch] = useState('')
   const [repoFilter, setRepoFilter] = useState<'all' | 'anchor' | 'strong' | 'supporting' | 'unassigned'>('all')
 
+  // Merge duplicate job experiences
+  const [mergeMode, setMergeMode] = useState(false)
+  const [mergeSelected, setMergeSelected] = useState<string[]>([])
+  const [mergeConfirm, setMergeConfirm] = useState(false)
+  const [mergePrimary, setMergePrimary] = useState<string | null>(null)
+  const [mergeCompany, setMergeCompany] = useState('')
+  const [mergeTitle, setMergeTitle] = useState('')
+  const [merging, setMerging] = useState(false)
+  const [mergeToast, setMergeToast] = useState('')
+
   // ─── Load all data ──────────────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
@@ -415,6 +425,78 @@ export default function LibraryPage() {
     }
   }
 
+  // ── Merge duplicate job experiences ─────────────────────────────────────────
+  function exitMergeMode() {
+    setMergeMode(false)
+    setMergeSelected([])
+    setMergeConfirm(false)
+    setMergePrimary(null)
+  }
+
+  function toggleMergeSelect(id: string) {
+    setMergeSelected(sel => sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id])
+  }
+
+  function primaryFill(id: string) {
+    setMergePrimary(id)
+    const j = jobs.find(x => x.id === id)
+    setMergeCompany(j?.company ?? '')
+    setMergeTitle(j?.title ?? '')
+  }
+
+  function openMergeConfirm() {
+    if (mergeSelected.length < 2) return
+    primaryFill(mergeSelected[0])
+    setMergeConfirm(true)
+  }
+
+  async function confirmMerge() {
+    if (!mergePrimary || mergeSelected.length < 2 || merging) return
+    const keepId = mergePrimary
+    const mergeIds = mergeSelected.filter(id => id !== keepId)
+    setMerging(true)
+    try {
+      const res = await fetch('/api/merge-experiences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keep_id: keepId, merge_ids: mergeIds }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Merge failed')
+
+      // Optional rename of the kept entry. PATCH overwrites all fields, so carry
+      // the kept entry's existing dates/location through.
+      const kept = jobs.find(x => x.id === keepId)
+      const newCompany = mergeCompany.trim() || kept?.company || ''
+      const newTitle = mergeTitle.trim() || null
+      if (kept && (newCompany !== kept.company || newTitle !== kept.title)) {
+        await fetch(`/api/job-experiences/${keepId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            company: newCompany,
+            title: newTitle,
+            start_date: kept.start_date,
+            end_date: kept.end_date,
+            location: kept.location,
+          }),
+        }).catch(() => {})
+      }
+
+      const count = data.merged_count ?? mergeIds.length
+      setSelectedJobId(keepId)   // move selection to the kept entry
+      exitMergeMode()
+      setLoadTrigger(t => t + 1) // refresh jobs / modules / assignments / skills
+      setMergeToast(`Merged ${count} ${count === 1 ? 'entry' : 'entries'}`)
+      setTimeout(() => setMergeToast(''), 4000)
+    } catch (e) {
+      setMergeToast((e as Error).message)
+      setTimeout(() => setMergeToast(''), 5000)
+    } finally {
+      setMerging(false)
+    }
+  }
+
   async function deleteJob(jobId: string) {
     setDeletingJob(true)
     await fetch(`/api/job-experiences/${jobId}`, { method: 'DELETE' })
@@ -489,10 +571,73 @@ export default function LibraryPage() {
       ) : (
         <div style={{ display: 'flex', height: 'calc(100vh - 56px)', overflow: 'hidden' }}>
 
+          {/* Merge confirmation modal */}
+          {mergeConfirm && (
+            <div
+              style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+              onClick={() => { if (!merging) setMergeConfirm(false) }}
+            >
+              <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 12, padding: 22, width: '100%', maxWidth: 440, boxShadow: '0 12px 40px rgba(0,0,0,0.4)' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Which entry should be the primary?</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, lineHeight: 1.5 }}>Modules and skills from the others move into this one; the rest are removed.</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                  {mergeSelected.map(id => {
+                    const j = jobs.find(x => x.id === id)
+                    if (!j) return null
+                    const isPrimary = mergePrimary === id
+                    const count = jobModules(id).length
+                    return (
+                      <label key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', border: `1px solid ${isPrimary ? 'var(--teal-glow)' : 'var(--border2)'}`, background: isPrimary ? 'var(--teal-dim)' : 'transparent' }}>
+                        <input type="radio" name="mergePrimary" checked={isPrimary} onChange={() => primaryFill(id)} style={{ accentColor: 'var(--teal)', flexShrink: 0 }} />
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: isPrimary ? 'var(--teal)' : 'var(--text)' }}>{displayCompany(j.company)}</span>
+                          {j.title && <span style={{ fontSize: 12, color: 'var(--text3)' }}> — {j.title}</span>}
+                        </span>
+                        <span style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0 }}>{count} module{count === 1 ? '' : 's'}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 3 }}>Company</div>
+                    <input className="form-input" style={{ fontSize: 13, padding: '7px 10px' }} value={mergeCompany} onChange={e => setMergeCompany(e.target.value)} placeholder="Company name" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 3 }}>Title</div>
+                    <input className="form-input" style={{ fontSize: 13, padding: '7px 10px' }} value={mergeTitle} onChange={e => setMergeTitle(e.target.value)} placeholder="Title (optional)" />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setMergeConfirm(false)} disabled={merging}>Cancel</button>
+                  <button className="btn-primary" style={{ fontSize: 12 }} onClick={confirmMerge} disabled={merging || !mergePrimary}>{merging ? 'Merging…' : 'Confirm merge'}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Merge result toast */}
+          {mergeToast && (
+            <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 60, background: 'var(--surface)', border: '1px solid var(--teal-glow)', color: 'var(--teal)', fontSize: 13, fontWeight: 600, padding: '10px 18px', borderRadius: 999, boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}>
+              {mergeToast}
+            </div>
+          )}
+
           {/* ── LEFT: Jobs sidebar ── */}
           <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--border)', background: 'var(--bg2)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-            <div style={{ padding: '12px 14px 6px', fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text3)', fontWeight: 600 }}>
-              Work Experience
+            <div style={{ padding: '12px 14px 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+              <span style={{ fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text3)', fontWeight: 600 }}>Work Experience</span>
+              {mergeMode ? (
+                <span style={{ fontSize: 10, color: 'var(--teal)', fontWeight: 600 }}>Select to merge</span>
+              ) : jobs.length >= 2 && (
+                <button
+                  onClick={() => { setMergeMode(true); setMergeSelected([]); setMergeConfirm(false) }}
+                  className="btn-ghost"
+                  style={{ fontSize: 10, padding: '2px 8px' }}
+                >
+                  Merge
+                </button>
+              )}
             </div>
 
             {jobs.length === 0 && !showAddJob && (
@@ -502,44 +647,79 @@ export default function LibraryPage() {
               </div>
             )}
 
-            {jobs.map(job => (
+            {jobs.map(job => {
+              const checked = mergeSelected.includes(job.id)
+              const active = mergeMode ? checked : selectedJobId === job.id
+              return (
               <button
                 key={job.id}
-                onClick={() => { setSelectedJobId(job.id); setEditingJobId(null); setEditJobError(null); setConfirmDeleteJobId(null) }}
+                onClick={() => {
+                  if (mergeMode) { toggleMergeSelect(job.id); return }
+                  setSelectedJobId(job.id); setEditingJobId(null); setEditJobError(null); setConfirmDeleteJobId(null)
+                }}
                 style={{
-                  display: 'block', width: '100%', textAlign: 'left',
+                  display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%', textAlign: 'left',
                   padding: '10px 14px', border: 'none',
-                  borderLeft: `2px solid ${selectedJobId === job.id ? 'var(--teal)' : 'transparent'}`,
-                  background: selectedJobId === job.id ? 'var(--teal-dim)' : 'transparent',
+                  borderLeft: `2px solid ${active ? 'var(--teal)' : 'transparent'}`,
+                  background: active ? 'var(--teal-dim)' : 'transparent',
                   cursor: 'pointer', transition: 'all 0.1s',
                 } as React.CSSProperties}
-                onMouseEnter={e => { if (selectedJobId !== job.id) e.currentTarget.style.background = 'var(--bg3)' }}
-                onMouseLeave={e => { if (selectedJobId !== job.id) e.currentTarget.style.background = 'transparent' }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg3)' }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
               >
-                <div style={{ fontSize: 13, fontWeight: 600, color: selectedJobId === job.id ? 'var(--teal)' : 'var(--text)', marginBottom: 2 }}>
-                  {displayCompany(job.company)}
-                </div>
-                <div style={{ fontSize: 11, color: selectedJobId === job.id ? 'var(--teal)' : 'var(--text3)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  {job.title && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{job.title}</span>}
-                  {(job.start_date || job.end_date) && (
-                    <span style={{ fontFamily: 'var(--mono)', opacity: 0.8 }}>
-                      {[job.start_date, job.end_date].filter(Boolean).join('–')}
-                    </span>
-                  )}
+                {mergeMode && (
                   <span style={{
-                    fontSize: 10, padding: '1px 5px', borderRadius: 10,
-                    background: selectedJobId === job.id && jobModules(job.id).length > 0 ? 'var(--teal-dim)' : 'var(--surface)',
-                    color: selectedJobId === job.id && jobModules(job.id).length > 0 ? 'var(--teal)' : 'var(--text3)',
-                    border: '1px solid var(--border2)',
+                    flexShrink: 0, marginTop: 1, width: 14, height: 14, borderRadius: 3,
+                    border: `1.5px solid ${checked ? 'var(--teal)' : 'var(--border2)'}`,
+                    background: checked ? 'var(--teal)' : 'transparent',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   }}>
-                    {jobModules(job.id).length}
+                    {checked && <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 6.5l2.5 2.5 4.5-5" /></svg>}
                   </span>
-                </div>
+                )}
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: active ? 'var(--teal)' : 'var(--text)', marginBottom: 2 }}>
+                    {displayCompany(job.company)}
+                  </div>
+                  <div style={{ fontSize: 11, color: active ? 'var(--teal)' : 'var(--text3)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    {job.title && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{job.title}</span>}
+                    {(job.start_date || job.end_date) && (
+                      <span style={{ fontFamily: 'var(--mono)', opacity: 0.8 }}>
+                        {[job.start_date, job.end_date].filter(Boolean).join('–')}
+                      </span>
+                    )}
+                    <span style={{
+                      fontSize: 10, padding: '1px 5px', borderRadius: 10,
+                      background: active && jobModules(job.id).length > 0 ? 'var(--teal-dim)' : 'var(--surface)',
+                      color: active && jobModules(job.id).length > 0 ? 'var(--teal)' : 'var(--text3)',
+                      border: '1px solid var(--border2)',
+                    }}>
+                      {jobModules(job.id).length}
+                    </span>
+                  </div>
+                </span>
               </button>
-            ))}
+              )
+            })}
+
+            {/* Merge action bar (merge mode) */}
+            {mergeMode && (
+              <div style={{ marginTop: 'auto', borderTop: '1px solid var(--border)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg2)', position: 'sticky', bottom: 0 }}>
+                <span style={{ fontSize: 11, color: 'var(--text3)', flex: 1 }}>{mergeSelected.length} selected</span>
+                <button className="btn-ghost" style={{ fontSize: 11, padding: '5px 10px' }} onClick={exitMergeMode}>Cancel</button>
+                <button
+                  className="btn-primary"
+                  style={{ fontSize: 11, padding: '5px 10px', opacity: mergeSelected.length < 2 ? 0.5 : 1, cursor: mergeSelected.length < 2 ? 'default' : 'pointer' }}
+                  disabled={mergeSelected.length < 2}
+                  onClick={openMergeConfirm}
+                >
+                  Merge →
+                </button>
+              </div>
+            )}
 
             {/* Add job */}
-            {showAddJob ? (
+            {!mergeMode && (showAddJob ? (
               <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)' }}>
                 <input
                   autoFocus
@@ -605,7 +785,7 @@ export default function LibraryPage() {
                   )}
                 </button>
               </div>
-            )}
+            ))}
           </div>
 
           {/* ── RIGHT: Main panel ── */}
