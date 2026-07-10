@@ -536,19 +536,33 @@ export default function GeneratePage() {
   // ── Building step: live theme coverage ─────────────────────────────────────
   const coveredThemes = useMemo(() => {
     const covered = new Set<string>()
-    const themes = confirmedThemes.length > 0 ? confirmedThemes : (jdData?.extracted_themes ?? [])
-    for (const m of rankedModules) {
-      if (!selectedIds.includes(m.module_id)) continue
-      // Tag-based coverage (set at parse time in library)
-      for (const t of m.themes ?? []) covered.add(t)
-      // Content-based coverage: check if any JD theme string appears in effective content
-      const effectiveContent = (moduleContentOverrides[m.module_id] ?? m.content).toLowerCase()
-      for (const theme of themes) {
-        if (effectiveContent.includes(theme.toLowerCase())) covered.add(theme)
+    const themes = confirmedThemes.length > 0
+      ? confirmedThemes
+      : (jdData?.extracted_themes ?? [])
+    const selectedModules = rankedModules.filter(m =>
+      selectedIds.includes(m.module_id)
+    )
+    for (const theme of themes) {
+      const themeLower = theme.toLowerCase()
+      for (const m of selectedModules) {
+        const effectiveContent = (
+          moduleContentOverrides[m.module_id] ?? m.content
+        ).toLowerCase()
+        // Tag match: module explicitly tagged with this JD theme
+        if ((m.themes ?? []).some(t => t.toLowerCase() === themeLower)) {
+          covered.add(theme)
+          break
+        }
+        // Content match: JD theme phrase appears in module text
+        if (effectiveContent.includes(themeLower)) {
+          covered.add(theme)
+          break
+        }
       }
     }
     return covered
-  }, [rankedModules, selectedIds, moduleContentOverrides, confirmedThemes, jdData?.extracted_themes])
+  }, [rankedModules, selectedIds, moduleContentOverrides,
+      confirmedThemes, jdData?.extracted_themes])
 
   useEffect(() => {
     // Don't save ephemeral / terminal states
@@ -1636,32 +1650,6 @@ export default function GeneratePage() {
             )}
 
             {/* Estimated ATS score */}
-            {estimatedAtsScore !== null && (
-              <div style={{ marginBottom: 18 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Est. ATS Match</div>
-                  <div style={{
-                    fontSize: 12, fontWeight: 700,
-                    color: estimatedAtsScore >= 85 ? 'var(--teal)' : estimatedAtsScore >= 75 ? '#4ade80' : estimatedAtsScore >= 60 ? '#eab308' : '#ef4444',
-                  }}>
-                    {estimatedAtsScore}
-                  </div>
-                </div>
-                <div style={{ height: 4, background: 'var(--bg3)', borderRadius: 999, overflow: 'hidden' }}>
-                  <div style={{
-                    height: '100%',
-                    width: `${estimatedAtsScore}%`,
-                    background: estimatedAtsScore >= 85 ? 'var(--teal)' : estimatedAtsScore >= 75 ? '#4ade80' : estimatedAtsScore >= 60 ? '#eab308' : '#ef4444',
-                    borderRadius: 999,
-                    transition: 'width 0.3s',
-                  }} />
-                </div>
-                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>
-                  {estimatedAtsScore >= 75 ? '✓ Above interview threshold' : 'Cover more phrases to reach 75+'}
-                </div>
-              </div>
-            )}
-
             {/* Job title coverage check */}
             {jdData?.extracted_job_title && (
               <div style={{ marginBottom: 18 }}>
