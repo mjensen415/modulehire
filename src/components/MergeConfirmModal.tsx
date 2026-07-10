@@ -136,9 +136,9 @@ export default function MergeConfirmModal({
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 12, padding: 22, width: '100%', maxWidth: 440, maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.4)' }}>
         {phase === 'pick' ? (
           <>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Which entry should be the primary?</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, lineHeight: 1.5 }}>Modules and skills from the others move into this one; the rest are removed.</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Merge work experience entries</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, lineHeight: 1.5 }}>All modules and skills from every selected entry will be combined into the primary. Duplicate entries are removed — no modules or skills are lost.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
               {experiences.map(e => {
                 const isPrimary = primaryId === e.id
                 return (
@@ -148,10 +148,16 @@ export default function MergeConfirmModal({
                       <span style={{ fontSize: 13, fontWeight: 600, color: isPrimary ? 'var(--teal)' : 'var(--text)' }}>{e.company}</span>
                       {e.title && <span style={{ fontSize: 12, color: 'var(--text3)' }}> — {e.title}</span>}
                     </span>
-                    <span style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0 }}>{e.moduleCount} module{e.moduleCount === 1 ? '' : 's'}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0 }}>
+                      {e.moduleCount === 0 && !isPrimary ? '0 modules — skills only' : `${e.moduleCount} module${e.moduleCount === 1 ? '' : 's'}`}
+                    </span>
                   </label>
                 )
               })}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, fontSize: 12, color: 'var(--teal)', fontWeight: 600 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M12 5v14M5 12h14" /></svg>
+              {experiences.reduce((sum, e) => sum + e.moduleCount, 0)} module{experiences.reduce((sum, e) => sum + e.moduleCount, 0) === 1 ? '' : 's'} total will be combined
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
               <div>
@@ -166,7 +172,7 @@ export default function MergeConfirmModal({
             {error && <div style={{ fontSize: 12, color: 'var(--rose)', marginBottom: 12 }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button className="btn-ghost" style={{ fontSize: 12 }} onClick={onCancel} disabled={busy}>Cancel</button>
-              <button className="btn-primary" style={{ fontSize: 12 }} onClick={onContinue} disabled={busy || !primaryId}>{busy ? 'Working…' : 'Continue'}</button>
+              <button className="btn-primary" style={{ fontSize: 12 }} onClick={onContinue} disabled={busy || !primaryId}>{busy ? 'Working…' : 'Combine →'}</button>
             </div>
           </>
         ) : (

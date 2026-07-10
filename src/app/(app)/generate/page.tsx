@@ -187,6 +187,7 @@ export default function GeneratePage() {
   const [skills, setSkills] = useState<string[]>([])
   const [includeSkills, setIncludeSkills] = useState(true)
   const [skillInput, setSkillInput] = useState('')
+  const [confirmReplaceSkills, setConfirmReplaceSkills] = useState(false)
   const [posVariant, setPosVariant] = useState<'A' | 'B' | 'C' | 'D'>('A')
   const [jobTitle, setJobTitle] = useState('')
   const [jobTitleSaving, setJobTitleSaving] = useState(false)
@@ -535,19 +536,33 @@ export default function GeneratePage() {
   // ── Building step: live theme coverage ─────────────────────────────────────
   const coveredThemes = useMemo(() => {
     const covered = new Set<string>()
-    const themes = confirmedThemes.length > 0 ? confirmedThemes : (jdData?.extracted_themes ?? [])
-    for (const m of rankedModules) {
-      if (!selectedIds.includes(m.module_id)) continue
-      // Tag-based coverage (set at parse time in library)
-      for (const t of m.themes ?? []) covered.add(t)
-      // Content-based coverage: check if any JD theme string appears in effective content
-      const effectiveContent = (moduleContentOverrides[m.module_id] ?? m.content).toLowerCase()
-      for (const theme of themes) {
-        if (effectiveContent.includes(theme.toLowerCase())) covered.add(theme)
+    const themes = confirmedThemes.length > 0
+      ? confirmedThemes
+      : (jdData?.extracted_themes ?? [])
+    const selectedModules = rankedModules.filter(m =>
+      selectedIds.includes(m.module_id)
+    )
+    for (const theme of themes) {
+      const themeLower = theme.toLowerCase()
+      for (const m of selectedModules) {
+        const effectiveContent = (
+          moduleContentOverrides[m.module_id] ?? m.content
+        ).toLowerCase()
+        // Tag match: module explicitly tagged with this JD theme
+        if ((m.themes ?? []).some(t => t.toLowerCase() === themeLower)) {
+          covered.add(theme)
+          break
+        }
+        // Content match: JD theme phrase appears in module text
+        if (effectiveContent.includes(themeLower)) {
+          covered.add(theme)
+          break
+        }
       }
     }
     return covered
-  }, [rankedModules, selectedIds, moduleContentOverrides, confirmedThemes, jdData?.extracted_themes])
+  }, [rankedModules, selectedIds, moduleContentOverrides,
+      confirmedThemes, jdData?.extracted_themes])
 
   useEffect(() => {
     // Don't save ephemeral / terminal states
@@ -1040,6 +1055,15 @@ export default function GeneratePage() {
     } else if (e.key === 'Backspace' && !skillInput && skills.length > 0) {
       setSkills(s => s.slice(0, -1))
     }
+  }
+
+  // Fill the skills section from the user's confirmed library skills. Overwrite
+  // only after an inline confirm if the field already has content.
+  function handleUseMySkills() {
+    const names = (skillsData?.user_skills ?? []).map(s => s.name)
+    if (names.length === 0) return
+    if (skills.length === 0) setSkills(names)
+    else setConfirmReplaceSkills(true)
   }
 
   // ── Download helper (cross-origin blob trick for correct filename) ───────────
@@ -1626,32 +1650,6 @@ export default function GeneratePage() {
             )}
 
             {/* Estimated ATS score */}
-            {estimatedAtsScore !== null && (
-              <div style={{ marginBottom: 18 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Est. ATS Match</div>
-                  <div style={{
-                    fontSize: 12, fontWeight: 700,
-                    color: estimatedAtsScore >= 85 ? 'var(--teal)' : estimatedAtsScore >= 75 ? '#4ade80' : estimatedAtsScore >= 60 ? '#eab308' : '#ef4444',
-                  }}>
-                    {estimatedAtsScore}
-                  </div>
-                </div>
-                <div style={{ height: 4, background: 'var(--bg3)', borderRadius: 999, overflow: 'hidden' }}>
-                  <div style={{
-                    height: '100%',
-                    width: `${estimatedAtsScore}%`,
-                    background: estimatedAtsScore >= 85 ? 'var(--teal)' : estimatedAtsScore >= 75 ? '#4ade80' : estimatedAtsScore >= 60 ? '#eab308' : '#ef4444',
-                    borderRadius: 999,
-                    transition: 'width 0.3s',
-                  }} />
-                </div>
-                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>
-                  {estimatedAtsScore >= 75 ? '✓ Above interview threshold' : 'Cover more phrases to reach 75+'}
-                </div>
-              </div>
-            )}
-
             {/* Job title coverage check */}
             {jdData?.extracted_job_title && (
               <div style={{ marginBottom: 18 }}>
@@ -2220,10 +2218,30 @@ export default function GeneratePage() {
 
               {/* Skills */}
               <div style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Skills section</div>
-                  <button className={`mod-toggle ${includeSkills ? '' : 'off'}`} onClick={() => setIncludeSkills(v => !v)} aria-label="Toggle skills" />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {includeSkills && (skillsData?.user_skills.length ?? 0) > 0 && (
+                      <button
+                        onClick={handleUseMySkills}
+                        style={{ fontSize: 11, padding: '3px 9px', border: '1px solid var(--border2)', borderRadius: 5, background: 'none', color: 'var(--teal)', cursor: 'pointer', fontFamily: 'var(--font)' }}
+                      >
+                        Use my skills ✦
+                      </button>
+                    )}
+                    <button className={`mod-toggle ${includeSkills ? '' : 'off'}`} onClick={() => setIncludeSkills(v => !v)} aria-label="Toggle skills" />
+                  </div>
                 </div>
+                {includeSkills && skillsData === null && (
+                  <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', marginBottom: 8 }}>Skills load after a JD is analyzed.</div>
+                )}
+                {includeSkills && confirmReplaceSkills && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 12, color: 'var(--text2)' }}>
+                    Replace with your confirmed skills?
+                    <button className="btn-primary" style={{ fontSize: 11 }} onClick={() => { setSkills((skillsData?.user_skills ?? []).map(s => s.name)); setConfirmReplaceSkills(false) }}>Replace</button>
+                    <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => setConfirmReplaceSkills(false)}>Cancel</button>
+                  </div>
+                )}
                 {includeSkills && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px', background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 8, alignItems: 'center', minHeight: 42 }}>
                     {skills.map(s => (
@@ -2260,7 +2278,7 @@ export default function GeneratePage() {
               </div>
               {jdText.trim().length > 0 ? (
                 <div style={{ fontSize: 13, lineHeight: 1.85, color: 'var(--text-secondary, var(--text2))', whiteSpace: 'pre-wrap' }}>
-                  {highlightJdText(jdText, skillsData?.jd_skills ?? [], (skillsData?.user_skills ?? []).map(s => s.name))}
+                  {highlightJdText(jdText, confirmedPhrases, (skillsData?.user_skills ?? []).map(s => s.name))}
                 </div>
               ) : (
                 <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>Re-paste your JD in step 1 to enable highlights.</div>
