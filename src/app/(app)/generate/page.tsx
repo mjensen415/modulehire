@@ -237,6 +237,7 @@ export default function GeneratePage() {
   type UserSkill = { name: string; category: string | null; job_id: string }
   const [skillsData, setSkillsData] = useState<{ jd_skills: string[]; user_skills: UserSkill[] } | null>(null)
   const [skillsExpanded, setSkillsExpanded] = useState(false)
+  const [jdRefExpanded, setJdRefExpanded] = useState(false)
   const [fastTrackLoading, setFastTrackLoading] = useState(false)
   // Inline module editing
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null)
@@ -2265,25 +2266,48 @@ export default function GeneratePage() {
             </div>
           </div>
 
-            {/* Right: JD Reference panel */}
-            <div style={{ flex: '0 0 42%', minWidth: 0, borderLeft: '1px solid var(--border2)', display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '20px 22px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>JD Reference</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text3)' }}>
-                  <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(29,158,117,0.18)', border: '1px solid rgba(29,158,117,0.4)' }} />Matched
-                </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text3)' }}>
-                  <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(186,117,23,0.15)', border: '1px solid rgba(186,117,23,0.4)' }} />Gap
-                </span>
-              </div>
-              {jdText.trim().length > 0 ? (
-                <div style={{ fontSize: 13, lineHeight: 1.85, color: 'var(--text-secondary, var(--text2))', whiteSpace: 'pre-wrap' }}>
-                  {highlightJdText(jdText, confirmedPhrases, (skillsData?.user_skills ?? []).map(s => s.name))}
+          </div>
+
+          {/* JD reference — collapsible strip at the bottom of the module panel */}
+          <div style={{ borderTop: '0.5px solid var(--border)', flexShrink: 0, background: jdRefExpanded ? 'var(--surface-0, var(--surface))' : 'transparent' }}>
+            <button
+              onClick={() => setJdRefExpanded(v => !v)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '10px 16px', textAlign: 'left' }}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 500, color: 'var(--text2)' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M8 13h8M8 17h8M8 9h2" /></svg>
+                JD reference
+              </span>
+              {skillsData && (() => {
+                const matched = confirmedPhrases.filter(p => isCovered(p, allSelectedContent)).length
+                const gaps = confirmedPhrases.length - matched
+                return (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 999, background: 'rgba(29,158,117,0.15)', color: 'var(--teal)' }}>{matched} matched</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 999, background: 'rgba(186,117,23,0.15)', color: 'var(--amber)' }}>{gaps} gaps</span>
+                  </span>
+                )
+              })()}
+              <span style={{ flex: 1 }} />
+              <svg width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="var(--text3)" strokeWidth="1.6" style={{ transform: jdRefExpanded ? 'none' : 'rotate(-90deg)', transition: 'transform 0.15s', flexShrink: 0 }}><path d="M1 2l4 4 4-4" /></svg>
+            </button>
+            {jdRefExpanded && (
+              <>
+                <div style={{ maxHeight: 240, overflowY: 'auto', padding: '12px 16px', fontSize: 12, lineHeight: 1.9, color: 'var(--text-secondary, var(--text2))', whiteSpace: 'pre-wrap' }}>
+                  {jdText.trim().length > 0
+                    ? highlightJdText(jdText, confirmedPhrases, (skillsData?.user_skills ?? []).map(s => s.name))
+                    : <span style={{ fontStyle: 'italic', color: 'var(--text3)' }}>Re-paste your JD in step 1 to enable highlights.</span>}
                 </div>
-              ) : (
-                <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>Re-paste your JD in step 1 to enable highlights.</div>
-              )}
-            </div>
+                <div style={{ borderTop: '0.5px solid var(--border)', padding: '8px 16px', background: 'var(--surface-0, var(--surface))', display: 'flex', gap: 14 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text3)' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(29,158,117,0.18)', border: '1px solid rgba(29,158,117,0.4)' }} />Matched
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text3)' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(186,117,23,0.15)', border: '1px solid rgba(186,117,23,0.4)' }} />Gap
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Footer bar */}
