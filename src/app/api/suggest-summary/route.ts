@@ -61,25 +61,33 @@ Required shape:
   "themes_used": ["theme1", "theme2"]
 }`
 
-    const raw = await aiComplete([{ role: 'user', content: prompt }], 400)
-    const stripped = raw
+    // Assistant prefill: seed the reply with '{' so the model must emit valid JSON.
+    const raw = await aiComplete([
+      { role: 'user', content: prompt },
+      { role: 'assistant', content: '{' },
+    ], 600)
+
+    // The model continues from after the '{', so reconstruct the full object.
+    const full = '{' + raw
+    const stripped = full
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
       .trim()
-    const start = stripped.indexOf('{')
+    // stripped is guaranteed to start with '{' (start === 0); only the closing
+    // brace needs locating.
     const end = stripped.lastIndexOf('}')
-    if (start === -1 || end === -1) {
-      console.error('[suggest-summary] No JSON object found. Raw response:', raw)
+    if (end === -1) {
+      console.error('[suggest-summary] No closing brace found. Raw response:', raw)
       return NextResponse.json({ error: 'AI did not return JSON' }, { status: 502 })
     }
 
     let parsed: { suggested?: unknown; themes_used?: unknown }
     try {
-      parsed = JSON.parse(jsonrepair(stripped.slice(start, end + 1)))
+      parsed = JSON.parse(jsonrepair(stripped.slice(0, end + 1)))
     } catch (parseErr) {
       console.error('[suggest-summary] JSON.parse failed:', parseErr)
       console.error('[suggest-summary] Raw response:', raw)
-      console.error('[suggest-summary] Sliced JSON candidate:', stripped.slice(start, end + 1))
+      console.error('[suggest-summary] Sliced JSON candidate:', stripped.slice(0, end + 1))
       return NextResponse.json({ error: 'AI returned malformed JSON' }, { status: 502 })
     }
 

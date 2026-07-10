@@ -187,6 +187,7 @@ export default function GeneratePage() {
   const [skills, setSkills] = useState<string[]>([])
   const [includeSkills, setIncludeSkills] = useState(true)
   const [skillInput, setSkillInput] = useState('')
+  const [confirmReplaceSkills, setConfirmReplaceSkills] = useState(false)
   const [posVariant, setPosVariant] = useState<'A' | 'B' | 'C' | 'D'>('A')
   const [jobTitle, setJobTitle] = useState('')
   const [jobTitleSaving, setJobTitleSaving] = useState(false)
@@ -1040,6 +1041,15 @@ export default function GeneratePage() {
     } else if (e.key === 'Backspace' && !skillInput && skills.length > 0) {
       setSkills(s => s.slice(0, -1))
     }
+  }
+
+  // Fill the skills section from the user's confirmed library skills. Overwrite
+  // only after an inline confirm if the field already has content.
+  function handleUseMySkills() {
+    const names = (skillsData?.user_skills ?? []).map(s => s.name)
+    if (names.length === 0) return
+    if (skills.length === 0) setSkills(names)
+    else setConfirmReplaceSkills(true)
   }
 
   // ── Download helper (cross-origin blob trick for correct filename) ───────────
@@ -2220,10 +2230,30 @@ export default function GeneratePage() {
 
               {/* Skills */}
               <div style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Skills section</div>
-                  <button className={`mod-toggle ${includeSkills ? '' : 'off'}`} onClick={() => setIncludeSkills(v => !v)} aria-label="Toggle skills" />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {includeSkills && (skillsData?.user_skills.length ?? 0) > 0 && (
+                      <button
+                        onClick={handleUseMySkills}
+                        style={{ fontSize: 11, padding: '3px 9px', border: '1px solid var(--border2)', borderRadius: 5, background: 'none', color: 'var(--teal)', cursor: 'pointer', fontFamily: 'var(--font)' }}
+                      >
+                        Use my skills ✦
+                      </button>
+                    )}
+                    <button className={`mod-toggle ${includeSkills ? '' : 'off'}`} onClick={() => setIncludeSkills(v => !v)} aria-label="Toggle skills" />
+                  </div>
                 </div>
+                {includeSkills && skillsData === null && (
+                  <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', marginBottom: 8 }}>Skills load after a JD is analyzed.</div>
+                )}
+                {includeSkills && confirmReplaceSkills && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 12, color: 'var(--text2)' }}>
+                    Replace with your confirmed skills?
+                    <button className="btn-primary" style={{ fontSize: 11 }} onClick={() => { setSkills((skillsData?.user_skills ?? []).map(s => s.name)); setConfirmReplaceSkills(false) }}>Replace</button>
+                    <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => setConfirmReplaceSkills(false)}>Cancel</button>
+                  </div>
+                )}
                 {includeSkills && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px', background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 8, alignItems: 'center', minHeight: 42 }}>
                     {skills.map(s => (
