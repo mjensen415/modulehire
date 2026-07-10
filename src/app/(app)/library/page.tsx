@@ -161,6 +161,14 @@ export default function LibraryPage() {
   const [mergeConfirm, setMergeConfirm] = useState(false)
   const [mergeToast, setMergeToast] = useState('')
 
+  // Post-merge duplicate module detection
+  type DupModule = { id: string; content: string | null }
+  type DupPair = { module_a: DupModule; module_b: DupModule; similarity: number }
+  const [dupModulePairs, setDupModulePairs] = useState<DupPair[]>([])
+  const [dupBannerVisible, setDupBannerVisible] = useState(false)
+  const [dupPanelOpen, setDupPanelOpen] = useState(false)
+  const [dupResolved, setDupResolved] = useState<Record<string, true>>({})
+
   // ─── Load all data ──────────────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
@@ -243,6 +251,7 @@ export default function LibraryPage() {
 
   const selectedModules = selectedJobId ? jobModules(selectedJobId) : []
   const selectedSkills = selectedJobId ? skillsForJob(selectedJobId) : []
+  const unresolvedDupPairs = dupModulePairs.filter(p => !dupResolved[`${p.module_a.id}|${p.module_b.id}`])
 
   // Cluster skills by category (technical → domain → leadership → General), dropping empty groups.
   const skillGroups = SKILL_GROUPS
@@ -444,6 +453,40 @@ export default function LibraryPage() {
     setLoadTrigger(t => t + 1) // refresh jobs / modules / assignments / skills
     setMergeToast(`Merged ${count} ${count === 1 ? 'entry' : 'entries'}`)
     setTimeout(() => setMergeToast(''), 4000)
+    // Check the kept entry for content-duplicate modules created by the merge.
+    setDupModulePairs([]); setDupBannerVisible(false); setDupPanelOpen(false); setDupResolved({})
+    fetch('/api/find-duplicate-modules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_experience_id: keepId }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data.duplicate_pairs) && data.duplicate_pairs.length > 0) {
+          setDupModulePairs(data.duplicate_pairs)
+          setDupBannerVisible(true)
+        }
+      })
+      .catch(() => {})
+  }
+
+  const dupPairKey = (p: DupPair) => `${p.module_a.id}|${p.module_b.id}`
+
+  // Resolve a duplicate pair: 'a'/'b' soft-deletes the other module; 'both' keeps them.
+  async function resolveDupPair(p: DupPair, choice: 'a' | 'b' | 'both') {
+    const key = dupPairKey(p)
+    if (choice !== 'both') {
+      const deleteId = choice === 'a' ? p.module_b.id : p.module_a.id
+      setModules(prev => prev.filter(m => m.id !== deleteId))
+      await fetch(`/api/modules/${deleteId}`, { method: 'DELETE' }).catch(() => {})
+    }
+    const remaining = dupModulePairs.filter(x => dupPairKey(x) !== key && !dupResolved[dupPairKey(x)])
+    setDupResolved(r => ({ ...r, [key]: true }))
+    if (remaining.length === 0) {
+      setDupPanelOpen(false)
+      setDupBannerVisible(false)
+      setLoadTrigger(t => t + 1) // refresh module list
+    }
   }
 
   async function deleteJob(jobId: string) {
@@ -777,6 +820,42 @@ export default function LibraryPage() {
                     </>
                   )}
                 </div>
+
+                {/* Post-merge duplicate-module banner */}
+                {dupBannerVisible && !dupPanelOpen && unresolvedDupPairs.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '10px 20px 0', padding: '10px 14px', borderRadius: 8, background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)' }}>
+                    <span style={{ fontSize: 13, color: 'var(--teal)', flex: 1 }}>⚠ {unresolvedDupPairs.length} possible duplicate module{unresolvedDupPairs.length === 1 ? '' : 's'} found after merge.</span>
+                    <button className="btn-ghost" style={{ fontSize: 12, color: 'var(--teal)' }} onClick={() => setDupPanelOpen(true)}>Review →</button>
+                    <button onClick={() => setDupBannerVisible(false)} aria-label="Dismiss" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--teal)', fontSize: 16, lineHeight: 1, padding: '0 2px' }}>×</button>
+                  </div>
+                )}
+
+                {/* Duplicate-module review panel */}
+                {dupPanelOpen && unresolvedDupPairs.length > 0 && (
+                  <div style={{ margin: '10px 20px 0', padding: 14, borderRadius: 8, background: 'var(--surface)', border: '1px solid var(--teal-glow)', maxHeight: 320, overflowY: 'auto' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Review duplicate modules</span>
+                      <button onClick={() => setDupPanelOpen(false)} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 16, lineHeight: 1, padding: '0 2px' }}>×</button>
+                    </div>
+                    {unresolvedDupPairs.map(p => (
+                      <div key={`${p.module_a.id}|${p.module_b.id}`} style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 10 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 8 }}>
+                          {([['MODULE A', p.module_a], ['MODULE B', p.module_b]] as const).map(([label, m]) => (
+                            <div key={label}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.05em', marginBottom: 3 }}>{label}</div>
+                              <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}>{m.content}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => resolveDupPair(p, 'a')}>Keep A</button>
+                          <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => resolveDupPair(p, 'b')}>Keep B</button>
+                          <button className="btn-ghost" style={{ fontSize: 11 }} onClick={() => resolveDupPair(p, 'both')}>Keep both</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Two-column: modules | skills */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', flex: 1, minHeight: 0, overflow: 'hidden', borderBottom: '1px solid var(--border)' }}>
