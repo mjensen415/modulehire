@@ -6,7 +6,7 @@ import ScoreGauge from '@/components/ScoreGauge'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
-type Step = 'input' | 'analyzing' | 'building' | 'configuring' | 'generating' | 'done'
+type Step = 'input' | 'analyzing' | 'matching' | 'assembling' | 'confirm' | 'generating' | 'done'
 
 type AlignmentSuggestion = {
   theme: string
@@ -91,11 +91,12 @@ const SKILL_GROUP_ORDER: { key: string | null; label: string }[] = [
 
 // ─── STEP INDICATOR ───────────────────────────────────────────────────────────
 
-const STEPS: Step[] = ['input', 'building', 'configuring', 'done']
+const STEPS: Step[] = ['input', 'matching', 'assembling', 'confirm', 'done']
 const STEP_LABELS: Record<string, string> = {
   input: 'Job description',
-  building: 'Review & build',
-  configuring: 'Configure',
+  matching: 'Match',
+  assembling: 'Assemble',
+  confirm: 'Confirm',
   done: 'Download',
 }
 
@@ -103,9 +104,9 @@ function StepIndicator({ current }: { current: Step }) {
   // Map transient steps to their display step
   const display: Step =
     current === 'analyzing' ? 'input' :
-    current === 'generating' ? 'configuring' :
+    current === 'generating' ? 'confirm' :
     current
-  const displaySteps: Step[] = ['input', 'building', 'configuring']
+  const displaySteps: Step[] = ['input', 'matching', 'assembling', 'confirm']
   const currentIdx = displaySteps.indexOf(display)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
@@ -163,6 +164,11 @@ export default function GeneratePage() {
   const [rankedModules, setRankedModules] = useState<RankedModule[]>([])
   const [unmatchedModules, setUnmatchedModules] = useState<LibModule[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  // User-arranged order of module ids (set by drag-reorder in the assembling step).
+  const [moduleOrder, setModuleOrder] = useState<string[]>([])
+  const [dragModuleId, setDragModuleId] = useState<string | null>(null)
+  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set())
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [showUnmatched, setShowUnmatched] = useState(false)
   const [contact, setContact] = useState<Contact>({ name: '', email: '', phone: '', linkedin: '', location: '' })
   const [summaryOverride, setSummaryOverride] = useState('')
@@ -230,7 +236,6 @@ export default function GeneratePage() {
   type UserSkill = { name: string; category: string | null; job_id: string }
   const [skillsData, setSkillsData] = useState<{ jd_skills: string[]; user_skills: UserSkill[] } | null>(null)
   const [skillsExpanded, setSkillsExpanded] = useState(false)
-  const [jdTextExpanded, setJdTextExpanded] = useState(false)
   const [fastTrackLoading, setFastTrackLoading] = useState(false)
   // Inline module editing
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null)
@@ -286,7 +291,7 @@ export default function GeneratePage() {
         setRankedModules(data.ranked ?? [])
         setUnmatchedModules(data.unmatched ?? [])
         setSelectedIds((data.ranked ?? []).filter((m: RankedModule) => m.match_score >= 60).map((m: RankedModule) => m.module_id))
-        setStep('building')
+        setStep('matching')
       })
       .catch(e => {
         setErrorMessage((e as Error).message)
@@ -305,11 +310,11 @@ export default function GeneratePage() {
         if (!draft) return
         // Map old step names from before the 3-step redesign, then guard terminal states
         const stepMap: Record<string, Step> = {
-          confirming: 'building', selecting: 'building', aligning: 'building',
+          confirming: 'matching', selecting: 'matching', aligning: 'matching', building: 'matching', configuring: 'confirm',
         }
         const rawStep = draft.step as string
         const mappedStep: Step = stepMap[rawStep] ?? rawStep as Step
-        const safeStep: Step = mappedStep === 'done' || mappedStep === 'generating' ? 'configuring' : mappedStep
+        const safeStep: Step = mappedStep === 'done' || mappedStep === 'generating' ? 'confirm' : mappedStep
         // Only show the banner on 'input' step; for deeper steps, restore silently
         if (safeStep === 'input' || safeStep === 'analyzing') {
           setHasDraft(true)
@@ -343,7 +348,7 @@ export default function GeneratePage() {
     if (draft.include_awards !== undefined) setIncludeAwards(draft.include_awards as boolean)
     if (draft.awards_text !== undefined) setAwardsText(draft.awards_text as string)
     // Re-fetch ranked modules if restoring past input
-    if (draft.jd_id && ['building', 'configuring'].includes(targetStep)) {
+    if (draft.jd_id && ['matching', 'assembling', 'confirm'].includes(targetStep)) {
       fetch(`/api/job-descriptions/${draft.jd_id}`)
         .then(r => r.json())
         .then(data => {
@@ -449,6 +454,17 @@ export default function GeneratePage() {
   )
   const allSelectedContent = useMemo(() => selectedModuleContents.join(' '), [selectedModuleContents])
 
+  // Selected modules in the user's arranged order (moduleOrder), for the assembling step.
+  const assembledOrder = useMemo(() => {
+    const selected = rankedModules.filter(m => selectedIds.includes(m.module_id))
+    if (moduleOrder.length === 0) return selected
+    const byId = new Map(selected.map(m => [m.module_id, m]))
+    const ordered: RankedModule[] = []
+    for (const id of moduleOrder) { const m = byId.get(id); if (m) { ordered.push(m); byId.delete(id) } }
+    for (const m of selected) if (byId.has(m.module_id)) ordered.push(m)
+    return ordered
+  }, [rankedModules, selectedIds, moduleOrder])
+
   // Highlight JD skill phrases inside the raw JD text: teal when the selected
   // modules (or a confirmed user skill) cover the phrase, amber when it's a gap.
   // Locating uses simple case-insensitive substring matching, longest phrase
@@ -550,7 +566,7 @@ export default function GeneratePage() {
 
   // Pre-fill contact + skills when reaching configuring step
   useEffect(() => {
-    if (step !== 'configuring') return
+    if (step !== 'confirm') return
 
     // Pre-fill contact + summary from saved profile
     fetch('/api/me').then(r => r.json()).then(profile => {
@@ -659,7 +675,7 @@ export default function GeneratePage() {
 
   // Background alignment fetch when entering building step
   useEffect(() => {
-    if (step !== 'building') return
+    if (step !== 'matching') return
     if (!jdData?.jd_id || selectedIds.length === 0) return
     if (alignmentSuggestions.length > 0 || alignmentMatched.length > 0 || alignmentLoading) return
     setAlignmentLoading(true)
@@ -794,8 +810,8 @@ export default function GeneratePage() {
       const ids: string[] = data.module_ids ?? []
       if (ids.length === 0) throw new Error('No matching modules found — build manually instead.')
       setSelectedIds(ids)
-      // Skip the building step: generate directly with the auto-selected modules.
-      await handleGenerate(ids)
+      // Skip matching + assembling — jump straight to the confirm step.
+      setStep('confirm')
     } catch (e) {
       setErrorMessage((e as Error).message)
     } finally {
@@ -833,7 +849,7 @@ export default function GeneratePage() {
         setSkills(skillModules.map(m => m.title))
       }
 
-      setStep('building')
+      setStep('matching')
     } catch (e) {
       setErrorMessage((e as Error).message)
     } finally {
@@ -908,6 +924,20 @@ export default function GeneratePage() {
       ;[arr[idx], arr[next]] = [arr[next], arr[idx]]
       return arr
     })
+  }
+
+  // Drag-reorder in the assembling step: move draggedId to targetId's slot in the
+  // global moduleOrder (seeded from the current selection order on first drag).
+  function reorderModule(draggedId: string, targetId: string) {
+    if (draggedId === targetId) return
+    const currentOrder = assembledOrder.map(m => m.module_id)
+    const arr = [...currentOrder]
+    const from = arr.indexOf(draggedId)
+    const to = arr.indexOf(targetId)
+    if (from === -1 || to === -1) return
+    arr.splice(from, 1)
+    arr.splice(to, 0, draggedId)
+    setModuleOrder(arr)
   }
 
   function addUnmatched(m: LibModule) {
@@ -1124,10 +1154,15 @@ export default function GeneratePage() {
     try {
       // Fast track passes an explicit ordered id list (its picks may include
       // modules outside rankedModules); the manual flow derives them from the
-      // ranked list filtered by the user's selection.
-      const orderedIds = explicitIds ?? rankedModules
-        .filter(m => selectedIds.includes(m.module_id))
-        .map(m => m.module_id)
+      // ranked list filtered by the user's selection, honoring any drag-reorder
+      // arranged in the assembling step.
+      const orderedIds = explicitIds ?? (() => {
+        const selected = rankedModules.filter(m => selectedIds.includes(m.module_id)).map(m => m.module_id)
+        if (moduleOrder.length === 0) return selected
+        const inOrder = moduleOrder.filter(id => selectedIds.includes(id))
+        const rest = selected.filter(id => !inOrder.includes(id))
+        return [...inOrder, ...rest]
+      })()
 
       // Merge content overrides (manual edits) + accepted alignment rewrites
       // Accepted alignment suggestions take priority over manual edits
@@ -1144,6 +1179,7 @@ export default function GeneratePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           module_ids: orderedIds,
+          module_order: orderedIds,
           jd_id: jdData!.jd_id,
           ...(hasAugmentations && { module_augmentations: moduleAugmentations }),
           positioning_variant: posVariant,
@@ -1170,7 +1206,7 @@ export default function GeneratePage() {
       if (!res.ok) {
         if (data.code === 'monthly_generation_limit') {
           setShowMonthlyLimitModal(true)
-          setStep('configuring')
+          setStep('confirm')
           return
         }
         throw new Error(data.error ?? 'Generation failed')
@@ -1187,7 +1223,7 @@ export default function GeneratePage() {
       setStep('done')
     } catch (e) {
       setErrorMessage((e as Error).message)
-      setStep('configuring')
+      setStep('confirm')
     }
   }
 
@@ -1247,29 +1283,14 @@ export default function GeneratePage() {
           <StepIndicator current={step} />
         </div>
         <div className="top-bar-right">
-          {step === 'building' && (
-            <>
-              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep('input')}>← Back</button>
-              <button className="btn-primary" onClick={() => setStep('configuring')} disabled={selectedIds.length === 0}>
-                Continue →
-              </button>
-            </>
-          )}
-          {step === 'configuring' && (
-            <>
-              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep('building')}>← Back</button>
-              <button className="btn-primary" onClick={() => handleGenerate()} disabled={!contact.name || !contact.email}>
-                Generate resume →
-              </button>
-            </>
-          )}
+          {/* Step nav for matching / assembling / confirm lives in each step's footer bar. */}
           {step === 'done' && generatedUrls && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button
                 className="btn-ghost"
                 style={{ fontSize: 12 }}
                 title="Auto-adjust: re-rank modules for better keyword coverage"
-                onClick={() => setStep('building')}
+                onClick={() => setStep('matching')}
               >
                 ↺ Auto-adjust
               </button>
@@ -1353,11 +1374,11 @@ export default function GeneratePage() {
                     fetch('/api/draft-generation').then(r => r.json()).then(({ draft }) => {
                       if (draft) {
                         const stepMap: Record<string, Step> = {
-                          confirming: 'building', selecting: 'building', aligning: 'building',
+                          confirming: 'matching', selecting: 'matching', aligning: 'matching', building: 'matching', configuring: 'confirm',
                         }
                         const rawStep = draft.step as string
                         const mapped: Step = stepMap[rawStep] ?? rawStep as Step
-                        const safeStep: Step = mapped === 'done' || mapped === 'generating' ? 'configuring' : mapped
+                        const safeStep: Step = mapped === 'done' || mapped === 'generating' ? 'confirm' : mapped
                         restoreDraft(draft, safeStep)
                       }
                     })
@@ -1410,7 +1431,7 @@ export default function GeneratePage() {
               {/* Build manually */}
               <button
                 type="button"
-                onClick={() => setStep('building')}
+                onClick={() => setStep('matching')}
                 disabled={fastTrackLoading}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', width: '100%',
@@ -1531,8 +1552,9 @@ export default function GeneratePage() {
       )}
 
       {/* ── BUILDING ──────────────────────────────────────────────────────── */}
-      {step === 'building' && (
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      {step === 'matching' && (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
           {/* Left: JD Intelligence panel */}
           <div style={{
@@ -2126,50 +2148,6 @@ export default function GeneratePage() {
                             )}
                           </div>
 
-                          {/* Section 1.5: Job description text with highlights (collapsible) */}
-                          {jdText.trim().length > 0 && (
-                            <div style={{ marginBottom: 22 }}>
-                              <button
-                                onClick={() => setJdTextExpanded(v => !v)}
-                                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', marginBottom: jdTextExpanded ? 10 : 0 }}
-                              >
-                                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Job description</span>
-                                {/* Legend */}
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text3)' }}>
-                                  <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(29,158,117,0.18)', border: '1px solid rgba(29,158,117,0.4)', display: 'inline-block' }} />
-                                  Matched
-                                </span>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text3)' }}>
-                                  <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(186,117,23,0.15)', border: '1px solid rgba(186,117,23,0.4)', display: 'inline-block' }} />
-                                  Gap
-                                </span>
-                                <span style={{ flex: 1 }} />
-                                <svg
-                                  width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="var(--text3)" strokeWidth="1.6"
-                                  style={{ transform: jdTextExpanded ? 'none' : 'rotate(-90deg)', transition: 'transform 0.15s', flexShrink: 0 }}
-                                >
-                                  <path d="M1 2l4 4 4-4" />
-                                </svg>
-                              </button>
-                              {jdTextExpanded && (
-                                <div style={{
-                                  maxHeight: 260,
-                                  overflowY: 'auto',
-                                  fontSize: 13,
-                                  lineHeight: 1.85,
-                                  color: 'var(--text-secondary, var(--text2))',
-                                  whiteSpace: 'pre-wrap',
-                                  background: 'var(--surface)',
-                                  border: '1px solid var(--border2)',
-                                  borderRadius: 8,
-                                  padding: '12px 14px',
-                                }}>
-                                  {highlightJdText(jdText, jdSkills, userSkills.map(s => s.name))}
-                                </div>
-                              )}
-                            </div>
-                          )}
-
                           {/* Section 2: Your confirmed skills */}
                           <div>
                             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Your confirmed skills</div>
@@ -2268,12 +2246,160 @@ export default function GeneratePage() {
               </div>
             </div>
           </div>
+
+            {/* Right: JD Reference panel */}
+            <div style={{ flex: '0 0 42%', minWidth: 0, borderLeft: '1px solid var(--border2)', display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '20px 22px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>JD Reference</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text3)' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(29,158,117,0.18)', border: '1px solid rgba(29,158,117,0.4)' }} />Matched
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text3)' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(186,117,23,0.15)', border: '1px solid rgba(186,117,23,0.4)' }} />Gap
+                </span>
+              </div>
+              {jdText.trim().length > 0 ? (
+                <div style={{ fontSize: 13, lineHeight: 1.85, color: 'var(--text-secondary, var(--text2))', whiteSpace: 'pre-wrap' }}>
+                  {highlightJdText(jdText, skillsData?.jd_skills ?? [], (skillsData?.user_skills ?? []).map(s => s.name))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>Re-paste your JD in step 1 to enable highlights.</div>
+              )}
+            </div>
+          </div>
+
+          {/* Footer bar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border2)', padding: '12px 22px', flexShrink: 0 }}>
+            <span style={{ fontSize: 12, color: 'var(--text3)' }}>{selectedIds.length} module{selectedIds.length === 1 ? '' : 's'} selected</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep('input')}>← Back</button>
+              <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('assembling')} disabled={selectedIds.length === 0}>Next: Review →</button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* ── CONFIGURING ───────────────────────────────────────────────────── */}
-      {step === 'configuring' && (
-        <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
+      {/* ── ASSEMBLING ──────────────────────────────────────────────────────── */}
+      {step === 'assembling' && (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
+            <div style={{ maxWidth: 820, margin: '0 auto' }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Assemble your resume</div>
+              <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 24 }}>Your selected modules, arranged into resume sections. Drag ⠿ to reorder within a section, edit inline, or remove.</div>
+              {(() => {
+                const usk = skillsData?.user_skills ?? []
+                const summaryMods = assembledOrder.filter(m => m.type === 'positioning' || m.type === 'summary')
+                const workMods = assembledOrder.filter(m => m.type !== 'positioning' && m.type !== 'summary' && m.source_company)
+                const otherMods = assembledOrder.filter(m => m.type !== 'positioning' && m.type !== 'summary' && !m.source_company)
+                const jobGroups = new Map<string, { company: string; role: string; date: string | null; mods: RankedModule[] }>()
+                for (const m of workMods) {
+                  const key = `${m.source_company ?? '—'}||${m.source_role_title ?? ''}`
+                  if (!jobGroups.has(key)) jobGroups.set(key, { company: m.source_company ?? '—', role: m.source_role_title ?? '', date: m.date_start ?? null, mods: [] })
+                  jobGroups.get(key)!.mods.push(m)
+                }
+                const jobList = [...jobGroups.values()].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''))
+                const clamp: React.CSSProperties = { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }
+                const iconBtn: React.CSSProperties = { fontSize: 11, padding: '2px 7px', border: '1px solid var(--border2)', borderRadius: 4, background: 'none', color: 'var(--text3)', cursor: 'pointer', fontFamily: 'var(--font)' }
+                const sectionHead = (t: string) => <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '22px 0 10px' }}>{t}</div>
+                const empty = (label: string) => (
+                  <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', padding: '8px 0' }}>
+                    No {label} modules selected. <button onClick={() => setStep('matching')} style={{ background: 'none', border: 'none', color: 'var(--teal)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 12, padding: 0 }}>+ Add</button>
+                  </div>
+                )
+                const card = (m: RankedModule) => {
+                  const isEditing = editingModuleId === m.module_id
+                  const expanded = expandedModules.has(m.module_id)
+                  const content = moduleContentOverrides[m.module_id] ?? m.content
+                  return (
+                    <div
+                      key={m.module_id}
+                      draggable={!isEditing}
+                      onDragStart={() => setDragModuleId(m.module_id)}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={() => { if (dragModuleId) reorderModule(dragModuleId, m.module_id); setDragModuleId(null) }}
+                      onDragEnd={() => setDragModuleId(null)}
+                      style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 12px', marginBottom: 6, opacity: dragModuleId === m.module_id ? 0.4 : 1 }}
+                    >
+                      <span style={{ cursor: 'grab', color: 'var(--text3)', fontSize: 14, userSelect: 'none', marginTop: 1 }} title="Drag to reorder">⠿</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 3 }}>{m.title}</div>
+                        {isEditing ? (
+                          <>
+                            <textarea value={editingContent} onChange={e => setEditingContent(e.target.value)} rows={4} autoFocus style={{ width: '100%', fontSize: 12, lineHeight: 1.5, color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--teal-glow)', borderRadius: 6, padding: '7px 9px', resize: 'vertical', fontFamily: 'var(--font)', boxSizing: 'border-box', outline: 'none' }} />
+                            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                              <button className="btn-primary" style={{ fontSize: 11 }} onClick={() => saveModuleEdit(m.module_id)} disabled={editSaving}>{editSaving ? 'Saving…' : 'Save'}</button>
+                              <button className="btn-ghost" style={{ fontSize: 11 }} onClick={cancelModuleEdit}>Cancel</button>
+                            </div>
+                          </>
+                        ) : (
+                          <div
+                            onClick={() => setExpandedModules(s => { const n = new Set(s); if (n.has(m.module_id)) n.delete(m.module_id); else n.add(m.module_id); return n })}
+                            style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5, cursor: 'pointer', whiteSpace: 'pre-wrap', ...(expanded ? {} : clamp) }}
+                          >
+                            {content}
+                          </div>
+                        )}
+                      </div>
+                      {!isEditing && (
+                        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                          <button style={iconBtn} title="Edit" onClick={() => startEditModule(m)}>Edit</button>
+                          {jdData?.jd_id && <button style={{ ...iconBtn, opacity: improveLoading[m.module_id] ? 0.5 : 1 }} title="Improve with AI" disabled={improveLoading[m.module_id]} onClick={() => handleImprove(m.module_id)}>{improveLoading[m.module_id] ? '…' : '✦'}</button>}
+                          <button style={iconBtn} title="Remove" onClick={() => toggleModule(m.module_id)}>×</button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+                return (
+                  <>
+                    {sectionHead('Summary')}
+                    {summaryMods.length ? summaryMods.map(card) : empty('summary')}
+
+                    {sectionHead('Work Experience')}
+                    {jobList.length ? jobList.map(g => (
+                      <div key={`${g.company}||${g.role}`} style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text2)', marginBottom: 6, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                          <span>{g.company}{g.role ? ` — ${g.role}` : ''}</span>
+                          {(g.mods[0]?.date_start || g.mods[0]?.date_end) && <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)', fontWeight: 400 }}>{[g.mods[0].date_start, g.mods[0].date_end].filter(Boolean).join(' – ')}</span>}
+                        </div>
+                        {g.mods.map(card)}
+                      </div>
+                    )) : empty('work experience')}
+
+                    {sectionHead('Skills')}
+                    {usk.length ? (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {usk.map((s, i) => (
+                          <span key={`${s.name}-${i}`} style={{ fontSize: 12, fontWeight: 600, borderRadius: 999, padding: '3px 10px', background: 'rgba(29,158,117,0.10)', color: '#1d9e75', border: '1px solid var(--teal-glow)' }}>{s.name}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>No confirmed skills. <a href="/library" style={{ color: 'var(--teal)', textDecoration: 'none' }}>Add them in your library</a></div>
+                    )}
+
+                    {otherMods.length > 0 && (<>{sectionHead('Other')}{otherMods.map(card)}</>)}
+                  </>
+                )
+              })()}
+            </div>
+          </div>
+          {/* Footer bar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border2)', padding: '12px 22px', flexShrink: 0 }}>
+            <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+              {assembledOrder.length} module{assembledOrder.length === 1 ? '' : 's'} · {new Set(assembledOrder.filter(m => m.source_company).map(m => `${m.source_company}||${m.source_role_title ?? ''}`)).size} job{new Set(assembledOrder.filter(m => m.source_company).map(m => `${m.source_company}||${m.source_role_title ?? ''}`)).size === 1 ? '' : 's'} covered
+            </span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep('matching')}>← Back</button>
+              <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('confirm')} disabled={selectedIds.length === 0}>Next: Confirm →</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CONFIRM ───────────────────────────────────────────────────────── */}
+      {step === 'confirm' && (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
           <div style={{ maxWidth: 720, margin: '0 auto' }}>
 
             {errorMessage && (
@@ -2886,6 +3012,33 @@ export default function GeneratePage() {
               </div>
             </div>
 
+            {/* PREVIEW summary (collapsible, collapsed by default) */}
+            <div className="config-section">
+              <button onClick={() => setPreviewOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}>
+                <span className="config-section-title">Preview</span>
+                <span style={{ flex: 1 }} />
+                <svg width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="var(--text3)" strokeWidth="1.6" style={{ transform: previewOpen ? 'none' : 'rotate(-90deg)', transition: 'transform 0.15s' }}><path d="M1 2l4 4 4-4" /></svg>
+              </button>
+              {previewOpen && (
+                <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text2)', lineHeight: 1.9 }}>
+                  <div><strong style={{ color: 'var(--text)' }}>Role:</strong> {jdData?.extracted_job_title || jdData?.extracted_role_type || '—'}</div>
+                  <div><strong style={{ color: 'var(--text)' }}>Modules:</strong> {selectedIds.length} across {new Set(assembledOrder.filter(m => m.source_company).map(m => `${m.source_company}||${m.source_role_title ?? ''}`)).size} job(s)</div>
+                  <div><strong style={{ color: 'var(--text)' }}>Bullet style:</strong> {bulletStyle === '' ? 'None' : bulletStyle}</div>
+                  <div><strong style={{ color: 'var(--text)' }}>Cover letter:</strong> {includeCoverLetter ? 'Yes' : 'No'}</div>
+                </div>
+              )}
+            </div>
+
+          </div>
+          </div>
+
+          {/* Footer bar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border2)', padding: '12px 22px', flexShrink: 0 }}>
+            <span style={{ fontSize: 12, color: 'var(--text3)' }}>{selectedIds.length} module{selectedIds.length === 1 ? '' : 's'} · {bulletStyle === '' ? 'no bullets' : `bullet ${bulletStyle}`}</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep('assembling')}>← Back</button>
+              <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => handleGenerate()} disabled={!contact.name || !contact.email}>Generate resume →</button>
+            </div>
           </div>
         </div>
       )}
@@ -2971,7 +3124,7 @@ export default function GeneratePage() {
 
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button className="btn-ghost" style={{ fontSize: 13 }} onClick={() => setStep('configuring')}>Generate another variant</button>
+                  <button className="btn-ghost" style={{ fontSize: 13 }} onClick={() => setStep('confirm')}>Generate another variant</button>
                   <button className="btn-ghost" style={{ fontSize: 13 }} onClick={reset}>Start over</button>
                 </div>
               </div>
