@@ -2278,7 +2278,7 @@ export default function GeneratePage() {
               </div>
               {jdText.trim().length > 0 ? (
                 <div style={{ fontSize: 13, lineHeight: 1.85, color: 'var(--text-secondary, var(--text2))', whiteSpace: 'pre-wrap' }}>
-                  {highlightJdText(jdText, skillsData?.jd_skills ?? [], (skillsData?.user_skills ?? []).map(s => s.name))}
+                  {highlightJdText(jdText, confirmedPhrases, (skillsData?.user_skills ?? []).map(s => s.name))}
                 </div>
               ) : (
                 <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>Re-paste your JD in step 1 to enable highlights.</div>
