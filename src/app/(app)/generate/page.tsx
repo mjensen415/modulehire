@@ -155,6 +155,13 @@ function Spinner() {
   )
 }
 
+const ANALYZE_MESSAGES = [
+  'Analyzing job description…',
+  'Extracting key themes…',
+  'Matching to your library…',
+  'Ranking your modules…',
+]
+
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 export default function GeneratePage() {
@@ -238,6 +245,9 @@ export default function GeneratePage() {
   const [skillsData, setSkillsData] = useState<{ jd_skills: string[]; user_skills: UserSkill[] } | null>(null)
   const [skillsExpanded, setSkillsExpanded] = useState(false)
   const [jdRefExpanded, setJdRefExpanded] = useState(false)
+  // Animated analyzing state: cycling status message index + fade visibility.
+  const [analyzeMsgIdx, setAnalyzeMsgIdx] = useState(0)
+  const [analyzeMsgVisible, setAnalyzeMsgVisible] = useState(true)
   const [fastTrackLoading, setFastTrackLoading] = useState(false)
   // Inline module editing
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null)
@@ -466,6 +476,22 @@ export default function GeneratePage() {
     for (const m of selected) if (byId.has(m.module_id)) ordered.push(m)
     return ordered
   }, [rankedModules, selectedIds, moduleOrder])
+
+  // Cycle the analyzing status message every 1.8s (fade out, swap, fade in).
+  // Only runs while step === 'analyzing'; resets and clears on step change.
+  useEffect(() => {
+    if (step !== 'analyzing') return
+    setAnalyzeMsgIdx(0)
+    setAnalyzeMsgVisible(true)
+    const id = setInterval(() => {
+      setAnalyzeMsgVisible(false)
+      setTimeout(() => {
+        setAnalyzeMsgIdx(i => (i + 1) % ANALYZE_MESSAGES.length)
+        setAnalyzeMsgVisible(true)
+      }, 200)
+    }, 1800)
+    return () => clearInterval(id)
+  }, [step])
 
   // Highlight JD skill phrases inside the raw JD text: teal when the selected
   // modules (or a confirmed user skill) cover the phrase, amber when it's a gap.
@@ -1487,7 +1513,29 @@ export default function GeneratePage() {
             </div>
           )}
 
-          {!jdData && (<>
+          {/* Animated analyzing loader — replaces the form during analysis */}
+          {step === 'analyzing' && (
+            <div style={{ maxWidth: 420, margin: '0 auto', padding: '48px 24px', textAlign: 'center' }}>
+              <style>{`
+                @keyframes mh-analyze-dot { 0%, 80%, 100% { transform: scale(0.55); opacity: 0.5 } 40% { transform: scale(1); opacity: 1 } }
+                @keyframes mh-analyze-progress { from { width: 0% } to { width: 85% } }
+              `}</style>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 26 }}>
+                {[0, 1, 2].map(i => (
+                  <span key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: '#1d9e75', display: 'inline-block', animation: `mh-analyze-dot 1.4s ease-in-out ${i * 0.2}s infinite` }} />
+                ))}
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--text)', opacity: analyzeMsgVisible ? 1 : 0, transition: 'opacity 0.2s', minHeight: 20 }}>
+                {ANALYZE_MESSAGES[analyzeMsgIdx]}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 8 }}>This usually takes 10–15 seconds</div>
+              <div style={{ width: '100%', height: 3, background: 'var(--bg3)', borderRadius: 999, marginTop: 26, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: '85%', background: '#1d9e75', borderRadius: 999, animation: 'mh-analyze-progress 12s ease-out forwards' }} />
+              </div>
+            </div>
+          )}
+
+          {!jdData && step !== 'analyzing' && (<>
           {/* Tab switcher */}
           <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid var(--border2)' }}>
             {(['paste', 'url'] as const).map(tab => (
@@ -1520,7 +1568,6 @@ export default function GeneratePage() {
                 placeholder="Paste the full job description here…"
                 value={jdText}
                 onChange={e => setJdText(e.target.value)}
-                disabled={step === 'analyzing'}
                 rows={12}
               />
               <div className="char-count">{jdText.length.toLocaleString()} characters</div>
@@ -1565,10 +1612,10 @@ export default function GeneratePage() {
               <button
                 className="btn-primary"
                 onClick={handleMatch}
-                disabled={!hasContent || step === 'analyzing'}
+                disabled={!hasContent}
                 style={!hasContent ? { opacity: 0.4 } : undefined}
               >
-                {step === 'analyzing' ? <><Spinner /> Analyzing…</> : 'Match to my library →'}
+                Match to my library →
               </button>
             </div>
           )}
