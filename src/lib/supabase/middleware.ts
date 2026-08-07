@@ -9,6 +9,8 @@ export async function updateSession(request: NextRequest, nonce?: string, csp?: 
     const headers = new Headers(request.headers)
     if (nonce) headers.set('x-nonce', nonce)
     if (csp) headers.set('Content-Security-Policy', csp)
+    // Thread pathname so server-component layouts can branch without restructuring.
+    headers.set('x-pathname', request.nextUrl.pathname)
     return NextResponse.next({ request: { headers } })
   }
 
