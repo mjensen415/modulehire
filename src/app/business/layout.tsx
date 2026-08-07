@@ -1,19 +1,16 @@
-import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import BusinessSidebar from '@/components/business/BusinessSidebar'
 
+// This layout wraps all /business routes. Auth protection for /business/* subpaths
+// is handled at the middleware level (proxy.ts → middleware.ts PROTECTED_PREFIXES).
+// The exact /business path is the public landing page and is exempt from the
+// middleware redirect — logged-out users land here, logged-in users are redirected
+// to their dashboard by business/page.tsx.
 export default async function BusinessLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
-    // /business (exact) is the public landing page — allow through.
-    // Every other /business/* route requires auth.
-    const headersList = await headers()
-    const pathname = headersList.get('x-pathname') ?? ''
-    if (pathname !== '/business') redirect('/signin')
-
     return (
       <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
         {children}

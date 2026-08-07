@@ -65,6 +65,9 @@ export async function updateSession(request: NextRequest, nonce?: string, csp?: 
   )
 
   if (!user && isProtected) {
+    // /business (exact) is the public landing page — let unauthenticated visitors through.
+    // All /business/* subpaths require auth and are caught by the prefix check above.
+    if (pathname === '/business') return supabaseResponse
     const url = request.nextUrl.clone()
     url.pathname = '/signin'
     return NextResponse.redirect(url)
