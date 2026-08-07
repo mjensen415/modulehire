@@ -115,8 +115,17 @@ export default async function BusinessDashboardPage() {
         </div>
 
         {jobRows.length === 0 ? (
-          <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text3)', fontSize: 13.5 }}>
-            No jobs yet.
+          <div style={{ padding: '44px 32px', textAlign: 'center' }}>
+            <div style={{ fontSize: 28, marginBottom: 14 }}>📋</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>
+              Post your first job
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 20, maxWidth: 340, margin: '0 auto 20px' }}>
+              Paste a job description, set your scoring criteria, and upload applicants — ModuleHire ranks them automatically.
+            </div>
+            <Link href="/business/jobs/new" className="btn-primary" style={{ display: 'inline-flex', textDecoration: 'none' }}>
+              + Create a job posting
+            </Link>
           </div>
         ) : (
           <div>

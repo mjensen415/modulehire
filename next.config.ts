@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
       {
         source: '/',
         has: [{ type: 'host', value: 'business.modulehire.com' }],
-        destination: '/business/dashboard',
+        destination: '/business',
         permanent: false,
       },
     ];
