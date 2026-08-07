@@ -6,16 +6,11 @@ import { useRouter } from 'next/navigation'
 type Weight = 'dealbreaker' | 'must_have' | 'nice_to_have'
 type Criterion = { key: string; label: string; weight: Weight; description?: string }
 
-const WEIGHT_LABELS: Record<Weight, string> = {
-  dealbreaker: 'Dealbreaker',
-  must_have: 'Must have',
-  nice_to_have: 'Nice to have',
-}
-const WEIGHT_COLORS: Record<Weight, string> = {
-  dealbreaker: '#ef4444',
-  must_have: 'var(--teal)',
-  nice_to_have: 'var(--text3)',
-}
+const WEIGHT_OPTIONS: Array<{ value: Weight; label: string; color: string; bg: string }> = [
+  { value: 'dealbreaker', label: '⚠ Dealbreaker', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
+  { value: 'must_have', label: 'Must have', color: 'var(--teal)', bg: 'var(--teal-dim)' },
+  { value: 'nice_to_have', label: 'Nice to have', color: 'var(--text3)', bg: 'var(--bg3)' },
+]
 
 let keyCounter = 0
 function nextKey() {
@@ -158,45 +153,53 @@ export default function NewJobPage() {
             We pulled these from the JD. Promote any to dealbreaker, add custom criteria, or remove ones that don&apos;t matter.
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
             {criteria.map((c) => (
-              <div key={c.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: 'var(--text3)', cursor: 'grab', fontSize: 13 }}>⠿</span>
-                <input
-                  className="form-input"
-                  type="text"
-                  value={c.label}
-                  onChange={(e) => updateCriterion(c.key, { label: e.target.value })}
-                  placeholder="Criterion label"
-                  maxLength={100}
-                  style={{ flex: 1 }}
-                />
-                <select
-                  value={c.weight}
-                  onChange={(e) => updateCriterion(c.key, { weight: e.target.value as Weight })}
-                  style={{
-                    background: 'var(--bg3)',
-                    border: '1px solid var(--border2)',
-                    borderRadius: 8,
-                    padding: '11px 10px',
-                    fontSize: 13,
-                    fontFamily: 'var(--font)',
-                    fontWeight: 600,
-                    color: WEIGHT_COLORS[c.weight],
-                    cursor: 'pointer',
-                  }}
-                >
-                  {(Object.keys(WEIGHT_LABELS) as Weight[]).map((w) => (
-                    <option key={w} value={w}>{WEIGHT_LABELS[w]}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => removeCriterion(c.key)}
-                  style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 16, padding: '4px 8px' }}
-                  aria-label="Remove criterion"
-                >
-                  ×
-                </button>
+              <div key={c.key} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ color: 'var(--text3)', cursor: 'grab', fontSize: 13, flexShrink: 0 }}>⠿</span>
+                  <input
+                    className="form-input"
+                    type="text"
+                    value={c.label}
+                    onChange={(e) => updateCriterion(c.key, { label: e.target.value })}
+                    placeholder="Criterion label"
+                    maxLength={100}
+                    style={{ flex: 1, padding: '8px 12px', fontSize: 13 }}
+                  />
+                  <button
+                    onClick={() => removeCriterion(c.key)}
+                    style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 17, padding: '2px 6px', flexShrink: 0, lineHeight: 1 }}
+                    aria-label="Remove criterion"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: 6, paddingLeft: 22 }}>
+                  {WEIGHT_OPTIONS.map((opt) => {
+                    const active = c.weight === opt.value
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateCriterion(c.key, { weight: opt.value })}
+                        style={{
+                          fontSize: 11.5,
+                          fontWeight: 600,
+                          padding: '4px 10px',
+                          borderRadius: 20,
+                          border: `1px solid ${active ? opt.color : 'var(--border2)'}`,
+                          background: active ? opt.bg : 'transparent',
+                          color: active ? opt.color : 'var(--text3)',
+                          cursor: 'pointer',
+                          fontFamily: 'var(--font)',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             ))}
           </div>

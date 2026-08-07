@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 
 function IconHouse() {
   return (
@@ -28,6 +29,13 @@ function IconSettings() {
     </svg>
   )
 }
+function IconArrowLeft() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+      <path d="M8 2.5L4 6.5l4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 
 const NAV_ITEMS = [
   { href: '/business/dashboard', label: 'Dashboard', icon: IconHouse },
@@ -37,6 +45,17 @@ const NAV_ITEMS = [
 
 export default function BusinessSidebar({ userEmail }: { userEmail: string | null }) {
   const pathname = usePathname()
+  const [orgName, setOrgName] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/business/organizations')
+      .then((r) => r.json())
+      .then((data) => {
+        const org = data.orgs?.[0]
+        if (org) setOrgName(org.name)
+      })
+      .catch(() => null)
+  }, [])
 
   return (
     <div
@@ -53,6 +72,7 @@ export default function BusinessSidebar({ userEmail }: { userEmail: string | nul
         borderRight: '1px solid var(--border)',
       }}
     >
+      {/* Header */}
       <div style={{ padding: '18px 16px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>
           ModuleHire
@@ -60,8 +80,26 @@ export default function BusinessSidebar({ userEmail }: { userEmail: string | nul
         <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--teal)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>
           for Business
         </div>
+        {orgName && (
+          <div style={{
+            marginTop: 10,
+            padding: '6px 10px',
+            background: 'var(--bg3)',
+            border: '1px solid var(--border)',
+            borderRadius: 7,
+            fontSize: 12.5,
+            fontWeight: 600,
+            color: 'var(--text)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            {orgName}
+          </div>
+        )}
       </div>
 
+      {/* Nav */}
       <nav style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + '/')
@@ -88,8 +126,30 @@ export default function BusinessSidebar({ userEmail }: { userEmail: string | nul
             </Link>
           )
         })}
+
+        {/* Divider */}
+        <div style={{ borderTop: '1px solid var(--border)', margin: '8px 0' }} />
+
+        <Link
+          href="/dashboard"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 10px',
+            borderRadius: 7,
+            fontSize: 12.5,
+            fontWeight: 500,
+            textDecoration: 'none',
+            color: 'var(--text3)',
+          }}
+        >
+          <IconArrowLeft />
+          Back to ModuleHire
+        </Link>
       </nav>
 
+      {/* Footer */}
       <div style={{ padding: '14px 12px', borderTop: '1px solid var(--border)' }}>
         <div style={{ fontSize: 11.5, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {userEmail ?? ''}
