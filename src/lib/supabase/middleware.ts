@@ -54,6 +54,7 @@ export async function updateSession(request: NextRequest, nonce?: string, csp?: 
     '/preview',
     '/admin',
     '/onboarding',
+    '/business',
   ]
 
   const { pathname } = request.nextUrl

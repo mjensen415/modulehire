@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getOrgRole } from '@/lib/business/org-access'
 import { requiredString } from '@/lib/validate'
 
 function slugify(name: string): string {
@@ -88,5 +89,51 @@ export async function GET() {
   } catch (error) {
     console.error('[business/organizations GET]', error)
     return NextResponse.json({ error: 'Could not load organizations.' }, { status: 500 })
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const body = await req.json()
+    const { org_id } = body
+    if (!org_id || typeof org_id !== 'string') {
+      return NextResponse.json({ error: 'org_id required' }, { status: 400 })
+    }
+
+    const role = await getOrgRole(supabase, org_id, user.id)
+    if (role !== 'owner') {
+      return NextResponse.json({ error: 'Only owners can update organization settings.' }, { status: 403 })
+    }
+
+    const update: Record<string, unknown> = {}
+
+    if (body.name !== undefined) {
+      const name = requiredString(body.name, 100, 'name')
+      update.name = name
+    }
+
+    if (Object.keys(update).length === 0) {
+      return NextResponse.json({ error: 'No fields to update.' }, { status: 400 })
+    }
+
+    const { data: org, error } = await supabase
+      .from('organizations')
+      .update(update)
+      .eq('id', org_id)
+      .select('id, name, slug, tier')
+      .single()
+    if (error) throw error
+
+    return NextResponse.json({ org })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'ValidationError') {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    console.error('[business/organizations PATCH]', error)
+    return NextResponse.json({ error: 'Could not update organization.' }, { status: 500 })
   }
 }

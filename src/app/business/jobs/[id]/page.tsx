@@ -136,6 +136,7 @@ export default function JobWorkspacePage() {
   const [statusFilter, setStatusFilter] = useState<'all' | Status>('all')
   const [sortKey, setSortKey] = useState<SortKey>('score')
   const [search, setSearch] = useState('')
+  const [jobStatusUpdating, setJobStatusUpdating] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [csvUploading, setCsvUploading] = useState(false)
   const [noteText, setNoteText] = useState('')
@@ -250,6 +251,26 @@ export default function JobWorkspacePage() {
     }
   }
 
+  async function handleJobStatusChange(status: string) {
+    if (!job || jobStatusUpdating) return
+    const previous = job.status
+    setJob({ ...job, status })
+    setJobStatusUpdating(true)
+    try {
+      const res = await fetch(`/api/business/job-postings/${jobId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      if (!res.ok) throw new Error('Could not update job status')
+    } catch (e) {
+      setJob({ ...job, status: previous })
+      setError((e as Error).message)
+    } finally {
+      setJobStatusUpdating(false)
+    }
+  }
+
   async function handleAddNote() {
     if (!detail || !noteText.trim() || savingNote) return
     setSavingNote(true)
@@ -309,12 +330,30 @@ export default function JobWorkspacePage() {
           {job?.title ?? '…'}
         </h1>
         {job && (
-          <span style={{
-            fontSize: 10.5, fontWeight: 700, padding: '3px 8px', borderRadius: 20,
-            color: jobStatusCfg.color, background: jobStatusCfg.bg, textTransform: 'uppercase', letterSpacing: '0.04em',
-          }}>
-            {job.status}
-          </span>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {(['draft', 'active', 'paused', 'closed'] as const).map((s) => {
+              const cfg = STATUS_CONFIG[s as Status] ?? STATUS_CONFIG.new
+              const active = job.status === s
+              return (
+                <button
+                  key={s}
+                  onClick={() => handleJobStatusChange(s)}
+                  disabled={jobStatusUpdating}
+                  style={{
+                    fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 20,
+                    border: `1px solid ${active ? cfg.color : 'var(--border2)'}`,
+                    background: active ? cfg.bg : 'transparent',
+                    color: active ? cfg.color : 'var(--text3)',
+                    cursor: jobStatusUpdating ? 'default' : 'pointer',
+                    textTransform: 'uppercase' as const, letterSpacing: '0.04em',
+                    fontFamily: 'var(--font)', transition: 'all 0.15s',
+                  }}
+                >
+                  {s}
+                </button>
+              )
+            })}
+          </div>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           <input ref={fileInputRef} type="file" accept=".pdf,.docx" onChange={handleFileUpload} style={{ display: 'none' }} />

@@ -5,6 +5,7 @@ import { updateSession } from '@/lib/supabase/middleware'
 const ALLOWED_ORIGINS = new Set([
   'https://modulehire.com',
   'https://www.modulehire.com',
+  'https://business.modulehire.com',
   'http://localhost:3000',
   'http://localhost:3001',
 ])
@@ -28,12 +29,17 @@ const CORS_HEADERS = 'Content-Type, Authorization'
 function buildCsp(nonce: string): string {
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    // Cloudflare Turnstile: strict-dynamic covers the script we inject at
+    // runtime; the explicit host is a fallback for browsers without
+    // strict-dynamic support.
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://challenges.cloudflare.com`,
     "style-src 'self' 'unsafe-inline'",
     "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com",
+    // Turnstile renders its challenge in an iframe from this origin.
+    "frame-src https://challenges.cloudflare.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
