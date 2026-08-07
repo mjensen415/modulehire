@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { requiredString } from '@/lib/validate'
 
 function slugify(name: string): string {
@@ -41,7 +41,10 @@ export async function POST(req: Request) {
       .single()
     if (orgError) throw orgError
 
-    const { error: memberError } = await supabase
+    // Use admin client to bypass RLS for this internal enrollment —
+    // the user is the org owner; RLS is enforced on all other routes.
+    const admin = await createAdminClient()
+    const { error: memberError } = await admin
       .from('org_members')
       .insert({ org_id: org.id, user_id: user.id, role: 'owner' })
     if (memberError) throw memberError
@@ -51,8 +54,9 @@ export async function POST(req: Request) {
     if (error instanceof Error && error.name === 'ValidationError') {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
-    console.error('[business/organizations POST]', error)
-    return NextResponse.json({ error: 'Could not create organization.' }, { status: 500 })
+    const detail = error instanceof Error ? error.message : JSON.stringify(error)
+    console.error('[business/organizations POST]', detail)
+    return NextResponse.json({ error: 'Could not create organization.', detail }, { status: 500 })
   }
 }
 
