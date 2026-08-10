@@ -21,7 +21,7 @@ export default async function BusinessLayout({ children }: { children: React.Rea
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
       <BusinessSidebar userEmail={user.email ?? null} />
-      <main style={{ flex: 1, marginLeft: 220, padding: 40 }}>
+      <main style={{ flex: 1, marginLeft: 240, padding: 40 }}>
         {children}
       </main>
     </div>

@@ -37,7 +37,10 @@ export async function GET(req: Request) {
 
     let query = supabase
       .from('applicants')
-      .select('id, name, email, parsed_headline, overall_score, has_dealbreaker, status, scored_at, created_at', { count: 'exact' })
+      .select(
+        'id, name, email, parsed_headline, overall_score, has_dealbreaker, status, scored_at, created_at, applicant_criterion_scores ( criterion_id, score )',
+        { count: 'exact' }
+      )
       .eq('job_id', jobId)
 
     if (status) query = query.eq('status', status)

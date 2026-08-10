@@ -14,6 +14,7 @@ type Applicant = {
   status: Status
   scored_at: string | null
   created_at: string
+  applicant_criterion_scores?: Array<{ criterion_id: string; score: number | null }>
 }
 
 type CriterionScore = {
@@ -37,6 +38,21 @@ type Job = { id: string; title: string; status: string }
 
 type Status = 'new' | 'reviewing' | 'shortlisted' | 'interviewing' | 'offered' | 'rejected'
 type SortKey = 'score' | 'name' | 'date'
+
+type Weight = 'dealbreaker' | 'must_have' | 'nice_to_have'
+type Criterion = { key: string; id?: string; label: string; weight: Weight; description?: string }
+
+const CRITERIA_WEIGHT_OPTIONS: Array<{ value: Weight; label: string; color: string; bg: string }> = [
+  { value: 'dealbreaker', label: '⚠ Dealbreaker', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
+  { value: 'must_have', label: 'Must have', color: 'var(--teal)', bg: 'var(--teal-dim)' },
+  { value: 'nice_to_have', label: 'Nice to have', color: 'var(--text3)', bg: 'var(--bg3)' },
+]
+
+let criteriaKeyCounter = 0
+function nextCriteriaKey() {
+  criteriaKeyCounter += 1
+  return `nc${criteriaKeyCounter}`
+}
 
 const STATUS_CONFIG: Record<Status, { label: string; color: string; bg: string }> = {
   new:         { label: 'New',         color: 'var(--text3)',     bg: 'var(--bg3)' },
@@ -70,6 +86,20 @@ function scoreBg(score: number) {
   if (score >= 80) return 'rgba(29,158,117,0.12)'
   if (score >= 60) return 'rgba(245,158,11,0.12)'
   return 'rgba(239,68,68,0.12)'
+}
+
+function isCsvFile(file: File): boolean {
+  return file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv')
+}
+
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+}
+
+function csvEscape(value: string | number): string {
+  const s = String(value)
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+  return s
 }
 
 function timeAgo(iso: string) {
@@ -144,9 +174,17 @@ export default function JobWorkspacePage() {
   const [toast, setToast] = useState('')
   const [expandedEvidence, setExpandedEvidence] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
+  const [criteria, setCriteria] = useState<Criterion[]>([])
+  const [criteriaOpen, setCriteriaOpen] = useState(false)
+  const [criteriaSaving, setCriteriaSaving] = useState(false)
+  const [rescoring, setRescoring] = useState(false)
+  const [rescoreCount, setRescoreCount] = useState(0)
+  const [addApplicantsOpen, setAddApplicantsOpen] = useState(false)
+  const [addingApplicant, setAddingApplicant] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const csvInputRef = useRef<HTMLInputElement>(null)
+  const addApplicantInputRef = useRef<HTMLInputElement>(null)
 
   const loadApplicants = useCallback(async () => {
     try {
@@ -164,7 +202,12 @@ export default function JobWorkspacePage() {
   useEffect(() => {
     fetch(`/api/business/job-postings/${jobId}`)
       .then((r) => r.json())
-      .then((data) => { if (data.job) setJob(data.job) })
+      .then((data) => {
+        if (!data.job) return
+        setJob(data.job)
+        const loaded: Array<{ id: string; label: string; weight: Weight; description: string | null }> = data.job.criteria ?? []
+        setCriteria(loaded.map((c) => ({ key: c.id, id: c.id, label: c.label, weight: c.weight, description: c.description ?? undefined })))
+      })
     loadApplicants()
   }, [jobId, loadApplicants])
 
@@ -232,6 +275,66 @@ export default function JobWorkspacePage() {
     }
   }
 
+  async function handleAddApplicantFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return
+    const files = Array.from(fileList)
+    setAddingApplicant(true)
+    setError('')
+    try {
+      let lastApplicantId: string | null = null
+      for (const file of files) {
+        const formData = new FormData()
+        formData.append('job_id', jobId)
+        formData.append('file', file)
+        const res = await fetch(isCsvFile(file) ? '/api/business/applicants/csv' : '/api/business/applicants/upload', {
+          method: 'POST',
+          body: formData,
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error ?? `Could not upload ${file.name}`)
+        if (data.applicant?.id) lastApplicantId = data.applicant.id
+      }
+      await loadApplicants()
+      if (lastApplicantId) setSelectedId(lastApplicantId)
+      setAddApplicantsOpen(false)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setAddingApplicant(false)
+      if (addApplicantInputRef.current) addApplicantInputRef.current.value = ''
+    }
+  }
+
+  function handleExportCsv() {
+    const criterionColumns = criteria.filter((c) => c.id).map((c) => ({ id: c.id as string, label: c.label }))
+    const headers = ['Name', 'Email', 'Score', 'Status', 'Has Dealbreaker', 'Scored At', ...criterionColumns.map((c) => c.label)]
+
+    const rows = applicants.map((a) => {
+      const scoreByCriterion = new Map((a.applicant_criterion_scores ?? []).map((cs) => [cs.criterion_id, cs.score]))
+      return [
+        a.name ?? '',
+        a.email ?? '',
+        a.overall_score ?? '',
+        STATUS_CONFIG[a.status]?.label ?? a.status,
+        a.has_dealbreaker ? 'Yes' : 'No',
+        a.scored_at ?? '',
+        ...criterionColumns.map((c) => scoreByCriterion.get(c.id) ?? ''),
+      ]
+    })
+
+    const csv = [headers, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const date = new Date().toISOString().slice(0, 10)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `applicants-${slugify(job?.title ?? 'job')}-${date}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   async function handleStatusChange(status: Status) {
     if (!detail) return
     const previous = detail.status
@@ -288,6 +391,66 @@ export default function JobWorkspacePage() {
       setError((e as Error).message)
     } finally {
       setSavingNote(false)
+    }
+  }
+
+  function updateCriterion(key: string, patch: Partial<Criterion>) {
+    setCriteria((cs) => cs.map((c) => (c.key === key ? { ...c, ...patch } : c)))
+  }
+
+  function removeCriterion(key: string) {
+    setCriteria((cs) => cs.filter((c) => c.key !== key))
+  }
+
+  function addCriterion() {
+    setCriteria((cs) => [...cs, { key: nextCriteriaKey(), label: '', weight: 'must_have' }])
+  }
+
+  async function handleSaveCriteria() {
+    if (criteriaSaving || rescoring) return
+    setCriteriaSaving(true)
+    setError('')
+    try {
+      const payload = criteria
+        .filter((c) => c.label.trim())
+        .map((c) => ({ label: c.label.trim(), weight: c.weight, description: c.description }))
+
+      const res = await fetch(`/api/business/job-postings/${jobId}/criteria`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ criteria: payload }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not save criteria')
+
+      const saved: Array<{ id: string; label: string; weight: Weight; description: string | null }> = data.criteria ?? []
+      setCriteria(saved.map((c) => ({ key: c.id, id: c.id, label: c.label, weight: c.weight, description: c.description ?? undefined })))
+      setCriteriaSaving(false)
+
+      if (applicants.length === 0) {
+        setCriteriaOpen(false)
+        return
+      }
+
+      setRescoreCount(applicants.length)
+      setRescoring(true)
+      try {
+        const rescoreRes = await fetch(`/api/business/job-postings/${jobId}/rescore`, { method: 'POST' })
+        const rescoreData = await rescoreRes.json()
+        if (!rescoreRes.ok) throw new Error(rescoreData.error ?? 'Could not re-score applicants')
+        await loadApplicants()
+        if (selectedId) loadDetail(selectedId)
+        setToast(`Re-scored ${rescoreData.rescored} applicant${rescoreData.rescored === 1 ? '' : 's'}${rescoreData.errors ? ` — ${rescoreData.errors} failed` : ''}`)
+        setTimeout(() => setToast(''), 5000)
+      } catch (e) {
+        setError((e as Error).message)
+      } finally {
+        setRescoring(false)
+        setCriteriaOpen(false)
+      }
+    } catch (e) {
+      setError((e as Error).message)
+      setCriteriaSaving(false)
     }
   }
 
@@ -356,6 +519,12 @@ export default function JobWorkspacePage() {
           </div>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button className="btn-ghost" onClick={handleExportCsv} disabled={applicants.length === 0} style={{ fontSize: 12.5, padding: '6px 12px' }}>
+            ↓ Export CSV
+          </button>
+          <button className="btn-ghost" onClick={() => setCriteriaOpen(true)} style={{ fontSize: 12.5, padding: '6px 12px' }}>
+            ⚙ Criteria
+          </button>
           <input ref={fileInputRef} type="file" accept=".pdf,.docx" onChange={handleFileUpload} style={{ display: 'none' }} />
           <button className="btn-ghost" onClick={() => fileInputRef.current?.click()} disabled={uploading} style={{ fontSize: 12.5, padding: '6px 12px' }}>
             {uploading ? 'Uploading…' : '↑ Resume'}
@@ -366,6 +535,102 @@ export default function JobWorkspacePage() {
           </button>
         </div>
       </div>
+
+      {/* Criteria editor modal */}
+      {criteriaOpen && (
+        <div
+          onClick={() => { if (!criteriaSaving && !rescoring) setCriteriaOpen(false) }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 14,
+              padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', overflowY: 'auto',
+            }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', marginBottom: 4, letterSpacing: '-0.02em' }}>
+              Scoring criteria
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 18, lineHeight: 1.5 }}>
+              Changes here re-score every applicant on this job automatically.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+              {criteria.map((c) => (
+                <div key={c.key} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <input
+                      className="form-input"
+                      type="text"
+                      value={c.label}
+                      onChange={(e) => updateCriterion(c.key, { label: e.target.value })}
+                      placeholder="Criterion label"
+                      maxLength={100}
+                      style={{ flex: 1, padding: '8px 12px', fontSize: 13 }}
+                    />
+                    <button
+                      onClick={() => removeCriterion(c.key)}
+                      style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 17, padding: '2px 6px', flexShrink: 0, lineHeight: 1 }}
+                      aria-label="Remove criterion"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {CRITERIA_WEIGHT_OPTIONS.map((opt) => {
+                      const active = c.weight === opt.value
+                      return (
+                        <button
+                          key={opt.value}
+                          onClick={() => updateCriterion(c.key, { weight: opt.value })}
+                          style={{
+                            fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
+                            border: `1px solid ${active ? opt.color : 'var(--border2)'}`,
+                            background: active ? opt.bg : 'transparent',
+                            color: active ? opt.color : 'var(--text3)',
+                            cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all 0.15s',
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button onClick={addCriterion} className="btn-ghost" style={{ marginBottom: 20 }}>
+              + Add criterion
+            </button>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setCriteriaOpen(false)}
+                className="btn-ghost"
+                disabled={criteriaSaving || rescoring}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveCriteria}
+                className="btn-primary"
+                disabled={criteriaSaving || rescoring || criteria.every((c) => !c.label.trim())}
+              >
+                {criteriaSaving
+                  ? 'Saving…'
+                  : rescoring
+                    ? `Re-scoring ${rescoreCount} applicant${rescoreCount === 1 ? '' : 's'}…`
+                    : 'Save criteria'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toasts / errors */}
       {toast && (
@@ -491,6 +756,57 @@ export default function JobWorkspacePage() {
                   </div>
                 )
               })
+            )}
+          </div>
+
+          {/* Ongoing upload */}
+          <div style={{ borderTop: '1px solid var(--border)', padding: 10, flexShrink: 0 }}>
+            <input
+              ref={addApplicantInputRef}
+              type="file"
+              accept=".pdf,.docx,.csv"
+              multiple
+              onChange={(e) => handleAddApplicantFiles(e.target.files)}
+              style={{ display: 'none' }}
+            />
+            {!addApplicantsOpen ? (
+              <button
+                onClick={() => setAddApplicantsOpen(true)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  fontSize: 12.5, fontWeight: 600, color: 'var(--teal)', background: 'var(--teal-dim)',
+                  border: '1px solid var(--teal-glow)', borderRadius: 8, padding: '8px 10px',
+                  cursor: 'pointer', fontFamily: 'var(--font)',
+                }}
+              >
+                ＋ Add applicants
+              </button>
+            ) : (
+              <div
+                onClick={() => !addingApplicant && addApplicantInputRef.current?.click()}
+                style={{
+                  border: '1.5px dashed var(--border2)', borderRadius: 8, padding: '14px 10px',
+                  textAlign: 'center', cursor: addingApplicant ? 'default' : 'pointer', position: 'relative',
+                }}
+              >
+                {addingApplicant ? (
+                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+                    <span style={{ display: 'inline-block', animation: 'spin 0.8s linear infinite' }}>↻</span> Uploading…
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 4 }}>
+                      Click to browse PDF, DOCX, or CSV
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setAddApplicantsOpen(false) }}
+                      style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 11, cursor: 'pointer', fontFamily: 'var(--font)' }}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                )}
+              </div>
             )}
           </div>
         </div>
