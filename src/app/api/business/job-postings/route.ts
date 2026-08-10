@@ -30,33 +30,31 @@ export async function POST(req: Request) {
       .single()
     if (insertError) throw insertError
 
-    const prompt = `Extract structured data from this job description. Output MUST be a raw JSON object starting with { and ending with }. No other text.
+    const prompt = `Extract structured data from this job description and return ONLY a valid JSON object — no explanation, no markdown, no code fences.
 
-Required keys:
 {
-  "extracted_company": "company name or empty string",
-  "extracted_job_title": "literal job title",
-  "extracted_role_type": "best match role type or 'other'",
-  "extracted_themes": ["5-12 short skill or competency themes"],
+  "extracted_company": "company name, or empty string if not found",
+  "extracted_job_title": "the literal job title as written",
+  "extracted_role_type": "one of: vp-community, head-of-community, director-community, senior-manager-community, community-manager, developer-relations, developer-advocacy, developer-community-manager, community-marketing, community-ops, community-enablement, content-strategy, ic-community, software-engineer, product-manager, designer, data-scientist, marketing-manager, sales, operations, finance, hr, other",
+  "extracted_themes": ["6 to 12 short skill or competency phrases this role genuinely requires — e.g. 'cross-functional collaboration', 'SQL and data analysis', 'team leadership', 'product strategy'. Extract every distinct competency the JD calls for; do not invent themes not implied by the text."],
   "extracted_seniority": "one of: ic, manager, senior-manager, director, vp, c-suite",
-  "extracted_phrases": ["5-10 exact verbatim phrases a resume should echo"]
+  "extracted_phrases": ["5 to 10 exact verbatim phrases from the job description that a strong resume should echo to pass ATS screening"]
 }
 
 Job Description:
-${rawJd}
-
-JSON:`
+${rawJd}`
 
     let job_extracted = job
+    let extractionFailed = false
     try {
       const raw = await aiComplete(
-        [
-          { role: 'user', content: prompt },
-          { role: 'assistant', content: '{' },
-        ],
-        1024
+        [{ role: 'user', content: prompt }],
+        1500
       )
-      const extracted = JSON.parse(jsonrepair('{' + raw))
+      // Strip markdown fences if the model added them despite instructions
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
+      const jsonStr = cleaned.startsWith('{') ? cleaned : cleaned.slice(cleaned.indexOf('{'))
+      const extracted = JSON.parse(jsonrepair(jsonStr))
 
       const { data: updated, error: updateError } = await supabase
         .from('job_postings')
@@ -76,6 +74,7 @@ JSON:`
       job_extracted = updated
     } catch (analyzeError) {
       // JD analysis is best-effort — keep the job posting even if extraction fails
+      extractionFailed = true
       console.error('[business/job-postings analyze]', analyzeError)
     }
 
@@ -91,6 +90,7 @@ JSON:`
         extracted_role_type: job_extracted.extracted_role_type,
         extracted_company: job_extracted.extracted_company,
         created_at: job_extracted.created_at,
+        extraction_failed: extractionFailed,
       },
     })
   } catch (error) {

@@ -68,6 +68,9 @@ export default function NewJobPage() {
       setJobId(data.job.id)
       const themes: string[] = data.job.extracted_themes ?? []
       setCriteria(themes.map((theme: string) => ({ key: nextKey(), label: theme, weight: 'must_have' as Weight })))
+      if (data.job.extraction_failed || themes.length === 0) {
+        setError('We couldn\'t automatically extract criteria from this job description — add them manually below.')
+      }
       setStep(2)
     } catch (e) {
       setError((e as Error).message)
