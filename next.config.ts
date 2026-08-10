@@ -12,6 +12,20 @@ const nextConfig: NextConfig = {
         destination: '/business',
         permanent: false,
       },
+      // Catch personal-app paths that a business user might land on after
+      // signin — redirect them to their business equivalent.
+      {
+        source: '/dashboard',
+        has: [{ type: 'host', value: 'business.modulehire.com' }],
+        destination: '/business/dashboard',
+        permanent: false,
+      },
+      {
+        source: '/onboarding',
+        has: [{ type: 'host', value: 'business.modulehire.com' }],
+        destination: '/business/onboarding',
+        permanent: false,
+      },
     ];
   },
   async headers() {

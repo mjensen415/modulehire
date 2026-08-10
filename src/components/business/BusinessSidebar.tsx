@@ -29,10 +29,11 @@ function IconSettings() {
     </svg>
   )
 }
-function IconArrowLeft() {
+function IconPerson() {
   return (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-      <path d="M8 2.5L4 6.5l4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <circle cx="7" cy="4" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M1.5 12.5c0-2.8 2.5-5 5.5-5s5.5 2.2 5.5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
     </svg>
   )
 }
@@ -127,25 +128,27 @@ export default function BusinessSidebar({ userEmail }: { userEmail: string | nul
           )
         })}
 
-        {/* Divider */}
+        {/* Context switcher */}
         <div style={{ borderTop: '1px solid var(--border)', margin: '8px 0' }} />
-
+        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.07em', padding: '4px 10px 2px' }}>
+          Switch context
+        </div>
         <Link
           href="/dashboard"
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            padding: '8px 10px',
+            padding: '9px 10px',
             borderRadius: 7,
-            fontSize: 12.5,
+            fontSize: 13.5,
             fontWeight: 500,
             textDecoration: 'none',
-            color: 'var(--text3)',
+            color: 'var(--text2)',
           }}
         >
-          <IconArrowLeft />
-          Back to ModuleHire
+          <IconPerson />
+          Personal App
         </Link>
       </nav>
 

@@ -70,6 +70,11 @@ export async function updateSession(request: NextRequest, nonce?: string, csp?: 
     if (pathname === '/business') return supabaseResponse
     const url = request.nextUrl.clone()
     url.pathname = '/signin'
+    // Preserve business context so signin redirects back to the business app,
+    // not the personal dashboard.
+    if (pathname.startsWith('/business/')) {
+      url.searchParams.set('next', '/business/dashboard')
+    }
     return NextResponse.redirect(url)
   }
 

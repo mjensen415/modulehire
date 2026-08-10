@@ -123,8 +123,7 @@ function BusinessLanding() {
           fontSize: 18, color: 'var(--text2)', lineHeight: 1.65,
           maxWidth: 560, margin: '0 auto 40px', fontWeight: 400,
         }}>
-          Paste a job description, upload your applicants, and let AI rank them against
-          your exact criteria — in minutes, not days.
+          Paste a job description, set your criteria, and get every applicant scored and ranked — before the coffee's cold.
         </p>
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>

@@ -92,6 +92,15 @@ function IconPerson() {
     </svg>
   );
 }
+function IconBuilding() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <rect x="1.5" y="1.5" width="8" height="12" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+      <rect x="9.5" y="5.5" width="4" height="8" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M4 5h3M4 7.5h3M4 10h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  );
+}
 export default function AppSidebar({ footer, tier, isAdmin }: { footer?: React.ReactNode; tier?: string; isAdmin?: boolean }) {
   const pathname = usePathname();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -154,6 +163,14 @@ export default function AppSidebar({ footer, tier, isAdmin }: { footer?: React.R
         <Link href="/support" className={`nav-item${pathname.startsWith('/support') ? ' active' : ''}`}>
           <span className="nav-item-icon">?</span>
           Support
+        </Link>
+      </div>
+
+      <div className="sidebar-section">
+        <div className="sidebar-section-label">Switch context</div>
+        <Link href="/business/dashboard" className="nav-item">
+          <span className="nav-item-icon"><IconBuilding /></span>
+          For Business
         </Link>
       </div>
 
