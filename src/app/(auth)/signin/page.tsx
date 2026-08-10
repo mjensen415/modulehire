@@ -148,6 +148,19 @@ export default function SignIn() {
         throw new Error(data.error)
       }
 
+      // When email verification is required, the user exists but is unconfirmed.
+      // Sign them in (unconfirmed users can log in under this app's model) then
+      // redirect to a "check your email" state rather than onboarding.
+      if (data.verifyEmailSent) {
+        const { error: signInErr } = await supabase.auth.signInWithPassword({
+          email: signupEmail,
+          password: signupPassword,
+        })
+        if (!signInErr) router.push('/dashboard?verify=1')
+        else router.push('/signin?verify=1')
+        return
+      }
+
       const { error: signInErr } = await supabase.auth.signInWithPassword({
         email: signupEmail,
         password: signupPassword,
