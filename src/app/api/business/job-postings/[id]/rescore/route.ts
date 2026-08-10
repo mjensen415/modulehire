@@ -31,7 +31,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     const { data: applicants, error: applicantsError } = await supabase
       .from('applicants')
-      .select('id, raw_text')
+      .select('id, name, raw_text')
       .eq('job_id', jobId)
       .not('raw_text', 'is', null)
     if (applicantsError) throw applicantsError
@@ -44,6 +44,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       try {
         await scoreApplicant({
           applicantId: applicant.id,
+          applicantName: applicant.name ?? null,
           rawText: applicant.raw_text,
           jobTitle: job.title,
           jobCompany: job.extracted_company ?? null,

@@ -153,32 +153,19 @@ function CriterionDot({ applicant, criterionId, weight }: {
   const cs = scores.find((s) => s.criterion_id === criterionId)
   if (!cs || cs.score == null) {
     return (
-      <span
-        title="Not yet scored"
-        style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: 'var(--bg3)', border: '1px dashed var(--border2)' }}
-      />
+      <span title="Not yet scored" style={{ fontSize: 13, color: 'var(--text3)' }}>—</span>
     )
   }
 
-  let color = '#f59e0b'
-  let tooltip: string | undefined
-
-  if (cs.met === true || cs.score >= 65) {
-    color = '#1d9e75'
-  } else if (cs.met === false && weight === 'dealbreaker') {
-    color = '#ef4444'
-    tooltip = '⚠ Dealbreaker not met'
-  } else if (cs.met === false || cs.score < 45) {
-    color = '#ef4444'
-  } else {
-    color = '#f59e0b'
-  }
+  const met = cs.met === true || (cs.met == null && cs.score >= 65)
+  const isDealbreakerFail = !met && weight === 'dealbreaker'
+  const color = met ? '#1d9e75' : '#ef4444'
+  const tooltip = isDealbreakerFail ? '⚠ Dealbreaker not met' : met ? 'Met' : 'Not met'
 
   return (
-    <span
-      title={tooltip}
-      style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }}
-    />
+    <span title={tooltip} style={{ fontSize: 13, fontWeight: 700, color, lineHeight: 1 }}>
+      {met ? '✓' : '✗'}
+    </span>
   )
 }
 

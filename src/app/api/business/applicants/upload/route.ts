@@ -7,6 +7,12 @@ import { scoreApplicant } from '@/lib/business/score-applicant'
 
 export const maxDuration = 60
 
+function nameFromFilename(filename: string): string | null {
+  const base = filename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ').trim()
+  if (!base) return null
+  return base.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
+}
+
 async function extractText(file: File): Promise<string> {
   if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
     const { getDocumentProxy, extractText: unpdfExtract } = await import('unpdf')
@@ -73,12 +79,18 @@ export async function POST(req: Request) {
     const name = formData.get('name')
     const email = formData.get('email')
 
+    const nameStr = typeof name === 'string' && name.trim()
+      ? name.trim().slice(0, 200)
+      : file
+        ? nameFromFilename(file.name)
+        : null
+
     const { data: applicant, error: insertError } = await supabase
       .from('applicants')
       .insert({
         org_id: job.org_id,
         job_id: job.id,
-        name: typeof name === 'string' && name.trim() ? name.trim().slice(0, 200) : null,
+        name: nameStr,
         email: typeof email === 'string' && email.trim() ? email.trim().slice(0, 200) : null,
         raw_text: rawText,
         source: 'upload',
@@ -97,6 +109,7 @@ export async function POST(req: Request) {
 
     await scoreApplicant({
       applicantId: applicant.id,
+      applicantName: nameStr,
       rawText,
       jobTitle: job.title,
       jobCompany: job.extracted_company ?? null,

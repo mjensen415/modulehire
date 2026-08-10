@@ -74,7 +74,7 @@ export async function POST(req: Request) {
 
     const { data: criteria, error: criteriaError } = await supabase
       .from('scoring_criteria')
-      .select('id, label, weight, description')
+      .select('id, label, weight, description, criterion_type, min_years')
       .eq('job_id', job.id)
       .order('sort_order', { ascending: true })
     if (criteriaError) throw criteriaError
@@ -108,8 +108,10 @@ export async function POST(req: Request) {
           .single()
         if (insertError) throw insertError
 
+        const rowName = nameCol ? row[nameCol]?.trim() || null : null
         await scoreApplicant({
           applicantId: applicant.id,
+          applicantName: rowName,
           rawText,
           jobTitle: job.title,
           jobCompany: job.extracted_company ?? null,

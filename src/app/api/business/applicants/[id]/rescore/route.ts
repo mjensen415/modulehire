@@ -14,7 +14,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     const { data: applicant, error: applicantError } = await supabase
       .from('applicants')
-      .select('id, org_id, job_id, raw_text')
+      .select('id, name, org_id, job_id, raw_text')
       .eq('id', id)
       .single()
     if (applicantError || !applicant) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -35,13 +35,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     const { data: criteria, error: criteriaError } = await supabase
       .from('scoring_criteria')
-      .select('id, label, weight, description')
+      .select('id, label, weight, description, criterion_type, min_years')
       .eq('job_id', applicant.job_id)
       .order('sort_order', { ascending: true })
     if (criteriaError) throw criteriaError
 
     await scoreApplicant({
       applicantId: applicant.id,
+      applicantName: applicant.name ?? null,
       rawText: applicant.raw_text,
       jobTitle: job.title,
       jobCompany: job.extracted_company ?? null,
