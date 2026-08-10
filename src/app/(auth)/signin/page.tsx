@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
@@ -26,6 +26,13 @@ export default function SignIn() {
   const [signupEmail, setSignupEmail] = useState('')
   const [signupPassword, setSignupPassword] = useState('')
 
+  // Cloudflare Turnstile (bot check on signup). Only active when a site key is
+  // configured; otherwise the widget is skipped and the server also no-ops.
+  const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
+  const [turnstileToken, setTurnstileToken] = useState('')
+  const turnstileRef = useRef<HTMLDivElement | null>(null)
+  const turnstileWidgetId = useRef<string | null>(null)
+
   // Forgot password
   const [forgotOpen, setForgotOpen] = useState(false)
   const [forgotEmail, setForgotEmail] = useState('')
@@ -34,22 +41,75 @@ export default function SignIn() {
 
   const router = useRouter()
   const supabase = createClient()
-  const [signinNext, setSigninNext] = useState<string>('/dashboard')
-  const [signupNext, setSignupNext] = useState<string>('/onboarding')
 
-  // Read ?next= once on the client. Sign-up always defaults to /onboarding so
-  // new accounts always hit the activation flow.
+  // Read ?next= from the URL. These are only consumed inside event handlers
+  // (never rendered), so lazy-initializing on the client causes no hydration
+  // mismatch. Sign-up always defaults to /onboarding for the activation flow.
+  const [signinNext] = useState<string>(() =>
+    typeof window === 'undefined'
+      ? '/dashboard'
+      : safeNext(new URLSearchParams(window.location.search).get('next'), '/dashboard'),
+  )
+  const [signupNext] = useState<string>(() =>
+    typeof window === 'undefined'
+      ? '/onboarding'
+      : safeNext(new URLSearchParams(window.location.search).get('next'), '/onboarding'),
+  )
+
+  // If the URL says ?signup=1, jump straight to the signup tab. Done post-mount
+  // (not via lazy init) so the server- and client-rendered initial tab match.
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const raw = new URLSearchParams(window.location.search).get('next')
-      setSigninNext(safeNext(raw, '/dashboard'))
-      setSignupNext(safeNext(raw, '/onboarding'))
-      // If the URL says ?signup=1, jump straight to the signup tab.
-      if (new URLSearchParams(window.location.search).get('signup') === '1') {
-        setActiveTab('signup')
-      }
+    if (typeof window === 'undefined') return
+    if (new URLSearchParams(window.location.search).get('signup') === '1') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional post-mount URL read to avoid a hydration mismatch on the initial tab
+      setActiveTab('signup')
     }
   }, [])
+
+  // Load + render the Turnstile widget when the signup tab is active. Explicit
+  // render (vs. auto) so we can capture the token into React state and reset it.
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY) return
+    if (activeTab !== 'signup' || forgotOpen) return
+
+    const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js'
+    type TurnstileApi = {
+      render: (el: HTMLElement, opts: Record<string, unknown>) => string
+      reset: (id?: string) => void
+    }
+    const getApi = () => (window as unknown as { turnstile?: TurnstileApi }).turnstile
+
+    const renderWidget = () => {
+      const api = getApi()
+      if (!api || !turnstileRef.current || turnstileWidgetId.current) return
+      turnstileWidgetId.current = api.render(turnstileRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: (token: string) => setTurnstileToken(token),
+        'expired-callback': () => setTurnstileToken(''),
+        'error-callback': () => setTurnstileToken(''),
+      })
+    }
+
+    if (getApi()) {
+      renderWidget()
+    } else if (!document.querySelector(`script[src="${SCRIPT_SRC}"]`)) {
+      const s = document.createElement('script')
+      s.src = SCRIPT_SRC
+      s.async = true
+      s.defer = true
+      s.onload = renderWidget
+      document.head.appendChild(s)
+    } else {
+      // Script tag exists but API not ready yet — poll briefly.
+      const t = setInterval(() => {
+        if (getApi()) {
+          clearInterval(t)
+          renderWidget()
+        }
+      }, 200)
+      return () => clearInterval(t)
+    }
+  }, [activeTab, forgotOpen, TURNSTILE_SITE_KEY])
 
   const handleSignIn = async () => {
     setError('')
@@ -71,15 +131,22 @@ export default function SignIn() {
     setError('')
     if (!signupEmail || !signupEmail.includes('@')) return setError('Please enter a valid email address.')
     if (!signupPassword || signupPassword.length < 8) return setError('Password must be at least 8 characters.')
+    if (TURNSTILE_SITE_KEY && !turnstileToken) return setError('Please complete the captcha challenge.')
     setLoading(true)
     try {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: signupEmail, password: signupPassword }),
+        body: JSON.stringify({ email: signupEmail, password: signupPassword, turnstileToken }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
+      if (!res.ok) {
+        // Reset the widget — Turnstile tokens are single-use.
+        const api = (window as unknown as { turnstile?: { reset: (id?: string) => void } }).turnstile
+        if (api && turnstileWidgetId.current) api.reset(turnstileWidgetId.current)
+        setTurnstileToken('')
+        throw new Error(data.error)
+      }
 
       const { error: signInErr } = await supabase.auth.signInWithPassword({
         email: signupEmail,
@@ -311,6 +378,10 @@ export default function SignIn() {
                   onKeyDown={e => e.key === 'Enter' && handleSignUp()}
                 />
               </div>
+
+              {TURNSTILE_SITE_KEY && (
+                <div ref={turnstileRef} style={{ marginBottom: 12, minHeight: 65 }} />
+              )}
 
               {error && <p style={{ fontSize: 13, color: 'var(--rose)', marginBottom: 12 }}>{error}</p>}
 
