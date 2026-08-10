@@ -1375,6 +1375,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } })
     }
 
+    // Email verification gate: block generation for unconfirmed accounts when
+    // REQUIRE_EMAIL_VERIFICATION is enabled. Users can still sign in, browse, and
+    // build their library — only the expensive AI generate action is gated.
+    const { needsEmailVerification } = await import('@/lib/email-verification')
+    if (needsEmailVerification(user)) {
+      return NextResponse.json(
+        { error: 'Please verify your email before generating resumes. Check your inbox or request a new link.' },
+        { status: 403 }
+      )
+    }
+
     // ── Plan gate: monthly generation limit ──────────────────────────────────
     const now = new Date()
     const month = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
