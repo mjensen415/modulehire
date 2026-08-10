@@ -101,7 +101,7 @@ export default function BusinessSidebar({ userEmail }: { userEmail: string | nul
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + '/')
           return (
@@ -150,7 +150,7 @@ export default function BusinessSidebar({ userEmail }: { userEmail: string | nul
           <IconPerson />
           Personal App
         </Link>
-      </nav>
+      </div>
 
       {/* Footer */}
       <div style={{ padding: '14px 12px', borderTop: '1px solid var(--border)' }}>

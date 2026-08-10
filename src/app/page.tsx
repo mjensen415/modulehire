@@ -496,6 +496,82 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ─── FOR BUSINESS ─── */}
+      <section style={{
+        padding: '80px 24px',
+        borderTop: '1px solid var(--border)',
+        background: 'var(--bg2)',
+      }}>
+        <div style={{ maxWidth: 640, margin: '0 auto', textAlign: 'center' }}>
+
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            padding: '5px 14px', borderRadius: 20,
+            background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)',
+            fontSize: 11, fontWeight: 700, color: 'var(--teal)',
+            letterSpacing: '0.07em', textTransform: 'uppercase',
+            marginBottom: 28,
+          }}>
+            <svg width="12" height="12" viewBox="0 0 15 15" fill="none">
+              <rect x="1" y="5" width="13" height="9" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+              <path d="M5 5V3.5A1.5 1.5 0 016.5 2h2A1.5 1.5 0 0110 3.5V5" stroke="currentColor" strokeWidth="1.4"/>
+              <path d="M1 9h13" stroke="currentColor" strokeWidth="1.4"/>
+            </svg>
+            ModuleHire for Business
+          </div>
+
+          <h2 style={{
+            fontSize: 'clamp(26px, 4vw, 44px)', fontWeight: 800,
+            letterSpacing: '-0.03em', lineHeight: 1.15, marginBottom: 20,
+          }}>
+            The other side<br/>of the resume.
+          </h2>
+
+          <p style={{
+            fontSize: 17, color: 'var(--text2)', lineHeight: 1.65,
+            maxWidth: 480, margin: '0 auto 32px',
+          }}>
+            Paste a job description, set your criteria, and get every applicant scored and ranked — before the coffee&apos;s cold.
+          </p>
+
+          {/* Mini applicant score strip */}
+          <div style={{
+            display: 'flex', gap: 8, justifyContent: 'center',
+            flexWrap: 'wrap', margin: '0 0 36px',
+          }}>
+            {[
+              { name: 'Jordan M.', score: 91, color: '#1d9e75' },
+              { name: 'Casey T.', score: 74, color: '#f59e0b' },
+              { name: 'Robin K.', score: 43, color: 'var(--text3)' },
+            ].map(({ name, score, color }) => (
+              <div key={name} style={{
+                padding: '9px 16px', borderRadius: 8,
+                background: 'var(--bg)', border: '1px solid var(--border)',
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <span style={{ fontWeight: 800, color, fontSize: 16, fontVariantNumeric: 'tabular-nums' }}>{score}</span>
+                <span style={{ fontSize: 13, color: 'var(--text2)' }}>{name}</span>
+              </div>
+            ))}
+          </div>
+
+          <a
+            href="https://business.modulehire.com"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              padding: '14px 32px', borderRadius: 9,
+              background: 'var(--teal)', color: '#fff',
+              fontWeight: 700, fontSize: 15, textDecoration: 'none',
+            }}
+          >
+            Try ModuleHire for Business
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M1 7h12M8 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </a>
+        </div>
+      </section>
+
       <PublicFooter />
     </>
   );

@@ -121,7 +121,7 @@ export default async function BusinessDashboardPage() {
               Post your first job
             </div>
             <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 20, maxWidth: 340, margin: '0 auto 20px' }}>
-              Paste a job description, set your scoring criteria, and upload applicants — ModuleHire ranks them automatically.
+              Start by creating a job posting, then add your scoring criteria and upload applicants — we&apos;ll score and rank them for you.
             </div>
             <Link href="/business/jobs/new" className="btn-primary" style={{ display: 'inline-flex', textDecoration: 'none' }}>
               + Create a job posting
