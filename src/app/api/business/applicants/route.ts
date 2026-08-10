@@ -38,7 +38,7 @@ export async function GET(req: Request) {
     let query = supabase
       .from('applicants')
       .select(
-        'id, name, email, parsed_headline, overall_score, has_dealbreaker, status, scored_at, created_at, applicant_criterion_scores ( criterion_id, score )',
+        'id, name, email, parsed_headline, overall_score, has_dealbreaker, status, scored_at, created_at, applicant_criterion_scores ( criterion_id, score, met )',
         { count: 'exact' }
       )
       .eq('job_id', jobId)
