@@ -2,7 +2,9 @@ import '@/app/globals.css';
 import { redirect } from 'next/navigation';
 import AppSidebar from '@/components/layout/AppSidebar';
 import AppSidebarUser from '@/components/layout/AppSidebarUser';
+import EmailVerificationBanner from '@/components/EmailVerificationBanner';
 import { createClient } from '@/lib/supabase/server';
+import { needsEmailVerification } from '@/lib/email-verification';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -25,10 +27,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     isAdmin = profile?.is_admin ?? false;
   }
 
+  const showVerifyBanner = needsEmailVerification(user);
+
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <AppSidebar tier={tier} isAdmin={isAdmin} footer={<AppSidebarUser />} />
       <main className="app-main">
+        {showVerifyBanner && <EmailVerificationBanner email={user.email ?? null} />}
         {children}
       </main>
     </div>
