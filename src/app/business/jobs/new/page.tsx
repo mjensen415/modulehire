@@ -177,12 +177,45 @@ export default function NewJobPage() {
         {step === 1 ? 'Create a job posting' : step === 2 ? 'Set your scoring criteria' : 'Upload applicants'}
       </h1>
 
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 24, fontSize: 12, fontWeight: 600 }}>
-        <span style={{ color: step === 1 ? 'var(--teal)' : 'var(--text3)' }}>1 Job description</span>
-        <span style={{ color: 'var(--text3)' }}>—</span>
-        <span style={{ color: step === 2 ? 'var(--teal)' : 'var(--text3)' }}>2 Scoring criteria</span>
-        <span style={{ color: 'var(--text3)' }}>—</span>
-        <span style={{ color: step === 3 ? 'var(--teal)' : 'var(--text3)' }}>3 Upload applicants</span>
+      {/* Step pathway */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 28 }}>
+        {([
+          { n: 1, label: 'Job description' },
+          { n: 2, label: 'Scoring criteria' },
+          { n: 3, label: 'Upload applicants' },
+        ] as Array<{ n: 1 | 2 | 3; label: string }>).map((s, i) => {
+          const done = step > s.n
+          const active = step === s.n
+          return (
+            <div key={s.n} style={{ display: 'flex', alignItems: 'flex-start', flex: i < 2 ? 1 : undefined }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                <div style={{
+                  width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 700,
+                  background: done || active ? 'var(--teal)' : 'var(--bg3)',
+                  color: done || active ? '#fff' : 'var(--text3)',
+                  border: `2px solid ${done || active ? 'var(--teal)' : 'var(--border2)'}`,
+                }}>
+                  {done ? '✓' : s.n}
+                </div>
+                <span style={{
+                  fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+                  color: active ? 'var(--teal)' : done ? 'var(--text2)' : 'var(--text3)',
+                }}>
+                  {s.label}
+                </span>
+              </div>
+              {i < 2 && (
+                <div style={{
+                  flex: 1, height: 2, marginTop: 12, marginLeft: 6, marginRight: 6,
+                  background: step > s.n ? 'var(--teal)' : 'var(--border2)',
+                  borderRadius: 1,
+                }} />
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {error && (
@@ -248,44 +281,7 @@ export default function NewJobPage() {
                     ×
                   </button>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 22, marginBottom: 6 }}>
-                  {(['skill', 'experience'] as CriterionType[]).map((t) => {
-                    const active = c.criterionType === t
-                    return (
-                      <button
-                        key={t}
-                        onClick={() => updateCriterion(c.key, { criterionType: t, minYears: t === 'skill' ? undefined : c.minYears })}
-                        style={{
-                          fontSize: 11.5, fontWeight: 600,
-                          padding: '4px 10px', borderRadius: 20,
-                          border: `1px solid ${active ? 'var(--teal)' : 'var(--border2)'}`,
-                          background: active ? 'var(--teal-dim)' : 'transparent',
-                          color: active ? 'var(--teal)' : 'var(--text3)',
-                          cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all 0.15s',
-                        }}
-                      >
-                        {t === 'skill' ? '✓ Skill' : '⏱ Experience'}
-                      </button>
-                    )
-                  })}
-                  {c.criterionType === 'experience' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 4 }}>
-                      <input
-                        type="number"
-                        min={0}
-                        max={30}
-                        value={c.minYears ?? ''}
-                        onChange={(e) => updateCriterion(c.key, { minYears: parseInt(e.target.value) || undefined })}
-                        placeholder="0"
-                        className="form-input"
-                        style={{ width: 52, padding: '4px 8px', fontSize: 12, textAlign: 'center' }}
-                      />
-                      <span style={{ fontSize: 11.5, color: 'var(--text3)', whiteSpace: 'nowrap' }}>yr min</span>
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', gap: 6, paddingLeft: 22 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 22 }}>
                   {WEIGHT_OPTIONS.map((opt) => {
                     const active = c.weight === opt.value
                     return (
@@ -293,22 +289,37 @@ export default function NewJobPage() {
                         key={opt.value}
                         onClick={() => updateCriterion(c.key, { weight: opt.value })}
                         style={{
-                          fontSize: 11.5,
-                          fontWeight: 600,
-                          padding: '4px 10px',
-                          borderRadius: 20,
+                          fontSize: 11.5, fontWeight: 600,
+                          padding: '4px 10px', borderRadius: 20,
                           border: `1px solid ${active ? opt.color : 'var(--border2)'}`,
                           background: active ? opt.bg : 'transparent',
                           color: active ? opt.color : 'var(--text3)',
-                          cursor: 'pointer',
-                          fontFamily: 'var(--font)',
-                          transition: 'all 0.15s',
+                          cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all 0.15s',
                         }}
                       >
                         {opt.label}
                       </button>
                     )
                   })}
+                  <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', whiteSpace: 'nowrap' }}>Min. yrs</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={50}
+                      value={c.minYears ?? ''}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value)
+                        updateCriterion(c.key, {
+                          minYears: val > 0 ? val : undefined,
+                          criterionType: val > 0 ? 'experience' : 'skill',
+                        })
+                      }}
+                      placeholder="—"
+                      className="form-input"
+                      style={{ width: 44, padding: '3px 6px', fontSize: 12, textAlign: 'center' }}
+                    />
+                  </div>
                 </div>
               </div>
             ))}

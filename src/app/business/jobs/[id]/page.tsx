@@ -672,42 +672,7 @@ export default function JobWorkspacePage() {
                       ×
                     </button>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                    {(['skill', 'experience'] as CriterionType[]).map((t) => {
-                      const active = c.criterionType === t
-                      return (
-                        <button
-                          key={t}
-                          onClick={() => updateCriterion(c.key, { criterionType: t, minYears: t === 'skill' ? undefined : c.minYears })}
-                          style={{
-                            fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
-                            border: `1px solid ${active ? 'var(--teal)' : 'var(--border2)'}`,
-                            background: active ? 'var(--teal-dim)' : 'transparent',
-                            color: active ? 'var(--teal)' : 'var(--text3)',
-                            cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all 0.15s',
-                          }}
-                        >
-                          {t === 'skill' ? '✓ Skill' : '⏱ Experience'}
-                        </button>
-                      )
-                    })}
-                    {c.criterionType === 'experience' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 4 }}>
-                        <input
-                          type="number"
-                          min={0}
-                          max={30}
-                          value={c.minYears ?? ''}
-                          onChange={(e) => updateCriterion(c.key, { minYears: parseInt(e.target.value) || undefined })}
-                          placeholder="0"
-                          className="form-input"
-                          style={{ width: 52, padding: '4px 8px', fontSize: 12, textAlign: 'center' }}
-                        />
-                        <span style={{ fontSize: 11.5, color: 'var(--text3)', whiteSpace: 'nowrap' }}>yr min</span>
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     {CRITERIA_WEIGHT_OPTIONS.map((opt) => {
                       const active = c.weight === opt.value
                       return (
@@ -726,6 +691,25 @@ export default function JobWorkspacePage() {
                         </button>
                       )
                     })}
+                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', whiteSpace: 'nowrap' }}>Min. yrs</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={50}
+                        value={c.minYears ?? ''}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value)
+                          updateCriterion(c.key, {
+                            minYears: val > 0 ? val : undefined,
+                            criterionType: val > 0 ? 'experience' : 'skill',
+                          })
+                        }}
+                        placeholder="—"
+                        className="form-input"
+                        style={{ width: 44, padding: '3px 6px', fontSize: 12, textAlign: 'center' }}
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
