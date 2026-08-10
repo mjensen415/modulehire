@@ -1,24 +1,20 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-
-// Basic in-memory rate limiter (per-instance)
-const rateLimit = new Map<string, { count: number, timestamp: number }>()
+import { checkAndLogKey } from '@/lib/rate-limit'
 
 export async function POST(req: Request) {
   try {
-    const ip = req.headers.get('x-forwarded-for') || 'unknown'
-    const now = Date.now()
-    const windowMs = 60 * 1000 // 1 minute
-    const limit = 5 // 5 requests per minute
-
-    const current = rateLimit.get(ip)
-    if (current && (now - current.timestamp < windowMs)) {
-      if (current.count >= limit) {
-        return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 })
-      }
-      current.count++
-    } else {
-      rateLimit.set(ip, { count: 1, timestamp: now })
+    // Durable per-IP throttle (P1.4): 5 requests / hour backed by the
+    // rate_limits table. Replaces the old in-memory Map, which was per-instance
+    // and reset on every serverless cold start — effectively no limit on Vercel.
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+    const supabase = await createAdminClient()
+    const throttled = await checkAndLogKey(supabase, ip, 'rl_beta_request', 5, 3600)
+    if (!throttled.ok) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        { status: 429, headers: { 'Retry-After': String(throttled.retryAfter) } },
+      )
     }
 
     const { email, context, marketing_opt_in } = await req.json()
@@ -26,8 +22,6 @@ export async function POST(req: Request) {
     if (!email || !email.includes('@')) {
       return NextResponse.json({ error: 'Valid email required.' }, { status: 400 })
     }
-
-    const supabase = await createAdminClient()
 
     // Check for duplicate
     const { data: existing } = await supabase
