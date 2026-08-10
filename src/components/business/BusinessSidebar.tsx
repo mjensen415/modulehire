@@ -213,7 +213,7 @@ export default function BusinessSidebar({ userEmail }: { userEmail: string | nul
           {userEmail ?? ''}
         </div>
         <Link
-          href="/dashboard"
+          href="https://modulehire.com/dashboard"
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '7px 12px', borderRadius: 7,
