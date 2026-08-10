@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 type Weight = 'dealbreaker' | 'must_have' | 'nice_to_have'
-type Criterion = { key: string; label: string; weight: Weight; description?: string }
+type CriterionType = 'skill' | 'experience'
+type Criterion = { key: string; label: string; weight: Weight; description?: string; criterionType: CriterionType; minYears?: number }
 
 const WEIGHT_OPTIONS: Array<{ value: Weight; label: string; color: string; bg: string }> = [
   { value: 'dealbreaker', label: '⚠ Dealbreaker', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
@@ -67,7 +68,7 @@ export default function NewJobPage() {
 
       setJobId(data.job.id)
       const themes: string[] = data.job.extracted_themes ?? []
-      setCriteria(themes.map((theme: string) => ({ key: nextKey(), label: theme, weight: 'must_have' as Weight })))
+      setCriteria(themes.map((theme: string) => ({ key: nextKey(), label: theme, weight: 'must_have' as Weight, criterionType: 'skill' as CriterionType })))
       if (data.job.extraction_failed || themes.length === 0) {
         setError('We couldn\'t automatically extract criteria from this job description — add them manually below.')
       }
@@ -88,7 +89,7 @@ export default function NewJobPage() {
   }
 
   function addCriterion() {
-    setCriteria((cs) => [...cs, { key: nextKey(), label: '', weight: 'must_have' }])
+    setCriteria((cs) => [...cs, { key: nextKey(), label: '', weight: 'must_have', criterionType: 'skill' }])
   }
 
   async function handleSaveCriteria() {
@@ -98,7 +99,13 @@ export default function NewJobPage() {
     try {
       const payload = criteria
         .filter((c) => c.label.trim())
-        .map((c) => ({ label: c.label.trim(), weight: c.weight, description: c.description }))
+        .map((c) => ({
+          label: c.label.trim(),
+          weight: c.weight,
+          description: c.description,
+          criterion_type: c.criterionType,
+          min_years: c.criterionType === 'experience' && c.minYears && c.minYears > 0 ? c.minYears : null,
+        }))
 
       const res = await fetch(`/api/business/job-postings/${jobId}/criteria`, {
         method: 'PUT',
@@ -241,6 +248,43 @@ export default function NewJobPage() {
                     ×
                   </button>
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 22, marginBottom: 6 }}>
+                  {(['skill', 'experience'] as CriterionType[]).map((t) => {
+                    const active = c.criterionType === t
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => updateCriterion(c.key, { criterionType: t, minYears: t === 'skill' ? undefined : c.minYears })}
+                        style={{
+                          fontSize: 11.5, fontWeight: 600,
+                          padding: '4px 10px', borderRadius: 20,
+                          border: `1px solid ${active ? 'var(--teal)' : 'var(--border2)'}`,
+                          background: active ? 'var(--teal-dim)' : 'transparent',
+                          color: active ? 'var(--teal)' : 'var(--text3)',
+                          cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all 0.15s',
+                        }}
+                      >
+                        {t === 'skill' ? '✓ Skill' : '⏱ Experience'}
+                      </button>
+                    )
+                  })}
+                  {c.criterionType === 'experience' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 4 }}>
+                      <input
+                        type="number"
+                        min={0}
+                        max={30}
+                        value={c.minYears ?? ''}
+                        onChange={(e) => updateCriterion(c.key, { minYears: parseInt(e.target.value) || undefined })}
+                        placeholder="0"
+                        className="form-input"
+                        style={{ width: 52, padding: '4px 8px', fontSize: 12, textAlign: 'center' }}
+                      />
+                      <span style={{ fontSize: 11.5, color: 'var(--text3)', whiteSpace: 'nowrap' }}>yr min</span>
+                    </div>
+                  )}
+                </div>
+
                 <div style={{ display: 'flex', gap: 6, paddingLeft: 22 }}>
                   {WEIGHT_OPTIONS.map((opt) => {
                     const active = c.weight === opt.value

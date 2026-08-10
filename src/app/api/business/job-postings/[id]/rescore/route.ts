@@ -24,7 +24,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     const { data: criteria, error: criteriaError } = await supabase
       .from('scoring_criteria')
-      .select('id, label, weight, description')
+      .select('id, label, weight, description, criterion_type, min_years')
       .eq('job_id', jobId)
       .order('sort_order', { ascending: true })
     if (criteriaError) throw criteriaError

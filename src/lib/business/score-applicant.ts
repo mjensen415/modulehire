@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { jsonrepair } from 'jsonrepair'
 import { aiComplete } from '@/lib/ai'
 
-type Criterion = { id: string; label: string; weight: string; description: string | null }
+type Criterion = { id: string; label: string; weight: string; description: string | null; criterion_type?: string; min_years?: number | null }
 
 export async function scoreApplicant(params: {
   applicantId: string
@@ -23,14 +23,19 @@ KEY THEMES: ${themes.join(', ')}
 KEY PHRASES TO LOOK FOR: ${phrases.join(', ')}
 
 SCORING CRITERIA:
-${criteria.map((c, i) => `${i + 1}. [${c.weight.toUpperCase()}] ${c.label}${c.description ? `: ${c.description}` : ''}`).join('\n')}
+${criteria.map((c, i) => {
+  const isExp = c.criterion_type === 'experience'
+  const typeTag = isExp ? `[EXPERIENCE${c.min_years ? ` - min ${c.min_years} yrs` : ''}]` : '[SKILL]'
+  return `${i + 1}. [${c.weight.toUpperCase()}] ${typeTag} ${c.label}${c.description ? `: ${c.description}` : ''}`
+}).join('\n')}
 
 CANDIDATE RESUME:
 ${rawText.slice(0, 8000)}
 
 SCORING RULES:
-- Score each criterion 0-100 based on evidence in the resume
-- For DEALBREAKER criteria: also set met: true/false (met = score >= 60)
+- For EXPERIENCE criteria: estimate how many years of experience the candidate has in this area. score = min(actual_years / min_years, 1) * 100 (capped at 100). met: true if actual_years >= min_years (or min_years is 0). If no minimum specified, met: true if any relevant experience is found.
+- For SKILL criteria: score = confidence the skill/technology is present or demonstrated (0-100). met: true if clearly present, false if absent.
+- For DEALBREAKER criteria: explicitly set met: true/false
 - evidence: quote the exact resume text that supports the score, max 120 chars. If nothing found, write "not found in resume"
 - overall_score: weighted composite. Dealbreakers = 3x weight. must_have = 2x. nice_to_have = 1x. If any dealbreaker has met: false, cap overall_score at 25.
 - parsed_headline: one sentence describing this candidate's background (max 15 words)

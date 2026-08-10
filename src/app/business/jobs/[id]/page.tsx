@@ -40,7 +40,8 @@ type Status = 'new' | 'reviewing' | 'shortlisted' | 'interviewing' | 'offered' |
 type SortKey = 'score' | 'name' | 'date'
 
 type Weight = 'dealbreaker' | 'must_have' | 'nice_to_have'
-type Criterion = { key: string; id?: string; label: string; weight: Weight; description?: string }
+type CriterionType = 'skill' | 'experience'
+type Criterion = { key: string; id?: string; label: string; weight: Weight; description?: string; criterionType: CriterionType; minYears?: number }
 
 const CRITERIA_WEIGHT_OPTIONS: Array<{ value: Weight; label: string; color: string; bg: string }> = [
   { value: 'dealbreaker', label: '⚠ Dealbreaker', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
@@ -275,8 +276,13 @@ export default function JobWorkspacePage() {
       .then((data) => {
         if (!data.job) return
         setJob(data.job)
-        const loaded: Array<{ id: string; label: string; weight: Weight; description: string | null }> = data.job.criteria ?? []
-        setCriteria(loaded.map((c) => ({ key: c.id, id: c.id, label: c.label, weight: c.weight, description: c.description ?? undefined })))
+        const loaded: Array<{ id: string; label: string; weight: Weight; description: string | null; criterion_type?: string; min_years?: number | null }> = data.job.criteria ?? []
+        setCriteria(loaded.map((c) => ({
+          key: c.id, id: c.id, label: c.label, weight: c.weight,
+          description: c.description ?? undefined,
+          criterionType: (c.criterion_type === 'experience' ? 'experience' : 'skill') as CriterionType,
+          minYears: c.min_years ?? undefined,
+        })))
       })
     loadApplicants()
   }, [jobId, loadApplicants])
@@ -474,7 +480,7 @@ export default function JobWorkspacePage() {
   }
 
   function addCriterion() {
-    setCriteria((cs) => [...cs, { key: nextCriteriaKey(), label: '', weight: 'must_have' }])
+    setCriteria((cs) => [...cs, { key: nextCriteriaKey(), label: '', weight: 'must_have', criterionType: 'skill' }])
   }
 
   async function handleSaveCriteria() {
@@ -484,7 +490,13 @@ export default function JobWorkspacePage() {
     try {
       const payload = criteria
         .filter((c) => c.label.trim())
-        .map((c) => ({ label: c.label.trim(), weight: c.weight, description: c.description }))
+        .map((c) => ({
+          label: c.label.trim(),
+          weight: c.weight,
+          description: c.description,
+          criterion_type: c.criterionType,
+          min_years: c.criterionType === 'experience' && c.minYears && c.minYears > 0 ? c.minYears : null,
+        }))
 
       const res = await fetch(`/api/business/job-postings/${jobId}/criteria`, {
         method: 'PUT',
@@ -494,8 +506,13 @@ export default function JobWorkspacePage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Could not save criteria')
 
-      const saved: Array<{ id: string; label: string; weight: Weight; description: string | null }> = data.criteria ?? []
-      setCriteria(saved.map((c) => ({ key: c.id, id: c.id, label: c.label, weight: c.weight, description: c.description ?? undefined })))
+      const saved: Array<{ id: string; label: string; weight: Weight; description: string | null; criterion_type?: string; min_years?: number | null }> = data.criteria ?? []
+      setCriteria(saved.map((c) => ({
+        key: c.id, id: c.id, label: c.label, weight: c.weight,
+        description: c.description ?? undefined,
+        criterionType: (c.criterion_type === 'experience' ? 'experience' : 'skill') as CriterionType,
+        minYears: c.min_years ?? undefined,
+      })))
       setCriteriaSaving(false)
 
       if (applicants.length === 0) {
@@ -554,7 +571,7 @@ export default function JobWorkspacePage() {
 
   const criterionColumns = criteria
     .filter((c): c is Criterion & { id: string } => !!c.id)
-    .map((c) => ({ id: c.id, label: c.label, weight: c.weight }))
+    .map((c) => ({ id: c.id, label: c.label, weight: c.weight, criterionType: c.criterionType, minYears: c.minYears }))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)', margin: '-40px' }}>
@@ -654,6 +671,41 @@ export default function JobWorkspacePage() {
                     >
                       ×
                     </button>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    {(['skill', 'experience'] as CriterionType[]).map((t) => {
+                      const active = c.criterionType === t
+                      return (
+                        <button
+                          key={t}
+                          onClick={() => updateCriterion(c.key, { criterionType: t, minYears: t === 'skill' ? undefined : c.minYears })}
+                          style={{
+                            fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
+                            border: `1px solid ${active ? 'var(--teal)' : 'var(--border2)'}`,
+                            background: active ? 'var(--teal-dim)' : 'transparent',
+                            color: active ? 'var(--teal)' : 'var(--text3)',
+                            cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all 0.15s',
+                          }}
+                        >
+                          {t === 'skill' ? '✓ Skill' : '⏱ Experience'}
+                        </button>
+                      )
+                    })}
+                    {c.criterionType === 'experience' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 4 }}>
+                        <input
+                          type="number"
+                          min={0}
+                          max={30}
+                          value={c.minYears ?? ''}
+                          onChange={(e) => updateCriterion(c.key, { minYears: parseInt(e.target.value) || undefined })}
+                          placeholder="0"
+                          className="form-input"
+                          style={{ width: 52, padding: '4px 8px', fontSize: 12, textAlign: 'center' }}
+                        />
+                        <span style={{ fontSize: 11.5, color: 'var(--text3)', whiteSpace: 'nowrap' }}>yr min</span>
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {CRITERIA_WEIGHT_OPTIONS.map((opt) => {
@@ -799,9 +851,14 @@ export default function JobWorkspacePage() {
                   <div style={{ width: 36, flexShrink: 0, textAlign: 'center', padding: '8px 0' }}>#</div>
                   <div style={{ flex: 1, padding: '8px 6px' }}>Candidate</div>
                   {criterionColumns.map((c) => (
-                    <div key={c.id} title={c.label} style={{ width: 44, flexShrink: 0, textAlign: 'center', padding: '8px 2px', overflow: 'hidden' }}>
+                    <div key={c.id} title={c.label} style={{ width: 44, flexShrink: 0, textAlign: 'center', padding: '6px 2px', overflow: 'hidden' }}>
                       <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {c.label.slice(0, 3).toUpperCase()}
+                      </span>
+                      <span style={{ display: 'block', fontSize: 9, color: 'var(--text3)', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>
+                        {c.criterionType === 'experience'
+                          ? (c.minYears ? `≥${c.minYears}yr` : 'exp')
+                          : 'skill'}
                       </span>
                     </div>
                   ))}

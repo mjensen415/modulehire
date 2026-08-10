@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getOrgRole } from '@/lib/business/org-access'
 
 const WEIGHTS = new Set(['dealbreaker', 'must_have', 'nice_to_have'])
+const CRITERION_TYPES = new Set(['experience', 'skill'])
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -40,12 +41,18 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       if (!WEIGHTS.has(c.weight)) {
         throw new Error(`criteria[${i}].weight must be one of: dealbreaker, must_have, nice_to_have`)
       }
+      const criterionType = CRITERION_TYPES.has(c.criterion_type) ? c.criterion_type : 'skill'
+      const minYears = criterionType === 'experience' && typeof c.min_years === 'number' && c.min_years > 0
+        ? Math.min(Math.floor(c.min_years), 50)
+        : null
       return {
         job_id: jobId,
         label: c.label.trim(),
         weight: c.weight,
         description: typeof c.description === 'string' ? c.description.trim().slice(0, 500) || null : null,
         sort_order: i,
+        criterion_type: criterionType,
+        min_years: minYears,
       }
     })
 
@@ -62,7 +69,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const { data: inserted, error: insertError } = await supabase
       .from('scoring_criteria')
       .insert(rows)
-      .select('id, label, weight, description, sort_order')
+      .select('id, label, weight, description, sort_order, criterion_type, min_years')
       .order('sort_order', { ascending: true })
     if (insertError) throw insertError
 

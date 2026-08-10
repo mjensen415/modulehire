@@ -21,7 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
     const { data: criteria, error: criteriaError } = await supabase
       .from('scoring_criteria')
-      .select('id, label, weight, description, sort_order')
+      .select('id, label, weight, description, sort_order, criterion_type, min_years')
       .eq('job_id', id)
       .order('sort_order', { ascending: true })
     if (criteriaError) throw criteriaError
