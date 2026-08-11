@@ -78,14 +78,14 @@ function BusinessLanding() {
           </span>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Link href="/signin" style={{
+          <Link href="https://modulehire.com/signin" style={{
             fontSize: 13, fontWeight: 600, color: 'var(--text2)',
             textDecoration: 'none', padding: '7px 14px',
             border: '1px solid var(--border2)', borderRadius: 7,
           }}>
             Sign in
           </Link>
-          <Link href="/signin" style={{
+          <Link href="https://modulehire.com/signin" style={{
             fontSize: 13, fontWeight: 700, color: '#fff',
             textDecoration: 'none', padding: '8px 16px',
             background: 'var(--teal)', borderRadius: 7,
@@ -127,7 +127,7 @@ function BusinessLanding() {
         </p>
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <Link href="/signin" style={{
+          <Link href="https://modulehire.com/signin" style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             fontSize: 15, fontWeight: 700, color: '#fff',
             textDecoration: 'none', padding: '13px 28px',
@@ -225,7 +225,7 @@ function BusinessLanding() {
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 52 }}>
-          <Link href="/signin" style={{
+          <Link href="https://modulehire.com/signin" style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             fontSize: 14, fontWeight: 700, color: '#fff',
             textDecoration: 'none', padding: '12px 26px',
@@ -297,7 +297,7 @@ function BusinessLanding() {
         <p style={{ fontSize: 16, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 36 }}>
           Set up your organization, post a job, and upload your first batch of applicants — free.
         </p>
-        <Link href="/signin" style={{
+        <Link href="https://modulehire.com/signin" style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
           fontSize: 15, fontWeight: 700, color: '#fff',
           textDecoration: 'none', padding: '14px 32px',
@@ -308,7 +308,7 @@ function BusinessLanding() {
         </Link>
         <p style={{ fontSize: 12.5, color: 'var(--text3)', marginTop: 16 }}>
           Already have an account?{' '}
-          <Link href="/signin" style={{ color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>
+          <Link href="https://modulehire.com/signin" style={{ color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>
             Sign in →
           </Link>
         </p>
@@ -322,9 +322,9 @@ function BusinessLanding() {
         <div style={{ fontSize: 12, color: 'var(--text3)' }}>
           © {new Date().getFullYear()} ModuleHire · For Business
         </div>
-        <Link href="/" style={{ fontSize: 12, color: 'var(--text3)', textDecoration: 'none' }}>
+        <a href="https://modulehire.com" style={{ fontSize: 12, color: 'var(--text3)', textDecoration: 'none' }}>
           ← ModuleHire for job seekers
-        </Link>
+        </a>
       </footer>
 
     </div>

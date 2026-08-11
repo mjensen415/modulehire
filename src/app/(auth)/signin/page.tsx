@@ -205,11 +205,19 @@ export default function SignIn() {
     }
   }
 
-  // Always send OAuth back to the bare callback. Onboarding-vs-dashboard routing
-  // is decided server-side in /auth/callback based on onboarding_complete — passing
-  // a ?next= query string here breaks Supabase's redirect-URL allowlist match and
-  // bounces the user to the Site URL (landing page) without a session.
-  const oauthRedirectTo = () => `${window.location.origin}/auth/callback`
+  // Always send OAuth back to the bare callback on the main domain.
+  // Onboarding-vs-dashboard routing is decided server-side in /auth/callback.
+  // When signing in from business.modulehire.com, we mark that with a short-lived
+  // cookie so the callback can redirect back to the business subdomain after auth.
+  const oauthRedirectTo = () => {
+    const isBusiness = window.location.hostname === 'business.modulehire.com'
+    if (isBusiness) {
+      // Mark the origin so /auth/callback knows to send the user to business after auth.
+      document.cookie = '__mh_oauth_src=business; domain=.modulehire.com; path=/; max-age=600; SameSite=Lax; Secure'
+      return 'https://modulehire.com/auth/callback'
+    }
+    return `${window.location.origin}/auth/callback`
+  }
 
   const handleGoogle = async () => {
     await supabase.auth.signInWithOAuth({

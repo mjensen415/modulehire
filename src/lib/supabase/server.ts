@@ -1,9 +1,24 @@
 import { createServerClient } from '@supabase/ssr'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
+
+// Detect whether the current request is coming from the business subdomain.
+// Used to set a shared cookie domain so sessions work across subdomains.
+async function getCookieDomain(): Promise<string | undefined> {
+  try {
+    const headerStore = await headers()
+    const host = headerStore.get('host') ?? ''
+    if (host.endsWith('modulehire.com')) return '.modulehire.com'
+  } catch {
+    // headers() may throw in some contexts (e.g. Server Actions before routing).
+    // Fall through to undefined (no domain override).
+  }
+  return undefined
+}
 
 export async function createClient() {
   const cookieStore = await cookies()
+  const cookieDomain = await getCookieDomain()
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supabase.co',
@@ -16,7 +31,10 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, {
+                ...options,
+                ...(cookieDomain ? { domain: cookieDomain } : {}),
+              })
             })
           } catch {
             // The `set` method was called from a Server Component.

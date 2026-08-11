@@ -25,10 +25,16 @@ export async function updateSession(request: NextRequest, nonce?: string, csp?: 
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
+          const cookieDomain = request.headers.get('host')?.endsWith('modulehire.com')
+            ? '.modulehire.com'
+            : undefined
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = makeResponse()
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, {
+              ...options,
+              ...(cookieDomain ? { domain: cookieDomain } : {}),
+            })
           )
         },
       },

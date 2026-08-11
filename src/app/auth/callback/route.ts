@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 
 // Only allow relative paths starting with a single "/" — blocks open redirects.
@@ -20,7 +21,20 @@ export async function GET(request: Request) {
       // If the caller specified ?next=, honour it.
       if (explicitNext) return NextResponse.redirect(`${origin}${explicitNext}`)
 
-      // Otherwise, route new accounts to /onboarding and returning users to /dashboard.
+      // Check if this OAuth flow originated from the business subdomain.
+      // The signin page sets __mh_oauth_src=business before triggering OAuth.
+      const cookieStore = await cookies()
+      const isBusinessOAuth = cookieStore.get('__mh_oauth_src')?.value === 'business'
+
+      if (isBusinessOAuth) {
+        // Redirect to the business subdomain root — its page.tsx handles
+        // dashboard-vs-onboarding routing based on org membership.
+        const res = NextResponse.redirect('https://business.modulehire.com/')
+        res.cookies.set('__mh_oauth_src', '', { domain: '.modulehire.com', path: '/', maxAge: 0 })
+        return res
+      }
+
+      // Route new accounts to /onboarding and returning users to /dashboard.
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data: profile } = await supabase

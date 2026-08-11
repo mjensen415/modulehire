@@ -1497,7 +1497,7 @@ nav {
   .arrow-path.inject {
     stroke: var(--teal);
     stroke-dasharray: 6 4;
-    animation: dashFlow 2s linear infinite reverse;
+    animation: dashFlow 2s linear infinite;
   }
   .arrow-path.amber-path {
     stroke: var(--amber);
@@ -1514,13 +1514,13 @@ nav {
   .arrow-path.inject-amber {
     stroke: var(--amber);
     stroke-dasharray: 6 4;
-    animation: dashFlow 2s linear infinite reverse;
+    animation: dashFlow 2s linear infinite;
     animation-delay: 0.5s;
   }
   .arrow-path.inject-indigo {
     stroke: var(--indigo);
     stroke-dasharray: 6 4;
-    animation: dashFlow 2.1s linear infinite reverse;
+    animation: dashFlow 2.1s linear infinite;
     animation-delay: 0.9s;
   }
 
