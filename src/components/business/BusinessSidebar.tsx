@@ -12,6 +12,16 @@ function IconHouse() {
     </svg>
   )
 }
+function IconChart() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <path d="M1.5 13.5h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <rect x="3" y="8" width="2.4" height="5.5" rx="0.5" stroke="currentColor" strokeWidth="1.3" />
+      <rect x="6.8" y="4.5" width="2.4" height="9" rx="0.5" stroke="currentColor" strokeWidth="1.3" />
+      <rect x="10.6" y="1.5" width="2.4" height="12" rx="0.5" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  )
+}
 function IconSettings() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -132,6 +142,7 @@ export default function BusinessSidebar({ userEmail }: { userEmail: string | nul
       <div style={{ flex: 1, padding: '10px 10px 0', display: 'flex', flexDirection: 'column', gap: 1 }}>
 
         {navLink('/business/dashboard', 'Dashboard', IconHouse)}
+        {navLink('/business/analytics', 'Analytics', IconChart)}
 
         {/* Jobs section */}
         <div style={{ marginTop: 10 }}>
