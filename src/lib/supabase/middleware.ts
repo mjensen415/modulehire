@@ -63,6 +63,7 @@ export async function updateSession(request: NextRequest, nonce?: string, csp?: 
     '/admin',
     '/onboarding',
     '/business',
+    '/job-tracker',
   ]
 
   const { pathname } = request.nextUrl
