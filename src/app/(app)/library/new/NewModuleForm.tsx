@@ -2,6 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { ROLE_TEMPLATES, getRoleTemplate } from '@/data/role-templates'
+
+const DEFAULT_CONTENT_PLACEHOLDER =
+  'Describe what you did, the impact, and any metrics. This content will be used directly in your resume.'
 
 export default function NewModuleForm() {
   const router = useRouter()
@@ -19,8 +23,30 @@ export default function NewModuleForm() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const [roleId, setRoleId] = useState<string | null>(null)
+  const [roleSkipped, setRoleSkipped] = useState(false)
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+  const [contentPlaceholder, setContentPlaceholder] = useState(DEFAULT_CONTENT_PLACEHOLDER)
+
+  const template = roleId ? getRoleTemplate(roleId) : undefined
+
   function set(key: string, val: string) {
     setFields(f => ({ ...f, [key]: val }))
+  }
+
+  function selectRole(id: string) {
+    setRoleId(id)
+    setBannerDismissed(false)
+  }
+
+  function applyBulletPrompt(text: string) {
+    setContentPlaceholder(text)
+    if (fields.type !== 'skill') set('type', 'experience')
+  }
+
+  function applySuggestedSkill(skill: string) {
+    setFields(f => ({ ...f, title: skill, type: 'skill' }))
+    setContentPlaceholder(`Describe your experience with ${skill} — projects, scale, or outcomes.`)
   }
 
   async function handleSave() {
@@ -69,6 +95,103 @@ export default function NewModuleForm() {
         </div>
       )}
 
+      {/* Role template picker — shown until a role is picked or skipped */}
+      {!roleId && !roleSkipped && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
+              What kind of role are you targeting?
+            </div>
+            <button
+              onClick={() => setRoleSkipped(true)}
+              style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}
+            >
+              Skip
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
+            {ROLE_TEMPLATES.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => selectRole(t.id)}
+                style={{
+                  textAlign: 'left', background: 'var(--surface)', border: '1px solid var(--border2)',
+                  borderRadius: 10, padding: '12px 14px', cursor: 'pointer', fontFamily: 'var(--font)',
+                  transition: 'all 0.15s',
+                }}
+              >
+                <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                  {t.industry}
+                </div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>
+                  {t.title}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Template banner + suggestions */}
+      {template && !bannerDismissed && (
+        <div style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 10, padding: '14px 16px', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--teal)' }}>
+              Starting from {template.title} template
+            </div>
+            <button
+              onClick={() => setBannerDismissed(true)}
+              aria-label="Dismiss"
+              style={{ background: 'none', border: 'none', color: 'var(--teal)', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: 0 }}
+            >
+              ×
+            </button>
+          </div>
+
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+            Suggested skills — click to start a skill module
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+            {template.suggestedSkills.map((skill) => (
+              <button
+                key={skill}
+                onClick={() => applySuggestedSkill(skill)}
+                style={{
+                  fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
+                  border: '1px solid var(--border2)', background: 'var(--surface)', color: 'var(--text2)',
+                  cursor: 'pointer', fontFamily: 'var(--font)',
+                }}
+              >
+                {skill}
+              </button>
+            ))}
+          </div>
+
+          {template.sections.map((section) => (
+            <div key={section.name} style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                {section.name} bullet starters
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {section.bulletPrompts.map((prompt) => (
+                  <button
+                    key={prompt.text}
+                    onClick={() => applyBulletPrompt(prompt.text)}
+                    style={{
+                      textAlign: 'left', fontSize: 12, fontStyle: 'italic', color: 'var(--text2)',
+                      background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 7,
+                      padding: '7px 10px', cursor: 'pointer', fontFamily: 'var(--font)', lineHeight: 1.4,
+                    }}
+                  >
+                    {prompt.text}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="mod-edit-form">
         <div className="mod-edit-row">
           <label>Title <span style={{ color: 'var(--rose)' }}>*</span></label>
@@ -86,7 +209,7 @@ export default function NewModuleForm() {
           <textarea
             className="mod-edit-textarea"
             rows={6}
-            placeholder="Describe what you did, the impact, and any metrics. This content will be used directly in your resume."
+            placeholder={contentPlaceholder}
             value={fields.content}
             onChange={e => set('content', e.target.value)}
           />
