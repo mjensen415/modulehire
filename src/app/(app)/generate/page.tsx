@@ -3211,6 +3211,23 @@ export default function GeneratePage() {
                   ✓ Resume saved to your library. <a href="/resumes" style={{ color: 'var(--teal)' }}>View in My Resumes →</a>
                 </div>
 
+                {/* Interview prep CTA */}
+                {jdData?.jd_id && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '14px 16px', borderRadius: 10, border: '1px solid var(--border2)', background: 'var(--surface)', marginBottom: 20 }}>
+                    <div>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)', marginBottom: 3 }}>Interview coming up?</div>
+                      <div style={{ fontSize: 12, color: 'var(--text3)' }}>Turn this job description into a talking points document.</div>
+                    </div>
+                    <a
+                      href={`/interview-prep?jd=${jdData.jd_id}`}
+                      className="btn-primary"
+                      style={{ fontSize: 12.5, flexShrink: 0, textDecoration: 'none', whiteSpace: 'nowrap' }}
+                    >
+                      Prep for interview →{!(userTier === 'pro' || userTier === 'beta_pro') && ' 🔒 Pro'}
+                    </a>
+                  </div>
+                )}
+
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button className="btn-ghost" style={{ fontSize: 13 }} onClick={() => setStep('confirm')}>Generate another variant</button>

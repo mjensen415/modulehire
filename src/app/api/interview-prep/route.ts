@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { aiComplete } from '@/lib/ai'
 import { jsonrepair } from 'jsonrepair'
 import { isProTier } from '@/lib/plan'
+import { isUuid } from '@/lib/validate'
 
 export const maxDuration = 60
 
@@ -17,9 +18,8 @@ type PrepData = {
   red_flags: string[]
 }
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request) {
   try {
-    const { id } = await params
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -33,30 +33,35 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'pro_required' }, { status: 403 })
     }
 
-    const { data: application, error: appError } = await supabase
-      .from('job_applications')
-      .select('id, company, title, jd_text, prep_data, prep_generated_at')
-      .eq('id', id)
+    const body = await req.json()
+    const jobDescriptionId = body?.job_description_id
+    if (!isUuid(jobDescriptionId)) {
+      return NextResponse.json({ error: 'Invalid job_description_id' }, { status: 400 })
+    }
+    const forceRegenerate = !!body?.regenerate
+
+    const { data: jd, error: jdError } = await supabase
+      .from('job_descriptions')
+      .select('id, raw_text, extracted_company, extracted_job_title')
+      .eq('id', jobDescriptionId)
       .eq('user_id', user.id)
+      .is('deleted_at', null)
       .single()
-    if (appError || !application) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (jdError || !jd) return NextResponse.json({ error: 'Job description not found' }, { status: 404 })
 
-    if (!application.jd_text || !application.jd_text.trim()) {
-      return NextResponse.json({ error: 'This application has no job description saved yet.' }, { status: 400 })
-    }
+    if (!forceRegenerate) {
+      const { data: cached } = await supabase
+        .from('interview_prep_cache')
+        .select('prep_data, generated_at')
+        .eq('user_id', user.id)
+        .eq('job_description_id', jobDescriptionId)
+        .maybeSingle()
 
-    let forceRegenerate = false
-    try {
-      const body = await req.json()
-      forceRegenerate = !!body?.regenerate
-    } catch {
-      // No body sent — default to cache-aware behavior
-    }
-
-    if (!forceRegenerate && application.prep_data && application.prep_generated_at) {
-      const age = Date.now() - new Date(application.prep_generated_at).getTime()
-      if (age < CACHE_MAX_AGE_MS) {
-        return NextResponse.json({ prep: application.prep_data, generated_at: application.prep_generated_at, cached: true })
+      if (cached) {
+        const age = Date.now() - new Date(cached.generated_at).getTime()
+        if (age < CACHE_MAX_AGE_MS) {
+          return NextResponse.json({ prep: cached.prep_data, generated_at: cached.generated_at, cached: true })
+        }
       }
     }
 
@@ -82,13 +87,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'Add some modules to your library before generating prep.' }, { status: 400 })
     }
 
+    const jobTitle = jd.extracted_job_title || 'this role'
+    const company = jd.extracted_company || 'this company'
+
     const prompt = `You are helping a job candidate prepare for an interview. Surface THEIR OWN experience in the context of this job description — do not write answers for them, just help them see the connections.
 
-JOB TITLE: ${application.title}
-COMPANY: ${application.company}
+JOB TITLE: ${jobTitle}
+COMPANY: ${company}
 
 JOB DESCRIPTION:
-${application.jd_text.slice(0, 12_000)}
+${jd.raw_text.slice(0, 12_000)}
 
 CANDIDATE'S EXPERIENCE (from their resume/module library):
 ${resumeContent}
@@ -97,8 +105,8 @@ Extract 5-7 key requirements from the job description. For each, identify the mo
 
 Return ONLY a valid JSON object — no explanation, no markdown, no code fences:
 {
-  "job_title": "${application.title}",
-  "company": "${application.company}",
+  "job_title": "${jobTitle}",
+  "company": "${company}",
   "talking_points": [
     {
       "requirement": "what the JD asks for",
@@ -117,16 +125,40 @@ Return ONLY a valid JSON object — no explanation, no markdown, no code fences:
     const prep = JSON.parse(jsonrepair(jsonStr)) as PrepData
 
     const generatedAt = new Date().toISOString()
-    const { error: updateError } = await supabase
-      .from('job_applications')
-      .update({ prep_data: prep, prep_generated_at: generatedAt })
-      .eq('id', id)
-      .eq('user_id', user.id)
-    if (updateError) throw updateError
+    const { error: upsertError } = await supabase
+      .from('interview_prep_cache')
+      .upsert(
+        { user_id: user.id, job_description_id: jobDescriptionId, prep_data: prep, generated_at: generatedAt },
+        { onConflict: 'user_id,job_description_id' }
+      )
+    if (upsertError) throw upsertError
 
     return NextResponse.json({ prep, generated_at: generatedAt, cached: false })
   } catch (error) {
-    console.error('[job-tracker/[id]/prep POST]', error)
+    console.error('[interview-prep POST]', error)
     return NextResponse.json({ error: 'Could not generate interview prep.' }, { status: 500 })
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const jobDescriptionId = new URL(req.url).searchParams.get('job_description_id')
+    if (!isUuid(jobDescriptionId)) return NextResponse.json({ error: 'Invalid job_description_id' }, { status: 400 })
+
+    const { error } = await supabase
+      .from('interview_prep_cache')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('job_description_id', jobDescriptionId)
+    if (error) throw error
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('[interview-prep DELETE]', error)
+    return NextResponse.json({ error: 'Could not clear cache.' }, { status: 500 })
   }
 }

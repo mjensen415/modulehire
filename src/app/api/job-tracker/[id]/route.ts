@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { optionalString } from '@/lib/validate'
+import { ensureJobDescription } from '@/lib/job-descriptions'
 
 const STATUSES = new Set(['saved', 'applied', 'screening', 'interviewing', 'offered', 'rejected', 'withdrawn'])
 
@@ -59,7 +60,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       update.status = body.status
     }
 
-    const { data, error } = await supabase
+    const { data: updateResult, error } = await supabase
       .from('job_applications')
       .update(update)
       .eq('id', id)
@@ -67,7 +68,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .select()
       .single()
     if (error) throw error
-    if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!updateResult) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    let data = updateResult
+
+    if (typeof update.jd_text === 'string' && update.jd_text.trim() && !data.job_description_id) {
+      const jobDescriptionId = await ensureJobDescription(supabase, user.id, update.jd_text)
+      const { data: updated, error: linkError } = await supabase
+        .from('job_applications')
+        .update({ job_description_id: jobDescriptionId })
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single()
+      if (linkError) throw linkError
+      data = updated
+    }
 
     return NextResponse.json({ application: data })
   } catch (error) {

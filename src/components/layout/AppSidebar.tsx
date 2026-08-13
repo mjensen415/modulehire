@@ -102,6 +102,15 @@ function IconBriefcase2() {
     </svg>
   );
 }
+function IconClipboard() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <rect x="3" y="2.5" width="9" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M5.5 2.5V2a1.5 1.5 0 0 1 1.5-1.5h1A1.5 1.5 0 0 1 9.5 2v.5" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M5.5 6.5h4M5.5 9h4M5.5 11.5h2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  );
+}
 function IconBuilding() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -124,6 +133,7 @@ export default function AppSidebar({ footer, tier, isAdmin }: { footer?: React.R
     { href: '/resumes', label: 'My Resumes', icon: <IconResume />, exact: false },
     { href: '/my-info', label: 'My Info', icon: <IconPerson />, exact: true },
     { href: '/job-tracker', label: 'Job Tracker', icon: <IconBriefcase2 />, exact: false },
+    { href: '/interview-prep', label: 'Interview Prep', icon: <IconClipboard />, exact: false },
   ];
 
   function active(href: string, exact: boolean) {

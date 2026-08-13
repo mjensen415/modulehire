@@ -13,6 +13,7 @@ type JobApplication = {
   title: string
   url: string | null
   jd_text: string | null
+  job_description_id: string | null
   status: Status
   notes: string | null
   applied_at: string | null
@@ -181,7 +182,7 @@ export default function JobTrackerPage() {
       setProGateOpen(true)
       return
     }
-    router.push(`/job-tracker/${app.id}/prep`)
+    router.push(`/interview-prep?jd=${app.job_description_id}`)
   }
 
   return (
@@ -268,7 +269,7 @@ export default function JobTrackerPage() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }} onClick={(e) => e.stopPropagation()}>
                     {canPrep && (
-                      app.jd_text ? (
+                      app.job_description_id ? (
                         <button
                           onClick={() => handlePrepClick(app)}
                           title="Prep for interview"
