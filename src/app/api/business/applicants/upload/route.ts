@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { isUuid } from '@/lib/validate'
 import { checkAndLog } from '@/lib/rate-limit'
 import { getOrgRole } from '@/lib/business/org-access'
@@ -99,6 +99,23 @@ export async function POST(req: Request) {
       .select()
       .single()
     if (insertError) throw insertError
+
+    // Only attempt storage if a real file was uploaded (not resume_text)
+    if (file) {
+      const adminClient = await createAdminClient()
+      const ext = file.name.split('.').pop() ?? 'pdf'
+      const storagePath = `${job.org_id}/${job.id}/${applicant.id}.${ext}`
+      const { error: storageError } = await adminClient.storage
+        .from('applicant-resumes')
+        .upload(storagePath, Buffer.from(await file.arrayBuffer()), {
+          contentType: file.type || 'application/octet-stream',
+          upsert: true,
+        })
+      if (!storageError) {
+        await supabase.from('applicants').update({ file_url: storagePath }).eq('id', applicant.id)
+      }
+      // Storage failure is non-fatal — applicant is still created
+    }
 
     const { data: criteria, error: criteriaError } = await supabase
       .from('scoring_criteria')

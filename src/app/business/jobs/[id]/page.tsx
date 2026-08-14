@@ -32,9 +32,10 @@ type ApplicantDetail = Applicant & {
   raw_text: string | null
   criteria_scores: CriterionScore[]
   notes: Note[]
+  resume_signed_url: string | null
 }
 
-type Job = { id: string; title: string; status: string }
+type Job = { id: string; title: string; status: string; extracted_themes: string[] }
 
 type Status = 'new' | 'reviewing' | 'shortlisted' | 'interviewing' | 'offered' | 'rejected'
 type SortKey = 'score' | 'name' | 'date'
@@ -169,47 +170,6 @@ function CriterionDot({ applicant, criterionId, weight }: {
   )
 }
 
-// Formats raw resume text into sections with better readability
-function ResumeDisplay({ text, name, email, headline }: {
-  text: string | null
-  name: string | null
-  email: string | null
-  headline: string | null
-}) {
-  return (
-    <div>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.03em', marginBottom: 2 }}>
-          {name || 'Unnamed applicant'}
-        </div>
-        {email && (
-          <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 6 }}>{email}</div>
-        )}
-        {headline && (
-          <div style={{ fontSize: 13.5, color: 'var(--teal)', fontWeight: 600 }}>{headline}</div>
-        )}
-      </div>
-
-      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
-        {text ? (
-          <div style={{
-            fontSize: 13,
-            lineHeight: 1.75,
-            color: 'var(--text2)',
-            whiteSpace: 'pre-wrap',
-            fontFamily: 'inherit',
-            wordBreak: 'break-word',
-          }}>
-            {text}
-          </div>
-        ) : (
-          <div style={{ color: 'var(--text3)', fontSize: 13.5 }}>No resume text available.</div>
-        )}
-      </div>
-    </div>
-  )
-}
-
 export default function JobWorkspacePage() {
   const params = useParams<{ id: string }>()
   const jobId = params.id
@@ -233,12 +193,13 @@ export default function JobWorkspacePage() {
   const [error, setError] = useState('')
   const [criteria, setCriteria] = useState<Criterion[]>([])
   const [criteriaOpen, setCriteriaOpen] = useState(false)
+  const [suggestNote, setSuggestNote] = useState('')
   const [criteriaSaving, setCriteriaSaving] = useState(false)
   const [rescoring, setRescoring] = useState(false)
   const [rescoreCount, setRescoreCount] = useState(0)
   const [addApplicantsOpen, setAddApplicantsOpen] = useState(false)
   const [addingApplicant, setAddingApplicant] = useState(false)
-  const [resumeOpen, setResumeOpen] = useState(false)
+  const [detailTab, setDetailTab] = useState<'score' | 'resume'>('score')
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const csvInputRef = useRef<HTMLInputElement>(null)
@@ -262,7 +223,7 @@ export default function JobWorkspacePage() {
       .then((r) => r.json())
       .then((data) => {
         if (!data.job) return
-        setJob(data.job)
+        setJob({ ...data.job, extracted_themes: data.job.extracted_themes ?? [] })
         const loaded: Array<{ id: string; label: string; weight: Weight; description: string | null; criterion_type?: string; min_years?: number | null }> = data.job.criteria ?? []
         setCriteria(loaded.map((c) => ({
           key: c.id, id: c.id, label: c.label, weight: c.weight,
@@ -289,7 +250,7 @@ export default function JobWorkspacePage() {
   }, [])
 
   useEffect(() => {
-    setResumeOpen(false)
+    setDetailTab('score')
     if (selectedId) loadDetail(selectedId)
     else setDetail(null)
   }, [selectedId, loadDetail])
@@ -470,6 +431,23 @@ export default function JobWorkspacePage() {
     setCriteria((cs) => [...cs, { key: nextCriteriaKey(), label: '', weight: 'must_have', criterionType: 'skill' }])
   }
 
+  function handleSuggestFromJd() {
+    if (!job) return
+    const existingLabels = new Set(criteria.map((c) => c.label.trim().toLowerCase()).filter(Boolean))
+    const toAdd = job.extracted_themes.filter((theme) => !existingLabels.has(theme.trim().toLowerCase()))
+
+    if (toAdd.length === 0) {
+      setSuggestNote('All JD themes already in list.')
+    } else {
+      setCriteria((cs) => [
+        ...cs,
+        ...toAdd.map((theme) => ({ key: nextCriteriaKey(), label: theme, weight: 'must_have' as Weight, criterionType: 'skill' as CriterionType })),
+      ])
+      setSuggestNote(`Added ${toAdd.length} suggestion${toAdd.length === 1 ? '' : 's'} from JD`)
+    }
+    setTimeout(() => setSuggestNote(''), 3000)
+  }
+
   async function handleSaveCriteria() {
     if (criteriaSaving || rescoring) return
     setCriteriaSaving(true)
@@ -637,6 +615,21 @@ export default function JobWorkspacePage() {
             <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 18, lineHeight: 1.5 }}>
               Changes here re-score every applicant on this job automatically.
             </p>
+
+            {job && job.extracted_themes.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <button
+                  onClick={handleSuggestFromJd}
+                  className="btn-ghost"
+                  style={{ fontSize: 12, padding: '5px 12px' }}
+                >
+                  ✦ Suggest from JD
+                </button>
+                {suggestNote && (
+                  <span style={{ fontSize: 11, color: 'var(--teal)' }}>{suggestNote}</span>
+                )}
+              </div>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
               {criteria.map((c) => (
@@ -991,171 +984,193 @@ export default function JobWorkspacePage() {
                   )}
                 </div>
 
-                {/* Score overview */}
-                <div style={{ padding: '16px 16px 12px', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
-                  {detail.overall_score != null ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <ScoreGauge score={detail.overall_score} size="sm" showLabel={false} />
-                      <div>
-                        <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.04em', color: scoreColor(detail.overall_score), lineHeight: 1 }}>
-                          {detail.overall_score}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>out of 100</div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>Scoring in progress…</div>
-                  )}
-                  {detail.has_dealbreaker && (
-                    <div style={{
-                      marginTop: 10,
-                      background: 'rgba(239,68,68,0.1)', color: '#ef4444', fontSize: 12, fontWeight: 600,
-                      padding: '7px 10px', borderRadius: 7, textAlign: 'center',
-                    }}>
-                      ⚠ Dealbreaker not met
-                    </div>
-                  )}
+                {/* Tabs */}
+                <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginTop: 12, flexShrink: 0 }}>
+                  {(['score', 'resume'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setDetailTab(tab)}
+                      style={{
+                        flex: 1, padding: '9px 0', textAlign: 'center', fontSize: 12.5, fontWeight: 600,
+                        cursor: 'pointer', background: 'none', border: 'none', fontFamily: 'var(--font)',
+                        transition: 'color 0.15s',
+                        color: detailTab === tab ? 'var(--teal)' : 'var(--text3)',
+                        borderBottom: detailTab === tab ? '2px solid var(--teal)' : '2px solid transparent',
+                      }}
+                    >
+                      {tab === 'score' ? 'Score & Notes' : 'Resume'}
+                    </button>
+                  ))}
                 </div>
 
-                {/* Criteria breakdown */}
-                {detail.criteria_scores.length > 0 && (
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-                      Score breakdown
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {detail.criteria_scores.map((cs) => {
-                        const score = cs.score ?? 0
-                        const expanded = expandedEvidence.has(cs.criterion_id)
-                        const wColor = cs.weight ? (WEIGHT_COLOR[cs.weight] ?? 'var(--text3)') : 'var(--text3)'
-                        return (
-                          <div key={cs.criterion_id}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-                              <span style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{cs.label}</span>
-                              <span style={{ fontSize: 13, fontWeight: 800, color: scoreColor(score), flexShrink: 0 }}>{score}</span>
+                {detailTab === 'score' && (
+                  <>
+                    {/* Score overview */}
+                    <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border)' }}>
+                      {detail.overall_score != null ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <ScoreGauge score={detail.overall_score} size="sm" showLabel={false} />
+                          <div>
+                            <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.04em', color: scoreColor(detail.overall_score), lineHeight: 1 }}>
+                              {detail.overall_score}
                             </div>
-                            {/* Bar */}
-                            <div style={{ height: 4, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
-                              <div style={{
-                                width: `${Math.max(0, Math.min(100, score))}%`, height: '100%',
-                                background: scoreColor(score), borderRadius: 3,
-                                transition: 'width 0.4s ease',
-                              }} />
-                            </div>
-                            {/* Weight badge */}
-                            {cs.weight && cs.weight !== 'nice_to_have' && (
-                              <div style={{ fontSize: 10, fontWeight: 700, color: wColor, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-                                {cs.weight === 'dealbreaker' ? '⚠ ' : ''}{cs.weight.replace('_', ' ')}
-                              </div>
-                            )}
-                            {/* Evidence */}
-                            {cs.evidence && (
-                              <div
-                                onClick={() => toggleEvidence(cs.criterion_id)}
-                                style={{
-                                  fontSize: 11.5, fontStyle: 'italic', color: 'var(--text3)', cursor: 'pointer',
-                                  lineHeight: 1.5,
-                                  display: expanded ? 'block' : '-webkit-box',
-                                  WebkitLineClamp: expanded ? undefined : 2,
-                                  WebkitBoxOrient: 'vertical' as const,
-                                  overflow: 'hidden',
-                                }}
-                              >
-                                &ldquo;{cs.evidence}&rdquo;
-                              </div>
-                            )}
+                            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>out of 100</div>
                           </div>
-                        )
-                      })}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>Scoring in progress…</div>
+                      )}
+                      {detail.has_dealbreaker && (
+                        <div style={{
+                          marginTop: 10,
+                          background: 'rgba(239,68,68,0.1)', color: '#ef4444', fontSize: 12, fontWeight: 600,
+                          padding: '7px 10px', borderRadius: 7, textAlign: 'center',
+                        }}>
+                          ⚠ Dealbreaker not met
+                        </div>
+                      )}
                     </div>
-                  </div>
+
+                    {/* Criteria breakdown */}
+                    {detail.criteria_scores.length > 0 && (
+                      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                          Score breakdown
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {detail.criteria_scores.map((cs) => {
+                            const score = cs.score ?? 0
+                            const expanded = expandedEvidence.has(cs.criterion_id)
+                            const wColor = cs.weight ? (WEIGHT_COLOR[cs.weight] ?? 'var(--text3)') : 'var(--text3)'
+                            return (
+                              <div key={cs.criterion_id}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                                  <span style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{cs.label}</span>
+                                  <span style={{ fontSize: 13, fontWeight: 800, color: scoreColor(score), flexShrink: 0 }}>{score}</span>
+                                </div>
+                                {/* Bar */}
+                                <div style={{ height: 4, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
+                                  <div style={{
+                                    width: `${Math.max(0, Math.min(100, score))}%`, height: '100%',
+                                    background: scoreColor(score), borderRadius: 3,
+                                    transition: 'width 0.4s ease',
+                                  }} />
+                                </div>
+                                {/* Weight badge */}
+                                {cs.weight && cs.weight !== 'nice_to_have' && (
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: wColor, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                                    {cs.weight === 'dealbreaker' ? '⚠ ' : ''}{cs.weight.replace('_', ' ')}
+                                  </div>
+                                )}
+                                {/* Evidence */}
+                                {cs.evidence && (
+                                  <div
+                                    onClick={() => toggleEvidence(cs.criterion_id)}
+                                    style={{
+                                      fontSize: 11.5, fontStyle: 'italic', color: 'var(--text3)', cursor: 'pointer',
+                                      lineHeight: 1.5,
+                                      display: expanded ? 'block' : '-webkit-box',
+                                      WebkitLineClamp: expanded ? undefined : 2,
+                                      WebkitBoxOrient: 'vertical' as const,
+                                      overflow: 'hidden',
+                                    }}
+                                  >
+                                    &ldquo;{cs.evidence}&rdquo;
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Status */}
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                        Status
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                        {(Object.keys(STATUS_CONFIG) as Status[]).map((s) => {
+                          const cfg = STATUS_CONFIG[s]
+                          const active = detail.status === s
+                          return (
+                            <button
+                              key={s}
+                              onClick={() => handleStatusChange(s)}
+                              style={{
+                                fontSize: 11.5, fontWeight: 600, padding: '5px 10px', borderRadius: 20,
+                                border: `1px solid ${active ? cfg.color : 'var(--border2)'}`,
+                                background: active ? cfg.bg : 'transparent',
+                                color: active ? cfg.color : 'var(--text3)',
+                                cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all 0.15s',
+                              }}
+                            >
+                              {cfg.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Notes */}
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                        Notes
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 10 }}>
+                        {detail.notes.length === 0 ? (
+                          <div style={{ fontSize: 12, color: 'var(--text3)' }}>No notes yet.</div>
+                        ) : detail.notes.map((note) => (
+                          <div key={note.id} style={{ background: 'var(--bg2)', borderRadius: 8, padding: '8px 10px', border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: 10.5, color: 'var(--text3)', marginBottom: 4 }}>{timeAgo(note.created_at)}</div>
+                            <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.5 }}>{note.body}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <textarea
+                        className="form-input"
+                        placeholder="Add a note…"
+                        value={noteText}
+                        onChange={(e) => setNoteText(e.target.value)}
+                        rows={3}
+                        maxLength={2000}
+                        style={{ fontSize: 12.5, marginBottom: 8, resize: 'vertical' }}
+                      />
+                      <button
+                        className="btn-ghost"
+                        onClick={handleAddNote}
+                        disabled={savingNote || !noteText.trim()}
+                        style={{ width: '100%', justifyContent: 'center', fontSize: 12.5 }}
+                      >
+                        {savingNote ? 'Saving…' : 'Add note'}
+                      </button>
+                    </div>
+                  </>
                 )}
 
-                {/* Status */}
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                    Status
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                    {(Object.keys(STATUS_CONFIG) as Status[]).map((s) => {
-                      const cfg = STATUS_CONFIG[s]
-                      const active = detail.status === s
-                      return (
-                        <button
-                          key={s}
-                          onClick={() => handleStatusChange(s)}
-                          style={{
-                            fontSize: 11.5, fontWeight: 600, padding: '5px 10px', borderRadius: 20,
-                            border: `1px solid ${active ? cfg.color : 'var(--border2)'}`,
-                            background: active ? cfg.bg : 'transparent',
-                            color: active ? cfg.color : 'var(--text3)',
-                            cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all 0.15s',
-                          }}
-                        >
-                          {cfg.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Notes */}
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                    Notes
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 10 }}>
-                    {detail.notes.length === 0 ? (
-                      <div style={{ fontSize: 12, color: 'var(--text3)' }}>No notes yet.</div>
-                    ) : detail.notes.map((note) => (
-                      <div key={note.id} style={{ background: 'var(--bg2)', borderRadius: 8, padding: '8px 10px', border: '1px solid var(--border)' }}>
-                        <div style={{ fontSize: 10.5, color: 'var(--text3)', marginBottom: 4 }}>{timeAgo(note.created_at)}</div>
-                        <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.5 }}>{note.body}</div>
+                {detailTab === 'resume' && (
+                  <div style={{ padding: 16, overflowY: 'auto' }}>
+                    {detail.resume_signed_url && (
+                      <a
+                        href={detail.resume_signed_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-ghost"
+                        style={{ display: 'inline-flex', textDecoration: 'none', fontSize: 12.5, marginBottom: 14 }}
+                      >
+                        Download original file
+                      </a>
+                    )}
+                    {detail.raw_text ? (
+                      <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                        {detail.raw_text}
                       </div>
-                    ))}
+                    ) : (
+                      <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>No resume text available.</div>
+                    )}
                   </div>
-                  <textarea
-                    className="form-input"
-                    placeholder="Add a note…"
-                    value={noteText}
-                    onChange={(e) => setNoteText(e.target.value)}
-                    rows={3}
-                    maxLength={2000}
-                    style={{ fontSize: 12.5, marginBottom: 8, resize: 'vertical' }}
-                  />
-                  <button
-                    className="btn-ghost"
-                    onClick={handleAddNote}
-                    disabled={savingNote || !noteText.trim()}
-                    style={{ width: '100%', justifyContent: 'center', fontSize: 12.5 }}
-                  >
-                    {savingNote ? 'Saving…' : 'Add note'}
-                  </button>
-                </div>
-
-                {/* Resume — collapsible */}
-                <div style={{ padding: '12px 16px 20px' }}>
-                  <button
-                    onClick={() => setResumeOpen((v) => !v)}
-                    style={{
-                      background: 'none', border: 'none', color: 'var(--text2)', fontSize: 11,
-                      fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)', padding: 0,
-                      textTransform: 'uppercase', letterSpacing: '0.06em',
-                    }}
-                  >
-                    {resumeOpen ? 'Hide resume ▴' : 'Show resume ▾'}
-                  </button>
-                  {resumeOpen && (
-                    <div style={{ marginTop: 14 }}>
-                      <ResumeDisplay
-                        text={detail.raw_text}
-                        name={detail.name}
-                        email={detail.email}
-                        headline={detail.parsed_headline}
-                      />
-                    </div>
-                  )}
-                </div>
+                )}
               </>
             )}
           </div>
