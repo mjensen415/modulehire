@@ -2307,6 +2307,9 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
 @media (max-width: 900px) {
   .mobile-top-header {
     display: flex;
+    /* Escape app-main's 20px padding so the header is truly full-bleed */
+    margin: -20px -20px 0;
+    width: calc(100% + 40px);
   }
   .mobile-tab-bar {
     display: flex;
@@ -2314,6 +2317,20 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
   /* Push content above the tab bar */
   .app-main {
     padding-bottom: var(--mobile-bar-h);
+  }
+
+  /* app-topbar: demote from sticky on mobile — MobileTopHeader is the one
+     sticky bar. Keeping both at top:0 causes a double-header conflict where
+     "Here's your workspace" pins on top of the content and scrolling appears
+     broken. Make it scroll with content instead. */
+  .app-topbar {
+    position: relative;
+    top: auto;
+    margin-left: -20px;
+    margin-right: -20px;
+    width: calc(100% + 40px);
+    padding-left: 16px;
+    padding-right: 16px;
   }
 
   .interview-prep-layout {
