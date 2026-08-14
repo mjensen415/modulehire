@@ -330,7 +330,7 @@ export default function Home() {
             fontSize:'clamp(24px,3vw,38px)', fontWeight:800, letterSpacing:'-0.03em',
             lineHeight:1.15, textWrap: 'balance'
           }}>
-            Three steps. One career narrative, <span style={{color:'var(--text2)', fontWeight:400}}>infinitely adaptable.</span>
+            Four steps. One career narrative, <span style={{color:'var(--text2)', fontWeight:400}}>infinitely adaptable.</span>
           </h2>
         </div>
 
@@ -350,6 +350,11 @@ export default function Home() {
               step: '03', title: 'Generate in seconds.',
               desc: 'Get a tailored .docx and .pdf that reads like it was written specifically for that role — because the right modules were.',
               accent: '03'
+            },
+            {
+              step: '04', title: 'Walk in ready.',
+              desc: 'Generate a talking points doc for any interview — your pitch, your angle on every requirement, questions worth asking, and gaps to be honest about. Built from your actual experience and the real JD.',
+              accent: '04'
             }
           ].map(f => (
             <div className="feature-card" key={f.step}>
@@ -362,6 +367,156 @@ export default function Home() {
               <div className="feature-accent">{f.accent}</div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ─── INTERVIEW PREP SPOTLIGHT ─── */}
+      <section style={{ maxWidth: 1100, margin: '0 auto', padding: '80px 24px' }}>
+        <style>{`
+          @media (max-width: 768px) {
+            .interview-prep-spotlight { flex-direction: column; }
+            .interview-prep-spotlight > div { flex-basis: 100% !important; }
+          }
+        `}</style>
+        <div className="interview-prep-spotlight" style={{ display: 'flex', gap: 48, alignItems: 'center' }}>
+
+          {/* Left — copy */}
+          <div style={{ flex: '1 1 50%', minWidth: 0 }}>
+            <div style={{
+              fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--teal)',
+              letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 14, fontWeight: 500,
+            }}>
+              New: Interview Prep
+            </div>
+            <h2 style={{ fontSize: 'clamp(28px,4vw,40px)', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.15, marginBottom: 18 }}>
+              Stop winging your interviews.
+            </h2>
+            <p style={{ fontSize: 16, color: 'var(--text2)', lineHeight: 1.65, maxWidth: 420, marginBottom: 22 }}>
+              After you generate your resume, ModuleHire can build a full talking points document for the interview — matched to your actual modules and the job description you already uploaded.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+              {[
+                'Your opening pitch, drafted for you',
+                'Talking point for every key requirement',
+                'Questions worth asking',
+                'Gaps to be ready for',
+              ].map((item) => (
+                <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 14, color: 'var(--text2)' }}>
+                  <span style={{ color: 'var(--teal)', fontWeight: 700, flexShrink: 0 }}>✓</span>
+                  {item}
+                </div>
+              ))}
+            </div>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center',
+              background: 'var(--amber-dim)', color: 'var(--amber)',
+              fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
+              marginBottom: 18,
+            }}>
+              Pro feature
+            </div>
+            <div>
+              <Link href="/signin?signup=1" style={{ fontSize: 14, color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>
+                Try it free →
+              </Link>
+            </div>
+          </div>
+
+          {/* Right — prep doc mockup */}
+          <div style={{ flex: '1 1 50%', minWidth: 0 }}>
+            <div style={{
+              background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 14,
+              overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
+            }}>
+              {/* Doc header */}
+              <div style={{
+                padding: '14px 18px', borderBottom: '1px solid var(--border)', background: 'var(--bg2)',
+                display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12,
+              }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                    Senior Product Manager — Stripe
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                    Interview prep · Generated just now
+                  </div>
+                </div>
+                <div style={{
+                  fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700,
+                  background: 'var(--teal-dim)', color: 'var(--teal)',
+                  padding: '3px 9px', borderRadius: 20, flexShrink: 0,
+                }}>
+                  Pro
+                </div>
+              </div>
+
+              {/* Doc body */}
+              <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+                {/* Pitch */}
+                <div style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 8, padding: '12px 14px' }}>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--teal)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+                    Your pitch
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6 }}>
+                    I&apos;m a PM with 5 years building developer-facing products at scale. At Figma I owned the API platform — grew adoption 3× in 18 months.
+                  </div>
+                </div>
+
+                {/* Talking points */}
+                {[
+                  {
+                    label: 'Cross-functional leadership',
+                    angle: 'Led 3 eng teams across 2 time zones at Figma',
+                    point: 'Lead with the API v2 launch — shipped on time despite a 6-week scope change.',
+                  },
+                  {
+                    label: 'Data-driven prioritization',
+                    angle: 'Built a 0-to-1 analytics practice from scratch',
+                    point: 'Mention the North Star metric you defined and how it changed the roadmap.',
+                  },
+                ].map((tp) => (
+                  <div key={tp.label} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 13px' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 4 }}>{tp.label}</div>
+                    <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Your angle: {tp.angle}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text2)', lineHeight: 1.5 }}>{tp.point}</div>
+                  </div>
+                ))}
+
+                {/* Questions / Gaps */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ flex: '1 1 50%', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', minWidth: 0 }}>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 6 }}>
+                      Ask them
+                    </div>
+                    {[
+                      'How does eng and PM share the roadmap?',
+                      'What does a great first 90 days look like?',
+                    ].map((q) => (
+                      <div key={q} style={{ display: 'flex', gap: 5, fontSize: 11, color: 'var(--text2)', marginBottom: 4, lineHeight: 1.4 }}>
+                        <span style={{ color: 'var(--teal)', flexShrink: 0 }}>→</span>
+                        {q}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ flex: '1 1 50%', background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.15)', borderRadius: 8, padding: '10px 12px', minWidth: 0 }}>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--amber)', textTransform: 'uppercase', marginBottom: 6 }}>
+                      Gaps to prep for
+                    </div>
+                    {[
+                      'No direct payments experience',
+                      'Limited enterprise background',
+                    ].map((g) => (
+                      <div key={g} style={{ display: 'flex', gap: 5, fontSize: 11, color: 'var(--text2)', marginBottom: 4, lineHeight: 1.4 }}>
+                        <span style={{ color: 'var(--amber)', flexShrink: 0 }}>⚠</span>
+                        {g}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -407,6 +562,7 @@ export default function Home() {
               <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Full ATS Estimator breakdown</div>
               <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Full module editing</div>
               <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Multiple resume uploads</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Interview prep document</div>
             </div>
             <Link href="/signin?signup=1" className="btn-primary" style={{ width: '100%', justifyContent: 'center', textDecoration: 'none' }}>Start free →</Link>
           </div>
@@ -420,6 +576,7 @@ export default function Home() {
               <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Everything in Pro Monthly</div>
               <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Billed annually</div>
               <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>~ $8.25/month effective</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Interview prep document</div>
             </div>
             <Link href="/signin?signup=1" className="btn-secondary" style={{ width: '100%', justifyContent: 'center', textDecoration: 'none' }}>Start free →</Link>
           </div>
