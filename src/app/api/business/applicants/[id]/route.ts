@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getOrgRole } from '@/lib/business/org-access'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -57,12 +57,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       evidence: s.evidence,
     }))
 
+    let resumeSignedUrl: string | null = null
+    if (applicant.file_url) {
+      const adminClient = await createAdminClient()
+      const { data: signed } = await adminClient.storage
+        .from('applicant-resumes')
+        .createSignedUrl(applicant.file_url, 3600)
+      resumeSignedUrl = signed?.signedUrl ?? null
+    }
+
     return NextResponse.json({
       applicant: {
         ...applicant,
         criteria_scores: criteriaScores,
         notes: notesRes.data ?? [],
         history: historyRes.data ?? [],
+        resume_signed_url: resumeSignedUrl,
       },
     })
   } catch (error) {

@@ -8,7 +8,7 @@ import FeedbackModal from '@/components/FeedbackModal';
 import ThemeToggle from '@/components/ThemeToggle';
 import { isProTier } from '@/lib/plan';
 
-function IconGrid() {
+export function IconGrid() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <rect x="1" y="1" width="5.5" height="5.5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
@@ -18,7 +18,7 @@ function IconGrid() {
     </svg>
   );
 }
-function IconBlocks() {
+export function IconBlocks() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <path d="M1.5 4.5h12M1.5 7.5h8M1.5 10.5h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -26,14 +26,14 @@ function IconBlocks() {
     </svg>
   );
 }
-function IconStar() {
+export function IconStar() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <path d="M7.5 1.5l1.6 3.3 3.6.5-2.6 2.5.6 3.6L7.5 9.7l-3.2 1.7.6-3.6L2.3 5.3l3.6-.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
     </svg>
   );
 }
-function IconTarget() {
+export function IconTarget() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <circle cx="7.5" cy="7.5" r="6" stroke="currentColor" strokeWidth="1.3"/>
@@ -42,7 +42,7 @@ function IconTarget() {
     </svg>
   );
 }
-function IconFiles() {
+export function IconFiles() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <path d="M8 1H3a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V6L8 1Z" stroke="currentColor" strokeWidth="1.3"/>
@@ -51,7 +51,7 @@ function IconFiles() {
     </svg>
   );
 }
-function IconSettings() {
+export function IconSettings() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <circle cx="7.5" cy="7.5" r="2" stroke="currentColor" strokeWidth="1.3"/>
@@ -59,7 +59,7 @@ function IconSettings() {
     </svg>
   );
 }
-function IconUpgrade() {
+export function IconUpgrade() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <path d="M7.5 1.5l4.5 4.5H9V11H6V6H3l4.5-4.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
@@ -67,7 +67,7 @@ function IconUpgrade() {
     </svg>
   );
 }
-function IconShield() {
+export function IconShield() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <path d="M7.5 1.5L2 4v4c0 3.2 2.3 5.8 5.5 6.5C10.7 13.8 13 11.2 13 8V4L7.5 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
@@ -75,7 +75,7 @@ function IconShield() {
     </svg>
   );
 }
-function IconResume() {
+export function IconResume() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <path d="M9 1H3.5A1.5 1.5 0 002 2.5v10A1.5 1.5 0 003.5 14h8A1.5 1.5 0 0013 12.5V5L9 1Z" stroke="currentColor" strokeWidth="1.3"/>
@@ -84,7 +84,7 @@ function IconResume() {
     </svg>
   )
 }
-function IconPerson() {
+export function IconPerson() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <circle cx="7.5" cy="4.5" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
@@ -92,7 +92,7 @@ function IconPerson() {
     </svg>
   );
 }
-function IconBriefcase2() {
+export function IconBriefcase2() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <rect x="1" y="5" width="13" height="9" rx="2" stroke="currentColor" strokeWidth="1.3"/>
@@ -102,7 +102,7 @@ function IconBriefcase2() {
     </svg>
   );
 }
-function IconClipboard() {
+export function IconClipboard() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <rect x="3" y="2.5" width="9" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
@@ -111,7 +111,7 @@ function IconClipboard() {
     </svg>
   );
 }
-function IconBuilding() {
+export function IconBuilding() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <rect x="1.5" y="1.5" width="8" height="12" rx="1" stroke="currentColor" strokeWidth="1.3"/>

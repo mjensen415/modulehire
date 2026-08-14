@@ -82,3 +82,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'Could not update job posting.' }, { status: 500 })
   }
 }
+
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { data: existing } = await supabase
+      .from('job_postings')
+      .select('org_id')
+      .eq('id', id)
+      .single()
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    const role = await getOrgRole(supabase, existing.org_id, user.id)
+    if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { error } = await supabase
+      .from('job_postings')
+      .delete()
+      .eq('id', id)
+    if (error) throw error
+
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    console.error('[business/job-postings/[id] DELETE]', error)
+    return NextResponse.json({ error: 'Could not delete job posting.' }, { status: 500 })
+  }
+}

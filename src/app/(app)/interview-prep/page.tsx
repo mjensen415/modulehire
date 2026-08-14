@@ -68,6 +68,7 @@ export default function InterviewPrepPage() {
 
   const pasteRef = useRef<HTMLTextAreaElement>(null)
   const appliedJdParam = useRef(false)
+  const mainPanelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     fetch('/api/me').then((r) => r.json()).then((data) => setIsPro(isProTier(data.tier))).catch(() => null)
@@ -109,6 +110,12 @@ export default function InterviewPrepPage() {
     const summary = jdList.find((j) => j.id === id)
     if (isPro && summary?.has_prep) {
       loadCachedPrep(id)
+    }
+
+    if (typeof window !== 'undefined' && window.innerWidth <= 900) {
+      requestAnimationFrame(() => {
+        mainPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
     }
   }
 
@@ -215,10 +222,10 @@ export default function InterviewPrepPage() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', height: 'calc(100vh - 56px)', overflow: 'hidden' }}>
+      <div className="interview-prep-layout" style={{ display: 'flex', height: 'calc(100vh - 56px)', overflow: 'hidden' }}>
 
         {/* LEFT — saved JDs */}
-        <div className="interview-prep-left" style={{ width: 280, flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="interview-prep-left interview-prep-sidebar" style={{ flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>Saved Job Descriptions</div>
             <button
@@ -295,7 +302,7 @@ export default function InterviewPrepPage() {
         </div>
 
         {/* RIGHT — prep document */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
+        <div ref={mainPanelRef} className="interview-prep-main" style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
           {error && (
             <div className="no-print" style={{ background: 'oklch(0.4 0.18 10 / 0.15)', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)', marginBottom: 20, maxWidth: 680 }}>
               {error}

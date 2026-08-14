@@ -222,7 +222,8 @@ export default function JobTrackerPage() {
             </div>
           </div>
         ) : (
-          <div className="section-card">
+          <div className="section-card" style={{ overflowX: 'auto' }}>
+            <div style={{ minWidth: 640 }}>
             <div style={{
               display: 'grid', gridTemplateColumns: '1.4fr 1.4fr 120px 110px 1.4fr 90px',
               gap: 12, padding: '10px 20px', borderBottom: '1px solid var(--border)',
@@ -302,6 +303,7 @@ export default function JobTrackerPage() {
                 </div>
               )
             })}
+            </div>
           </div>
         )}
       </div>
@@ -310,7 +312,7 @@ export default function JobTrackerPage() {
       {modalOpen && (
         <div
           onClick={() => !saving && setModalOpen(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -395,7 +397,7 @@ export default function JobTrackerPage() {
       {proGateOpen && (
         <div
           onClick={() => setProGateOpen(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
