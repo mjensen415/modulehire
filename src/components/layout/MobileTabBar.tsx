@@ -66,13 +66,12 @@ export default function MobileTabBar({ tier }: { tier?: string }) {
   const moreActive = moreItems.some((item) => pathname.startsWith(item.href))
 
   return (
-    <>
-      <nav className="mobile-tab-bar" style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 60,
-        height: 'var(--mobile-bar-h)',
-        background: 'var(--bg2)', borderTop: '1px solid var(--border)',
-        alignItems: 'stretch',
-      }}>
+    <nav className="mobile-tab-bar" style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 60,
+      height: 'var(--mobile-bar-h)',
+      background: 'var(--bg2)', borderTop: '1px solid var(--border)',
+      alignItems: 'stretch',
+    }}>
         {TABS.map((tab) => {
           const isActive = active(tab.href, tab.exact)
           const Icon = tab.icon
@@ -105,9 +104,8 @@ export default function MobileTabBar({ tier }: { tier?: string }) {
           <IconDots />
           More
         </button>
-      </nav>
 
-      {/* Backdrop */}
+      {/* Backdrop — inside nav so display:none on desktop hides it too */}
       {sheetOpen && (
         <div
           onClick={() => setSheetOpen(false)}
@@ -115,7 +113,7 @@ export default function MobileTabBar({ tier }: { tier?: string }) {
         />
       )}
 
-      {/* More sheet */}
+      {/* More sheet — inside nav for the same reason */}
       <div
         style={{
           position: 'fixed', bottom: 'var(--mobile-bar-h)', left: 0, right: 0, zIndex: 55,
@@ -146,6 +144,6 @@ export default function MobileTabBar({ tier }: { tier?: string }) {
           )
         })}
       </div>
-    </>
+    </nav>
   )
 }
