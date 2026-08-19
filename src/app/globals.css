@@ -2348,3 +2348,34 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; a
     flex: 1;
   }
 }
+
+/* ─── MARKETING PAGE MOBILE ───────────────────────────────────────────────────
+   Prevents horizontal overflow on all devices.
+   ──────────────────────────────────────────────────────────────────────────── */
+html { overflow-x: hidden; }
+
+/* Hero visual is too complex for small screens — hide it, let the headline/CTAs
+   carry the section. The panels are < 220px wide and the arrows SVG layout
+   does not translate to single-column. */
+@media (max-width: 900px) {
+  .hero-visual-wrap { display: none; }
+  #hero {
+    min-height: auto;
+    padding: 90px 24px 52px;
+  }
+  .hero-ctas { margin-bottom: 0; }
+}
+
+/* Interview-prep spotlight: two-column flex → single column on mobile.
+   Replaces the inline <style> tag in page.tsx which can be blocked by CSP. */
+@media (max-width: 768px) {
+  .interview-prep-spotlight {
+    flex-direction: column !important;
+    gap: 32px !important;
+  }
+  .interview-prep-spotlight > div {
+    flex-basis: 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}

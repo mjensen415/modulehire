@@ -372,12 +372,6 @@ export default function Home() {
 
       {/* ─── INTERVIEW PREP SPOTLIGHT ─── */}
       <section style={{ maxWidth: 1100, margin: '0 auto', padding: '80px 24px' }}>
-        <style>{`
-          @media (max-width: 768px) {
-            .interview-prep-spotlight { flex-direction: column; }
-            .interview-prep-spotlight > div { flex-basis: 100% !important; }
-          }
-        `}</style>
         <div className="interview-prep-spotlight" style={{ display: 'flex', gap: 48, alignItems: 'center' }}>
 
           {/* Left — copy */}
