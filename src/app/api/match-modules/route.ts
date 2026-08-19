@@ -5,6 +5,7 @@ import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { jsonrepair } from 'jsonrepair'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
+import { getActiveProfileId } from '@/lib/profile'
 
 export const maxDuration = 60
 
@@ -52,10 +53,12 @@ export async function POST(req: Request) {
       .single()
     if (jdError || !jd) return NextResponse.json({ error: 'Job description not found' }, { status: 404 })
 
+    const profileId = await getActiveProfileId(supabase, user.id)
     const { data: modules, error: modError } = await supabase
       .from('modules')
       .select('id, title, themes, weight, type, content, source_company, source_role_title, date_start, date_end')
       .eq('user_id', user.id)
+      .eq('profile_id', profileId)
     if (modError) throw modError
 
     const moduleList = modules.map(m =>

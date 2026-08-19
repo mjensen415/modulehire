@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getActiveProfileId } from '@/lib/profile'
 
 export async function GET() {
   try {
@@ -7,12 +8,16 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // Only return assignments where the skill belongs to this user.
-    // RLS should already enforce this, but the server-side filter makes it explicit.
+    const profileId = await getActiveProfileId(supabase, user.id)
+
+    // Only return assignments where the skill belongs to this user and the
+    // module belongs to their active profile.
+    // RLS should already enforce user ownership, but the server-side filter makes it explicit.
     const { data, error } = await supabase
       .from('skill_module_assignments')
-      .select('skill_id, module_id, job_skills!inner(user_id)')
+      .select('skill_id, module_id, job_skills!inner(user_id), modules!inner(profile_id)')
       .eq('job_skills.user_id', user.id)
+      .eq('modules.profile_id', profileId)
 
     if (error) throw error
     return NextResponse.json({
@@ -24,10 +29,10 @@ export async function GET() {
   }
 }
 
-async function verifyOwnership(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, skillId: string, moduleId: string): Promise<boolean> {
+async function verifyOwnership(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, skillId: string, moduleId: string, profileId: string): Promise<boolean> {
   const [skillRes, modRes] = await Promise.all([
     supabase.from('job_skills').select('id').eq('id', skillId).eq('user_id', userId).single(),
-    supabase.from('modules').select('id').eq('id', moduleId).eq('user_id', userId).single(),
+    supabase.from('modules').select('id').eq('id', moduleId).eq('user_id', userId).eq('profile_id', profileId).single(),
   ])
   return !!skillRes.data && !!modRes.data
 }
@@ -41,7 +46,8 @@ export async function POST(req: Request) {
     const { skill_id, module_id } = await req.json()
     if (!skill_id || !module_id) return NextResponse.json({ error: 'skill_id and module_id required.' }, { status: 400 })
 
-    if (!(await verifyOwnership(supabase, user.id, skill_id, module_id))) {
+    const profileId = await getActiveProfileId(supabase, user.id)
+    if (!(await verifyOwnership(supabase, user.id, skill_id, module_id, profileId))) {
       return NextResponse.json({ error: 'Not found.' }, { status: 404 })
     }
 
@@ -63,7 +69,8 @@ export async function DELETE(req: Request) {
     const { skill_id, module_id } = await req.json()
     if (!skill_id || !module_id) return NextResponse.json({ error: 'skill_id and module_id required.' }, { status: 400 })
 
-    if (!(await verifyOwnership(supabase, user.id, skill_id, module_id))) {
+    const profileId = await getActiveProfileId(supabase, user.id)
+    if (!(await verifyOwnership(supabase, user.id, skill_id, module_id, profileId))) {
       return NextResponse.json({ error: 'Not found.' }, { status: 404 })
     }
 

@@ -1,12 +1,192 @@
 'use client'
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import ModuleHireLogo from '@/components/ModuleHireLogo';
 import FeedbackModal from '@/components/FeedbackModal';
 import ThemeToggle from '@/components/ThemeToggle';
 import { isProTier } from '@/lib/plan';
+
+type ProfileSummary = { id: string; name: string; module_count: number; is_active: boolean };
+
+function IconSwap() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
+      <path d="M4 3.5h8L10 1.5M11 11.5H3l2 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+function IconCheck() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 15 15" fill="none">
+      <path d="M2.5 7.5 6 11l6.5-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+function ProfileSwitcher({ activeProfileName, activeProfileId }: { activeProfileName: string; activeProfileId: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [switching, setSwitching] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [savingNew, setSavingNew] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  async function loadProfiles() {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/profiles');
+      const data = await res.json();
+      setProfiles(data.profiles ?? []);
+    } catch {
+      // Leave list empty — user can retry by reopening.
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function toggleOpen() {
+    const next = !open;
+    setOpen(next);
+    if (next) loadProfiles();
+  }
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setCreating(false);
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, []);
+
+  async function switchTo(id: string) {
+    if (id === activeProfileId) { setOpen(false); return; }
+    setSwitching(id);
+    try {
+      await fetch(`/api/profiles/${id}/activate`, { method: 'POST' });
+      router.refresh();
+      await loadProfiles();
+      setOpen(false);
+    } finally {
+      setSwitching(null);
+    }
+  }
+
+  async function createProfile() {
+    if (!newName.trim() || savingNew) return;
+    setSavingNew(true);
+    try {
+      const res = await fetch('/api/profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+      if (res.ok) {
+        setNewName('');
+        setCreating(false);
+        await loadProfiles();
+      }
+    } finally {
+      setSavingNew(false);
+    }
+  }
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', margin: '2px 0 4px' }}>
+      <button
+        onClick={toggleOpen}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+          background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 8,
+          padding: '7px 10px', cursor: 'pointer', fontFamily: 'var(--font)',
+        }}
+      >
+        <span style={{ color: 'var(--text3)' }}><IconSwap /></span>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {activeProfileName}
+        </span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 30,
+          background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 10,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.18)', padding: 6,
+        }}>
+          {loading ? (
+            <div style={{ padding: '10px 8px', fontSize: 12, color: 'var(--text3)' }}>Loading…</div>
+          ) : (
+            profiles.map(p => (
+              <button
+                key={p.id}
+                onClick={() => switchTo(p.id)}
+                disabled={switching === p.id}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                  background: 'none', border: 'none', cursor: 'pointer', borderRadius: 6,
+                  padding: '7px 8px', fontFamily: 'var(--font)', textAlign: 'left',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg3)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+              >
+                <span style={{ width: 13, color: 'var(--teal)' }}>{p.is_active && <IconCheck />}</span>
+                <span style={{ fontSize: 12.5, fontWeight: p.is_active ? 700 : 500, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {p.name}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--text3)' }}>{p.module_count}</span>
+              </button>
+            ))
+          )}
+
+          <div style={{ borderTop: '1px solid var(--border2)', marginTop: 4, paddingTop: 4 }}>
+            {creating ? (
+              <div style={{ display: 'flex', gap: 6, padding: '4px 4px 2px' }}>
+                <input
+                  autoFocus
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && createProfile()}
+                  placeholder="Profile name"
+                  maxLength={100}
+                  style={{
+                    flex: 1, fontSize: 12.5, padding: '6px 8px', borderRadius: 6,
+                    border: '1px solid var(--border2)', background: 'var(--bg2)', color: 'var(--text)', fontFamily: 'var(--font)',
+                  }}
+                />
+                <button
+                  onClick={createProfile}
+                  disabled={savingNew || !newName.trim()}
+                  className="btn-primary"
+                  style={{ fontSize: 12, padding: '6px 10px' }}
+                >
+                  {savingNew ? '…' : 'Add'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setCreating(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+                  background: 'none', border: 'none', cursor: 'pointer', borderRadius: 6,
+                  padding: '7px 8px', fontSize: 12.5, fontWeight: 600, color: 'var(--teal)', fontFamily: 'var(--font)',
+                }}
+              >
+                + New profile
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function IconGrid() {
   return (
@@ -120,7 +300,7 @@ export function IconBuilding() {
     </svg>
   );
 }
-export default function AppSidebar({ footer, tier, isAdmin }: { footer?: React.ReactNode; tier?: string; isAdmin?: boolean }) {
+export default function AppSidebar({ footer, tier, isAdmin, activeProfileName, activeProfileId }: { footer?: React.ReactNode; tier?: string; isAdmin?: boolean; activeProfileName?: string; activeProfileId?: string }) {
   const pathname = usePathname();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
@@ -148,6 +328,10 @@ export default function AppSidebar({ footer, tier, isAdmin }: { footer?: React.R
         </Link>
         <ThemeToggle />
       </div>
+
+      {activeProfileId && (
+        <ProfileSwitcher activeProfileName={activeProfileName ?? 'Default'} activeProfileId={activeProfileId} />
+      )}
 
       <div className="sidebar-section">
         <div className="sidebar-section-label">Workspace</div>

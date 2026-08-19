@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { parseModules } from '@/lib/parse-modules'
+import { getActiveProfileId } from '@/lib/profile'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 
@@ -44,7 +45,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Resume too long (max 200,000 chars)' }, { status: 400 })
     }
 
-    const { modules: insertedModules, contact, jobSyncError, jobExperienceIds } = await parseModules(supabase, user.id, resume_id, raw_text)
+    const profileId = await getActiveProfileId(supabase, user.id)
+    const { modules: insertedModules, contact, jobSyncError, jobExperienceIds } = await parseModules(supabase, user.id, resume_id, raw_text, profileId)
 
     const adminSb = await createAdminClient()
     let profileUpdated = false

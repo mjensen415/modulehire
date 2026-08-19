@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { checkAndLog } from '@/lib/rate-limit'
 import { parseModules } from '@/lib/parse-modules'
+import { getActiveProfileId } from '@/lib/profile'
 
 // Lets an authenticated user wipe and rebuild their own module library from
 // their most recent uploaded resume. Rate-limited so it can't be hammered.
@@ -21,6 +22,7 @@ export async function POST() {
     }
 
     const admin = await createAdminClient()
+    const profileId = await getActiveProfileId(supabase, user.id)
 
     // Most recent non-deleted uploaded resume with raw text.
     const { data: resume, error: resumeErr } = await admin
@@ -36,15 +38,14 @@ export async function POST() {
       return NextResponse.json({ error: 'No uploaded resume found. Upload a resume first.' }, { status: 404 })
     }
 
-    // Clear the existing library. FK cascades remove module_job_assignments,
-    // skill_module_assignments, and job_skills automatically.
-    const { error: delModErr } = await admin.from('modules').delete().eq('user_id', user.id)
+    // Clear only the active profile's modules. FK cascades remove module_job_assignments
+    // and skill_module_assignments automatically. job_experiences are shared across
+    // profiles and are left intact so other profiles keep their job associations.
+    const { error: delModErr } = await admin.from('modules').delete().eq('user_id', user.id).eq('profile_id', profileId)
     if (delModErr) throw delModErr
-    const { error: delJobErr } = await admin.from('job_experiences').delete().eq('user_id', user.id)
-    if (delJobErr) throw delJobErr
 
     // Rebuild with the current parser.
-    const result = await parseModules(admin, user.id, resume.id, resume.raw_text)
+    const result = await parseModules(admin, user.id, resume.id, resume.raw_text, profileId)
 
     return NextResponse.json({ success: true, modules_created: result.modules?.length ?? 0 })
   } catch (error) {

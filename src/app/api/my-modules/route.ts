@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getActiveProfileId } from '@/lib/profile'
 
 export async function GET() {
   try {
@@ -7,10 +8,13 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+    const profileId = await getActiveProfileId(supabase, user.id)
+
     const { data, error } = await supabase
       .from('modules')
       .select('id, title, weight, themes, type, source_company')
       .eq('user_id', user.id)
+      .eq('profile_id', profileId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
 

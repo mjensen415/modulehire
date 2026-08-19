@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { parseModules } from '@/lib/parse-modules'
+import { getActiveProfileId } from '@/lib/profile'
 
 // Owner-only maintenance endpoint: wipes a user's parsed library and re-parses
 // their most recent uploaded resume with the current (fixed) parser. Gated to
@@ -34,6 +35,8 @@ export async function POST(req: Request) {
     if (userErr) throw userErr
     if (!target) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
+    const profileId = await getActiveProfileId(admin, target.id)
+
     // 2. Most recent non-deleted uploaded resume with raw text.
     const { data: resume, error: resumeErr } = await admin
       .from('resumes')
@@ -51,15 +54,14 @@ export async function POST(req: Request) {
       )
     }
 
-    // 3. Clear the existing library. FK cascades remove module_job_assignments,
-    //    skill_module_assignments, and job_skills automatically.
-    const { error: delModErr } = await admin.from('modules').delete().eq('user_id', target.id)
+    // 3. Clear only the active profile's modules. FK cascades remove
+    //    module_job_assignments and skill_module_assignments automatically.
+    //    job_experiences are shared across profiles and are left intact.
+    const { error: delModErr } = await admin.from('modules').delete().eq('user_id', target.id).eq('profile_id', profileId)
     if (delModErr) throw delModErr
-    const { error: delJobErr } = await admin.from('job_experiences').delete().eq('user_id', target.id)
-    if (delJobErr) throw delJobErr
 
     // 4. Re-parse with the current parser (single-job attribution).
-    const result = await parseModules(admin, target.id, resume.id, resume.raw_text)
+    const result = await parseModules(admin, target.id, resume.id, resume.raw_text, profileId)
 
     return NextResponse.json({
       success: true,

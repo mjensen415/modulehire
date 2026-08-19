@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getActiveProfileId } from '@/lib/profile'
 
 export async function GET() {
   try {
@@ -7,11 +8,14 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // Only return assignments where the module belongs to this user.
+    const profileId = await getActiveProfileId(supabase, user.id)
+
+    // Only return assignments where the module belongs to this user's active profile.
     const { data, error } = await supabase
       .from('module_job_assignments')
-      .select('module_id, job_id, modules!inner(user_id)')
+      .select('module_id, job_id, modules!inner(user_id, profile_id)')
       .eq('modules.user_id', user.id)
+      .eq('modules.profile_id', profileId)
 
     if (error) throw error
     return NextResponse.json({
@@ -32,10 +36,12 @@ export async function POST(req: Request) {
     const { module_id, job_id } = await req.json()
     if (!module_id || !job_id) return NextResponse.json({ error: 'module_id and job_id required.' }, { status: 400 })
 
-    // Verify both job AND module belong to this user
+    const profileId = await getActiveProfileId(supabase, user.id)
+
+    // Verify both job AND module belong to this user's active profile
     const [jobRes, modRes] = await Promise.all([
       supabase.from('job_experiences').select('id').eq('id', job_id).eq('user_id', user.id).single(),
-      supabase.from('modules').select('id').eq('id', module_id).eq('user_id', user.id).single(),
+      supabase.from('modules').select('id').eq('id', module_id).eq('user_id', user.id).eq('profile_id', profileId).single(),
     ])
     if (!jobRes.data || !modRes.data) return NextResponse.json({ error: 'Not found.' }, { status: 404 })
 
@@ -57,10 +63,12 @@ export async function DELETE(req: Request) {
     const { module_id, job_id } = await req.json()
     if (!module_id || !job_id) return NextResponse.json({ error: 'module_id and job_id required.' }, { status: 400 })
 
+    const profileId = await getActiveProfileId(supabase, user.id)
+
     // Verify ownership before delete (RLS should also enforce, but make it explicit)
     const [jobRes, modRes] = await Promise.all([
       supabase.from('job_experiences').select('id').eq('id', job_id).eq('user_id', user.id).single(),
-      supabase.from('modules').select('id').eq('id', module_id).eq('user_id', user.id).single(),
+      supabase.from('modules').select('id').eq('id', module_id).eq('user_id', user.id).eq('profile_id', profileId).single(),
     ])
     if (!jobRes.data || !modRes.data) return NextResponse.json({ error: 'Not found.' }, { status: 404 })
 

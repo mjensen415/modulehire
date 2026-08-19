@@ -7,6 +7,7 @@ import MobileTopHeader from '@/components/layout/MobileTopHeader';
 import EmailVerificationBanner from '@/components/EmailVerificationBanner';
 import { createClient } from '@/lib/supabase/server';
 import { needsEmailVerification } from '@/lib/email-verification';
+import { getActiveProfileId } from '@/lib/profile';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -18,6 +19,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   let tier: string = 'free';
   let isAdmin: boolean = false;
+  let activeProfileId = '';
+  let activeProfileName = 'Default';
 
   if (user) {
     const { data: profile } = await supabase
@@ -27,6 +30,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .single();
     tier = profile?.tier ?? 'free';
     isAdmin = profile?.is_admin ?? false;
+
+    const profileId = await getActiveProfileId(supabase, user.id).catch(() => null);
+    if (profileId) {
+      const { data: profileRow } = await supabase
+        .from('user_profiles')
+        .select('id, name')
+        .eq('id', profileId)
+        .single();
+      activeProfileId = profileRow?.id ?? '';
+      activeProfileName = profileRow?.name ?? 'Default';
+    }
   }
 
   const showVerifyBanner = needsEmailVerification(user);
@@ -41,7 +55,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <AppSidebar tier={tier} isAdmin={isAdmin} footer={<AppSidebarUser />} />
+      <AppSidebar tier={tier} isAdmin={isAdmin} footer={<AppSidebarUser />} activeProfileName={activeProfileName} activeProfileId={activeProfileId} />
       <main className="app-main">
         <MobileTopHeader userInitial={userInitial} />
         {showVerifyBanner && <EmailVerificationBanner email={user.email ?? null} />}

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getActiveProfileId } from '@/lib/profile'
 
 export async function POST(req: Request) {
   try {
@@ -12,12 +13,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No modules provided' }, { status: 400 })
     }
 
+    const profileId = await getActiveProfileId(supabase, user.id)
+
     // Separate existing modules (have real UUIDs) from new ones (id is undefined/null)
     const toUpsert = modules.map((m: Record<string, unknown>) => {
       const { id, ...rest } = m
       const base = {
         ...rest,
         user_id: user.id,
+        profile_id: profileId,
         source_resume_id: resume_id ?? null,
       }
       // Only include id if it's a real UUID (not a temp "new-N" id)

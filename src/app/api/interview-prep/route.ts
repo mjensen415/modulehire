@@ -4,6 +4,7 @@ import { aiComplete } from '@/lib/ai'
 import { jsonrepair } from 'jsonrepair'
 import { isProTier } from '@/lib/plan'
 import { isUuid } from '@/lib/validate'
+import { getActiveProfileId } from '@/lib/profile'
 
 export const maxDuration = 60
 
@@ -65,10 +66,12 @@ export async function POST(req: Request) {
       }
     }
 
+    const profileId = await getActiveProfileId(supabase, user.id)
     const { data: modules, error: modulesError } = await supabase
       .from('modules')
       .select('title, content, source_company, source_role_title, weight')
       .eq('user_id', user.id)
+      .eq('profile_id', profileId)
       .is('deleted_at', null)
       .order('weight', { ascending: true })
     if (modulesError) throw modulesError

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requiredString, optionalString, ValidationError } from '@/lib/validate'
 import { moduleLimit, isProTier } from '@/lib/plan'
+import { getActiveProfileId } from '@/lib/profile'
 
 const VALID_WEIGHTS = new Set(['anchor', 'strong', 'supporting'])
 const VALID_TYPES = new Set(['experience', 'skill', 'story', 'positioning'])
@@ -37,10 +38,13 @@ export async function POST(req: Request) {
 
     const body = await req.json()
 
+    const profileId = await getActiveProfileId(supabase, user.id)
+
     let row
     try {
       row = {
         user_id: user.id,
+        profile_id: profileId,
         title: requiredString(body.title, 200, 'title'),
         content: requiredString(body.content, 50_000, 'content'),
         weight: VALID_WEIGHTS.has(body.weight) ? body.weight : 'supporting',

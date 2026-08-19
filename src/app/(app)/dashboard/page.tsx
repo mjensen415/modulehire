@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { moduleLimit, isProTier, FREE_MONTHLY_GENERATIONS } from '@/lib/plan';
+import { getActiveProfileId } from '@/lib/profile';
 
 // ─── ICONS ───
 function IconBlocks() {
@@ -49,6 +50,38 @@ function IconSearch() {
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
       <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/>
       <path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  );
+}
+function IconBolt() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 15 15" fill="none">
+      <path d="M8 1 2.5 8.5H7L6 14l6-8h-4.5L8 1Z" stroke="var(--teal)" strokeWidth="1.3" strokeLinejoin="round" fill="none"/>
+    </svg>
+  );
+}
+function IconUploadLarge() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 15 15" fill="none">
+      <path d="M7.5 10V1M4 4.5 7.5 1 11 4.5" stroke="var(--teal)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M1 11v1.5A1.5 1.5 0 0 0 2.5 14h10A1.5 1.5 0 0 0 14 12.5V11" stroke="var(--teal)" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  );
+}
+function IconSearchLarge() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 14 14" fill="none">
+      <circle cx="6" cy="6" r="4.5" stroke="var(--teal)" strokeWidth="1.3"/>
+      <path d="M10 10l2.5 2.5" stroke="var(--teal)" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  );
+}
+function IconWarningTriangle() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
+      <path d="M7.5 1.5 14 13H1L7.5 1.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+      <path d="M7.5 6v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      <circle cx="7.5" cy="10.8" r="0.6" fill="currentColor"/>
     </svg>
   );
 }
@@ -134,6 +167,8 @@ export default async function Dashboard() {
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
+  const activeProfileId = await getActiveProfileId(supabase, user.id);
+
   const [
     { data: modules, count: moduleCount },
     { data: resumes, count: resumeCount },
@@ -147,6 +182,7 @@ export default async function Dashboard() {
       .from('modules')
       .select('id, title, weight, themes, role_types, type, source_company', { count: 'exact' })
       .eq('user_id', user!.id)
+      .eq('profile_id', activeProfileId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(6),
@@ -200,19 +236,11 @@ export default async function Dashboard() {
     ? Math.round(scoredResumes.reduce((sum, r) => sum + r.ats_score, 0) / scoredResumes.length)
     : null;
 
-  const stats = [
-    { label: 'Modules', value: String(moduleCount ?? 0), change: 'in your library', up: false, color: 'var(--teal)' },
-    { label: 'Job descriptions', value: String(jdCount ?? 0), change: 'analyzed', up: false, color: 'var(--amber)' },
-    { label: 'Resumes generated', value: String(resumeCount ?? 0), change: 'all time', up: false, color: 'var(--indigo)' },
-    { label: 'Match score avg', value: avgScore !== null ? `${avgScore}` : '—', change: avgScore !== null ? `across ${scoredResumes.length} resume${scoredResumes.length !== 1 ? 's' : ''}` : 'run a match to see', up: false, color: 'var(--green)' },
-  ];
-
   const typedModules: ModuleRecord[] = (modules ?? []) as ModuleRecord[];
   const typedResumes = resumes ?? [];
   const typedJds = (jds ?? []) as Array<{ id: string; extracted_role_type?: string; extracted_company?: string; created_at: string }>;
   const hasContent = typedModules.length > 0 || typedResumes.length > 0;
 
-  // Keyword suggestions from most recent JD
   const latestJd = recentJdFull as {
     id: string;
     extracted_company: string | null;
@@ -220,11 +248,73 @@ export default async function Dashboard() {
     extracted_phrases: string[] | null;
     extracted_themes: string[] | null;
   } | null;
-  const suggestionKeywords: string[] = latestJd
-    ? [...(latestJd.extracted_phrases ?? []), ...(latestJd.extracted_themes ?? [])]
-        .filter((k, i, arr) => k && k.length > 2 && arr.indexOf(k) === i)
-        .slice(0, 20)
-    : [];
+
+  // "Next move" — determine the primary action to surface
+  type NextMove =
+    | { type: 'upload' }
+    | { type: 'paste_jd' }
+    | { type: 'generate'; company: string | null; role: string | null }
+    | { type: 'improve'; score: number; company: string | null; topGap: string | null };
+
+  let nextMove: NextMove;
+  if (typedModules.length === 0) {
+    nextMove = { type: 'upload' };
+  } else if ((jdCount ?? 0) === 0) {
+    nextMove = { type: 'paste_jd' };
+  } else if ((resumeCount ?? 0) === 0) {
+    nextMove = {
+      type: 'generate',
+      company: latestJd?.extracted_company ?? null,
+      role: latestJd?.extracted_role_type ?? null,
+    };
+  } else {
+    const moduleThemes = new Set(typedModules.flatMap(m => m.themes ?? []));
+    const jdThemes = latestJd?.extracted_themes ?? [];
+    const gaps = jdThemes.filter(t => !moduleThemes.has(t));
+    nextMove = {
+      type: 'improve',
+      score: avgScore ?? 0,
+      company: latestJd?.extracted_company ?? null,
+      topGap: gaps[0] ?? null,
+    };
+  }
+
+  // Module gaps for health section
+  const allModuleThemes = new Set(typedModules.flatMap(m => m.themes ?? []));
+  const latestJdThemes = latestJd?.extracted_themes ?? [];
+  const moduleGaps = latestJdThemes.filter(t => !allModuleThemes.has(t)).slice(0, 5);
+
+  // Coverage estimate (% of JD themes covered by at least one module)
+  const coveragePct = latestJdThemes.length > 0
+    ? Math.round(((latestJdThemes.length - moduleGaps.length) / latestJdThemes.length) * 100)
+    : null;
+
+  const healthStats = [
+    {
+      label: 'Avg ATS score',
+      value: avgScore !== null ? String(avgScore) : '—',
+      sub: avgScore !== null ? `across ${scoredResumes.length} resume${scoredResumes.length !== 1 ? 's' : ''}` : 'generate a resume to see',
+      color: avgScore !== null ? (avgScore >= 80 ? 'var(--green)' : avgScore >= 60 ? 'var(--amber)' : '#ef4444') : 'var(--teal)',
+    },
+    {
+      label: 'Modules',
+      value: String(moduleCount ?? 0),
+      sub: 'in your library',
+      color: 'var(--teal)',
+    },
+    {
+      label: 'JDs analyzed',
+      value: String(jdCount ?? 0),
+      sub: jdCount ? 'job descriptions' : 'paste one to start',
+      color: 'var(--amber)',
+    },
+    {
+      label: 'Skill coverage',
+      value: coveragePct !== null ? `${coveragePct}%` : '—',
+      sub: coveragePct !== null ? 'of latest JD themes' : 'add a JD to see',
+      color: coveragePct !== null ? (coveragePct >= 70 ? 'var(--green)' : 'var(--amber)') : 'var(--indigo)',
+    },
+  ];
 
   // Plan gate state
   const plan = (profileRow?.plan ?? 'free') as string;
@@ -275,17 +365,107 @@ export default async function Dashboard() {
           </div>
         )}
 
-        {/* STATS */}
+        {/* NEXT MOVE */}
+        {hasContent && (
+          <div className="section-card" style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '20px 24px', marginBottom: 16 }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+              background: 'rgba(29,158,117,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              {nextMove.type === 'upload' ? <IconUploadLarge /> : nextMove.type === 'paste_jd' ? <IconSearchLarge /> : <IconBolt />}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal)', letterSpacing: '0.06em', marginBottom: 4 }}>
+                YOUR NEXT MOVE
+              </div>
+              {nextMove.type === 'upload' && <>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Upload your resume to get started</div>
+                <div style={{ fontSize: 13, color: 'var(--text3)' }}>We&apos;ll parse it into skill modules you can mix and match for any role.</div>
+              </>}
+              {nextMove.type === 'paste_jd' && <>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Paste a job description to find your best modules</div>
+                <div style={{ fontSize: 13, color: 'var(--text3)' }}>We&apos;ll rank your {moduleCount} modules against the role and show what fits.</div>
+              </>}
+              {nextMove.type === 'generate' && <>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
+                  Generate your first resume{nextMove.company ? ` for ${nextMove.company}` : ''}
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text3)' }}>
+                  You&apos;ve analyzed{nextMove.role ? ` the ${nextMove.role} role` : ' a role'} — now build the resume.
+                </div>
+              </>}
+              {nextMove.type === 'improve' && <>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
+                  {nextMove.company
+                    ? `Your ${nextMove.company} resume scores ${nextMove.score}`
+                    : `Your latest resume scores ${nextMove.score}`}
+                  {nextMove.topGap ? ` — missing "${nextMove.topGap}"` : ' — you\'re in good shape'}
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text3)' }}>
+                  {nextMove.topGap
+                    ? `Adding a module covering "${nextMove.topGap}" could push your score higher.`
+                    : 'Add more job descriptions to keep your modules aligned to new roles.'}
+                </div>
+              </>}
+              <Link
+                href={nextMove.type === 'upload' ? '/upload' : nextMove.type === 'improve' ? '/library' : '/generate'}
+                style={{ display: 'inline-block', marginTop: 10, fontSize: 12.5, fontWeight: 600, color: 'var(--teal)', textDecoration: 'none' }}
+              >
+                {nextMove.type === 'upload' ? 'Upload resume →'
+                  : nextMove.type === 'paste_jd' ? 'Find matches →'
+                  : nextMove.type === 'generate' ? 'Generate resume →'
+                  : nextMove.topGap ? 'Add a module →'
+                  : 'Add a job description →'}
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* HEALTH ROW */}
         <div className="dash-stats">
-          {stats.map(s => (
+          {healthStats.map(s => (
             <div className="stat-card" key={s.label}>
               <div className="stat-label">{s.label}</div>
               <div className="stat-value">{s.value}</div>
-              <div className={`stat-change${s.up ? ' up' : ''}`}>{s.change}</div>
+              <div className="stat-change">{s.sub}</div>
               <div className="stat-accent" style={{ background: s.color }} />
             </div>
           ))}
         </div>
+
+        {/* MODULE GAPS */}
+        {moduleGaps.length > 0 && (
+          <div className="section-card" style={{ marginBottom: 16 }}>
+            <div className="section-head">
+              <div className="section-head-title">
+                <IconWarningTriangle /> Module gaps
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+                Skills in your latest JD{latestJd?.extracted_company ? ` (${latestJd.extracted_company})` : ''} not covered by any module
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '4px 0 8px' }}>
+              {moduleGaps.map(gap => (
+                <Link
+                  key={gap}
+                  href="/library"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    fontSize: 12.5, fontWeight: 500,
+                    background: 'var(--amber-dim)', color: 'var(--amber)',
+                    border: '1px solid var(--amber)', borderRadius: 6,
+                    padding: '5px 12px', textDecoration: 'none',
+                  }}
+                >
+                  + {gap}
+                </Link>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', paddingTop: 4 }}>
+              Click any gap to open your module library and add coverage.
+            </div>
+          </div>
+        )}
 
         {/* TWO COLUMN */}
         <div className="dash-two-col">
@@ -403,74 +583,26 @@ export default async function Dashboard() {
           </div>
         )}
 
-        {/* RECENT RESUMES + KEYWORD SUGGESTIONS */}
-        {(typedResumes.length > 0 || suggestionKeywords.length > 0) && (
-          <div style={{ display: 'grid', gridTemplateColumns: typedResumes.length > 0 && suggestionKeywords.length > 0 ? '1fr 320px' : '1fr', gap: 16, alignItems: 'start' }}>
-
-            {/* Recent generations */}
-            {typedResumes.length > 0 && (
-              <div className="section-card">
-                <div className="section-head">
-                  <div className="section-head-title"><IconFiles /> Recent Generations</div>
-                  <Link href="/resumes" className="section-head-action">View all →</Link>
+        {/* RECENT RESUMES */}
+        {typedResumes.length > 0 && (
+          <div className="section-card">
+            <div className="section-head">
+              <div className="section-head-title"><IconFiles /> Recent Generations</div>
+              <Link href="/resumes" className="section-head-action">View all →</Link>
+            </div>
+            {(typedResumes as Array<{ id: string; title?: string; positioning_variant?: string; created_at: string }>).map((r, i) => (
+              <div className="app-row" key={r.id}>
+                <div className={`app-dot ${i === 0 ? 'sent' : i === 1 ? 'viewed' : 'draft'}`} />
+                <div className="app-row-title">{r.title || 'Untitled resume'}</div>
+                <div className="app-row-co">{r.positioning_variant ?? ''}</div>
+                <div className="app-row-date">
+                  {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </div>
-                {(typedResumes as Array<{ id: string; title?: string; positioning_variant?: string; created_at: string }>).map((r, i) => (
-                  <div className="app-row" key={r.id}>
-                    <div className={`app-dot ${i === 0 ? 'sent' : i === 1 ? 'viewed' : 'draft'}`} />
-                    <div className="app-row-title">{r.title || 'Untitled resume'}</div>
-                    <div className="app-row-co">{r.positioning_variant ?? ''}</div>
-                    <div className="app-row-date">
-                      {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </div>
-                    <div className={`app-badge ${i === 0 ? 'sent' : i === 1 ? 'viewed' : 'draft'}`}>
-                      {i === 0 ? 'Latest' : i === 1 ? 'Prev' : 'Older'}
-                    </div>
-                  </div>
-                ))}
+                <div className={`app-badge ${i === 0 ? 'sent' : i === 1 ? 'viewed' : 'draft'}`}>
+                  {i === 0 ? 'Latest' : i === 1 ? 'Prev' : 'Older'}
+                </div>
               </div>
-            )}
-
-            {/* Keyword suggestions panel */}
-            {suggestionKeywords.length > 0 && (
-              <div className="section-card" style={{ padding: '20px 20px 16px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
-                  Keyword tips
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4, lineHeight: 1.4 }}>
-                  Want to improve your chances of getting this role?
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, lineHeight: 1.5 }}>
-                  Consider adding these keywords from your most recent job match
-                  {latestJd?.extracted_company ? ` with ${latestJd.extracted_company}` : ''}:
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                  {suggestionKeywords.slice(0, 10).map(kw => (
-                    <div key={kw} style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '7px 0',
-                      borderBottom: '1px solid var(--border2)',
-                    }}>
-                      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                        <circle cx="9" cy="9" r="8" stroke="var(--border2)" strokeWidth="1.5" fill="var(--bg3)"/>
-                      </svg>
-                      <span style={{ fontSize: 13, color: 'var(--text2)', fontWeight: 500 }}>{kw}</span>
-                    </div>
-                  ))}
-                </div>
-                {suggestionKeywords.length > 10 && (
-                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 10 }}>
-                    +{suggestionKeywords.length - 10} more · <Link href="/generate" style={{ color: 'var(--teal)', textDecoration: 'none' }}>Generate a resume to see full analysis →</Link>
-                  </div>
-                )}
-                {suggestionKeywords.length <= 10 && (
-                  <div style={{ marginTop: 12 }}>
-                    <Link href="/generate" style={{ fontSize: 12, color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>
-                      Generate a resume to see full keyword match →
-                    </Link>
-                  </div>
-                )}
-              </div>
-            )}
+            ))}
           </div>
         )}
 

@@ -156,7 +156,8 @@ export async function parseModules(
   supabase: SupabaseClient,
   userId: string,
   resumeId: string,
-  rawText: string
+  rawText: string,
+  profileId: string
 ) {
   const prompt = `You are a resume parsing expert. Decompose the resume below into modular skill blocks.
 
@@ -254,6 +255,7 @@ JSON array:`
   const modulesToInsert = modulesData.map(m => ({
     ...m,
     user_id: userId,
+    profile_id: profileId,
     source_resume_id: resumeId,
     role_types:    toArray(m.role_types),
     themes:        toArray(m.themes),

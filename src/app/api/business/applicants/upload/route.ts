@@ -13,6 +13,17 @@ function nameFromFilename(filename: string): string | null {
   return base.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
 }
 
+function nameFromText(text: string): string | null {
+  // First non-empty line of the resume is nearly always the candidate's name.
+  // Take the first 2 words, ignore punctuation separators.
+  const firstLine = text.split('\n').map(l => l.trim()).find(l => l.length > 2)
+  if (!firstLine) return null
+  const cleaned = firstLine.replace(/[,|•◆♦@\/\\()\[\]]/g, ' ').trim()
+  const words = cleaned.split(/\s+/).slice(0, 2)
+  if (words.length < 2) return null
+  return words.map(w => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ')
+}
+
 async function extractText(file: File): Promise<string> {
   if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
     const { getDocumentProxy, extractText: unpdfExtract } = await import('unpdf')
@@ -81,9 +92,7 @@ export async function POST(req: Request) {
 
     const nameStr = typeof name === 'string' && name.trim()
       ? name.trim().slice(0, 200)
-      : file
-        ? nameFromFilename(file.name)
-        : null
+      : nameFromText(rawText) ?? (file ? nameFromFilename(file.name) : null)
 
     const { data: applicant, error: insertError } = await supabase
       .from('applicants')

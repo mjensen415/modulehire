@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getActiveProfileId } from '@/lib/profile'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -12,11 +13,13 @@ export async function GET(_req: Request, { params }: RouteContext) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { id } = await params
+    const profileId = await getActiveProfileId(supabase, user.id)
     const { data, error } = await supabase
       .from('modules')
       .select('id, title, content, weight, themes, type, source_company, source_role_title, date_start, date_end')
       .eq('id', id)
       .eq('user_id', user.id)
+      .eq('profile_id', profileId)
       .is('deleted_at', null)
       .single()
 
@@ -34,6 +37,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { id } = await params
+    const profileId = await getActiveProfileId(supabase, user.id)
     const body = await req.json()
 
     const updates: Record<string, unknown> = {}
@@ -46,6 +50,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
       .update(updates)
       .eq('id', id)
       .eq('user_id', user.id)
+      .eq('profile_id', profileId)
       .select()
       .single()
 
@@ -66,12 +71,14 @@ export async function DELETE(_req: Request, { params }: RouteContext) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { id } = await params
+    const profileId = await getActiveProfileId(supabase, user.id)
 
     const { error } = await supabase
       .from('modules')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', id)
       .eq('user_id', user.id)
+      .eq('profile_id', profileId)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

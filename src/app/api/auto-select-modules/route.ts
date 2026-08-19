@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { isUuid } from '@/lib/validate'
+import { getActiveProfileId } from '@/lib/profile'
 
 // Fast-track module picker: scores the user's modules against the JD's themes
 // and returns the top matches, ordered. No AI call — a cheap deterministic
@@ -44,10 +45,12 @@ export async function POST(req: Request) {
     if (jdError || !jd) return NextResponse.json({ error: 'Job description not found' }, { status: 404 })
 
     // 2. Fetch the user's live modules.
+    const profileId = await getActiveProfileId(supabase, user.id)
     const { data: modules, error: modError } = await supabase
       .from('modules')
       .select('id, themes, type, content')
       .eq('user_id', user.id)
+      .eq('profile_id', profileId)
       .is('deleted_at', null)
     if (modError) throw modError
 

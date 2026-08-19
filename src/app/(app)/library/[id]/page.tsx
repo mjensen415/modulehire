@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getActiveProfileId } from '@/lib/profile'
 import EditModuleForm from './EditModuleForm'
 
 type PageProps = { params: Promise<{ id: string }> }
@@ -11,11 +12,13 @@ export default async function EditModulePage({ params }: PageProps) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  const profileId = await getActiveProfileId(supabase, user.id)
   const { data: module } = await supabase
     .from('modules')
     .select('id, title, content, weight, type, source_company, source_role_title, date_start, date_end, employment_type')
     .eq('id', id)
     .eq('user_id', user.id)
+    .eq('profile_id', profileId)
     .is('deleted_at', null)
     .single()
 

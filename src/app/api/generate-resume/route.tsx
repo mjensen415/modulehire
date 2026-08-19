@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
+import { getActiveProfileId } from '@/lib/profile'
 // canGenerate removed — generation is always allowed; download is gated client-side via canDownload.
 import { FREE_MONTHLY_GENERATIONS, isProTier } from '@/lib/plan'
 import * as docx from 'docx'
@@ -1484,10 +1485,12 @@ export async function POST(req: Request) {
       .single()
     if (jdError || !jd) return NextResponse.json({ error: 'Job description not found' }, { status: 404 })
 
+    const profileId = await getActiveProfileId(supabase, user.id)
     const { data: modules, error: modError } = await supabase
       .from('modules')
       .select('*')
       .eq('user_id', user.id)
+      .eq('profile_id', profileId)
       .in('id', module_ids)
     if (modError) throw modError
 
@@ -1813,6 +1816,7 @@ ${JSON.stringify(experienceGroups)}`
       .insert({
         id: resumeId,
         user_id: user.id,
+        profile_id: profileId,
         job_description_id: jd_id,
         title: resumeTitle,
         module_ids_used: module_ids,

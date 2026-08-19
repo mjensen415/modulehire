@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 
-type Section = 'account' | 'billing' | 'connected' | 'danger'
+type Section = 'account' | 'billing' | 'connected' | 'profiles' | 'danger'
 
 type Profile = {
   name: string
@@ -14,6 +14,8 @@ type Profile = {
   tier?: 'free' | 'pro' | 'beta_pro'
   tier_expires_at?: string | null
 }
+
+type ModuleProfile = { id: string; name: string; module_count: number; is_active: boolean }
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState<Section>('account')
@@ -27,6 +29,86 @@ export default function Settings() {
   const [saveError, setSaveError] = useState('')
   const [portalLoading, setPortalLoading] = useState(false)
   const [portalError, setPortalError] = useState('')
+
+  const [moduleProfiles, setModuleProfiles] = useState<ModuleProfile[]>([])
+  const [profilesLoading, setProfilesLoading] = useState(false)
+  const [profilesError, setProfilesError] = useState('')
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [newProfileName, setNewProfileName] = useState('')
+  const [creatingProfile, setCreatingProfile] = useState(false)
+  const [busyProfileId, setBusyProfileId] = useState<string | null>(null)
+
+  async function loadModuleProfiles() {
+    setProfilesLoading(true)
+    setProfilesError('')
+    try {
+      const res = await fetch('/api/profiles')
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not load profiles')
+      setModuleProfiles(data.profiles ?? [])
+    } catch (e) {
+      setProfilesError((e as Error).message)
+    } finally {
+      setProfilesLoading(false)
+    }
+  }
+
+  async function handleCreateProfile() {
+    if (!newProfileName.trim()) return
+    setCreatingProfile(true)
+    setProfilesError('')
+    try {
+      const res = await fetch('/api/profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newProfileName.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not create profile')
+      setNewProfileName('')
+      await loadModuleProfiles()
+    } catch (e) {
+      setProfilesError((e as Error).message)
+    } finally {
+      setCreatingProfile(false)
+    }
+  }
+
+  async function handleRenameProfile(id: string) {
+    if (!renameValue.trim()) return
+    setBusyProfileId(id)
+    try {
+      const res = await fetch(`/api/profiles/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: renameValue.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not rename profile')
+      setRenamingId(null)
+      await loadModuleProfiles()
+    } catch (e) {
+      setProfilesError((e as Error).message)
+    } finally {
+      setBusyProfileId(null)
+    }
+  }
+
+  async function handleDeleteProfile(id: string) {
+    setBusyProfileId(id)
+    setProfilesError('')
+    try {
+      const res = await fetch(`/api/profiles/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not delete profile')
+      await loadModuleProfiles()
+    } catch (e) {
+      setProfilesError((e as Error).message)
+    } finally {
+      setBusyProfileId(null)
+    }
+  }
 
   async function openBillingPortal() {
     setPortalError('')
@@ -66,6 +148,13 @@ export default function Settings() {
       .catch(() => {})
   }, [])
 
+  function selectSection(s: Section) {
+    setActiveSection(s)
+    if (s === 'profiles' && moduleProfiles.length === 0 && !profilesLoading) {
+      loadModuleProfiles()
+    }
+  }
+
   async function handleSave() {
     setSaving(true)
     setSaveError('')
@@ -101,11 +190,11 @@ export default function Settings() {
 
           <nav className="settings-nav">
             <div className="settings-nav-title">Settings</div>
-            {(['account', 'billing', 'connected'] as Section[]).map(s => (
+            {(['account', 'billing', 'connected', 'profiles'] as Section[]).map(s => (
               <button
                 key={s}
                 className={`settings-nav-link ${activeSection === s ? 'active' : ''}`}
-                onClick={() => setActiveSection(s)}
+                onClick={() => selectSection(s)}
                 style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font)' }}
               >
                 {s === 'connected' ? 'Connected accounts' : s.charAt(0).toUpperCase() + s.slice(1)}
@@ -271,6 +360,114 @@ export default function Settings() {
                     </div>
                   </div>
                   <button className="btn-connect">Connect</button>
+                </div>
+              </div>
+            )}
+
+            {activeSection === 'profiles' && (
+              <div className="settings-section active">
+                <div className="section-title">Profiles</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text3)', marginBottom: 20, lineHeight: 1.5 }}>
+                  Each profile has its own set of modules. Switch profiles to work with a different resume identity. Job descriptions and job applications are shared across all profiles.
+                </div>
+
+                {profilesError && (
+                  <div style={{ fontSize: 13, color: 'var(--rose)', marginBottom: 12 }}>{profilesError}</div>
+                )}
+
+                {profilesLoading ? (
+                  <div style={{ fontSize: 13, color: 'var(--text3)' }}>Loading…</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                    {moduleProfiles.map(p => {
+                      const canDelete = !p.is_active && moduleProfiles.length > 1
+                      const deleteTooltip = p.is_active
+                        ? 'Switch away from this profile before deleting it'
+                        : moduleProfiles.length <= 1
+                          ? 'You cannot delete your only profile'
+                          : undefined
+                      return (
+                        <div key={p.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+                          border: '1px solid var(--border2)', borderRadius: 10, background: 'var(--bg2)',
+                        }}>
+                          {renamingId === p.id ? (
+                            <input
+                              autoFocus
+                              value={renameValue}
+                              onChange={e => setRenameValue(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && handleRenameProfile(p.id)}
+                              maxLength={100}
+                              className="field-input"
+                              style={{ flex: 1 }}
+                            />
+                          ) : (
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>
+                                {p.is_active && (
+                                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--teal)', background: 'var(--teal-dim)', borderRadius: 20, padding: '2px 8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                    Active
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+                                {p.module_count} module{p.module_count === 1 ? '' : 's'}
+                              </div>
+                            </div>
+                          )}
+
+                          {renamingId === p.id ? (
+                            <>
+                              <button className="btn-primary" style={{ fontSize: 12, padding: '6px 12px' }} disabled={busyProfileId === p.id} onClick={() => handleRenameProfile(p.id)}>
+                                Save
+                              </button>
+                              <button className="btn-ghost" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => setRenamingId(null)}>
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                className="btn-ghost"
+                                style={{ fontSize: 12, padding: '6px 12px' }}
+                                onClick={() => { setRenamingId(p.id); setRenameValue(p.name) }}
+                              >
+                                Rename
+                              </button>
+                              <button
+                                className="btn-ghost"
+                                style={{ fontSize: 12, padding: '6px 12px', opacity: canDelete ? 1 : 0.45, cursor: canDelete ? 'pointer' : 'not-allowed' }}
+                                disabled={!canDelete || busyProfileId === p.id}
+                                title={deleteTooltip}
+                                onClick={() => canDelete && handleDeleteProfile(p.id)}
+                              >
+                                Delete
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <div style={{ borderTop: '1px solid var(--border2)', paddingTop: 20 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Create a new profile</div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <input
+                      value={newProfileName}
+                      onChange={e => setNewProfileName(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleCreateProfile()}
+                      placeholder="e.g. Product work"
+                      maxLength={100}
+                      className="field-input"
+                      style={{ flex: 1 }}
+                    />
+                    <button className="btn-primary" onClick={handleCreateProfile} disabled={creatingProfile || !newProfileName.trim()}>
+                      {creatingProfile ? 'Creating…' : 'Create profile'}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

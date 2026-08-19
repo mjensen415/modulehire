@@ -3,6 +3,7 @@ import { aiComplete } from '@/lib/ai'
 import { createClient } from '@/lib/supabase/server'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
+import { getActiveProfileId } from '@/lib/profile'
 
 export const maxDuration = 60
 
@@ -25,11 +26,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid module_id or jd_id' }, { status: 400 })
     }
 
+    const profileId = await getActiveProfileId(supabase, user.id)
     const { data: moduleRow } = await supabase
       .from('modules')
       .select('id, title, content')
       .eq('id', module_id)
       .eq('user_id', user.id)
+      .eq('profile_id', profileId)
       .is('deleted_at', null)
       .single()
     if (!moduleRow) return NextResponse.json({ error: 'Module not found' }, { status: 404 })

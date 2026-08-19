@@ -28,11 +28,21 @@ type CriterionScore = {
 
 type Note = { id: string; body: string; user_id: string; created_at: string }
 
+type AiCheckResult = {
+  likely_ai: boolean
+  confidence: string
+  signals: string[]
+  human_signals: string[]
+  summary: string
+}
+
 type ApplicantDetail = Applicant & {
   raw_text: string | null
   criteria_scores: CriterionScore[]
   notes: Note[]
   resume_signed_url: string | null
+  ai_check_result: AiCheckResult | null
+  ai_checked_at: string | null
 }
 
 type Job = { id: string; title: string; status: string; extracted_themes: string[] }
@@ -49,6 +59,8 @@ const CRITERIA_WEIGHT_OPTIONS: Array<{ value: Weight; label: string; color: stri
   { value: 'must_have', label: 'Must have', color: 'var(--teal)', bg: 'var(--teal-dim)' },
   { value: 'nice_to_have', label: 'Nice to have', color: 'var(--text3)', bg: 'var(--bg3)' },
 ]
+
+const AI_REVIEW_THRESHOLD = 88
 
 let criteriaKeyCounter = 0
 function nextCriteriaKey() {
@@ -200,6 +212,8 @@ export default function JobWorkspacePage() {
   const [addApplicantsOpen, setAddApplicantsOpen] = useState(false)
   const [addingApplicant, setAddingApplicant] = useState(false)
   const [detailTab, setDetailTab] = useState<'score' | 'resume'>('score')
+  const [aiChecking, setAiChecking] = useState(false)
+  const [aiCheckResult, setAiCheckResult] = useState<AiCheckResult | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const csvInputRef = useRef<HTMLInputElement>(null)
@@ -242,6 +256,7 @@ export default function JobWorkspacePage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Could not load applicant')
       setDetail(data.applicant)
+      setAiCheckResult(data.applicant.ai_check_result ?? null)
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -251,9 +266,24 @@ export default function JobWorkspacePage() {
 
   useEffect(() => {
     setDetailTab('score')
+    setAiCheckResult(null)
     if (selectedId) loadDetail(selectedId)
     else setDetail(null)
   }, [selectedId, loadDetail])
+
+  async function runAiCheck(applicantId: string) {
+    setAiChecking(true)
+    try {
+      const res = await fetch(`/api/business/applicants/${applicantId}/ai-check`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not run AI check')
+      setAiCheckResult(data.result)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setAiChecking(false)
+    }
+  }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -380,7 +410,7 @@ export default function JobWorkspacePage() {
   }
 
   async function handleJobStatusChange(status: string) {
-    if (!job || jobStatusUpdating) return
+    if (!job || jobStatusUpdating) return false
     const previous = job.status
     setJob({ ...job, status })
     setJobStatusUpdating(true)
@@ -391,11 +421,21 @@ export default function JobWorkspacePage() {
         body: JSON.stringify({ status }),
       })
       if (!res.ok) throw new Error('Could not update job status')
+      return true
     } catch (e) {
       setJob({ ...job, status: previous })
       setError((e as Error).message)
+      return false
     } finally {
       setJobStatusUpdating(false)
+    }
+  }
+
+  async function handleArchiveJob() {
+    const ok = await handleJobStatusChange('closed')
+    if (ok) {
+      setToast('Job archived')
+      setTimeout(() => setToast(''), 5000)
     }
   }
 
@@ -576,6 +616,11 @@ export default function JobWorkspacePage() {
           </div>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          {job?.status === 'active' && (
+            <button className="btn-ghost" onClick={handleArchiveJob} disabled={jobStatusUpdating} style={{ fontSize: 12.5, padding: '6px 12px' }}>
+              🗄 Archive
+            </button>
+          )}
           <button className="btn-ghost" onClick={handleExportCsv} disabled={applicants.length === 0} style={{ fontSize: 12.5, padding: '6px 12px' }}>
             ↓ Export CSV
           </button>
@@ -872,7 +917,7 @@ export default function JobWorkspacePage() {
                           <CriterionDot applicant={a} criterionId={c.id} weight={c.weight} />
                         </div>
                       ))}
-                      <div style={{ width: 64, flexShrink: 0, textAlign: 'right', padding: '10px 8px' }}>
+                      <div style={{ minWidth: 64, flexShrink: 0, textAlign: 'right', padding: '10px 8px' }}>
                         {a.overall_score != null ? (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             {a.has_dealbreaker && <span style={{ color: '#ef4444', fontSize: 11 }}>⚠</span>}
@@ -884,6 +929,18 @@ export default function JobWorkspacePage() {
                             }}>
                               {a.overall_score}
                             </span>
+                            {a.overall_score >= AI_REVIEW_THRESHOLD && !a.has_dealbreaker && (
+                              <span style={{
+                                fontSize: 10, fontWeight: 600, letterSpacing: '0.04em',
+                                background: 'rgba(234, 179, 8, 0.12)',
+                                color: '#b45309',
+                                border: '1px solid rgba(234, 179, 8, 0.3)',
+                                borderRadius: 4, padding: '2px 6px',
+                                whiteSpace: 'nowrap',
+                              }}>
+                                ⚑ Review
+                              </span>
+                            )}
                           </span>
                         ) : (
                           <span style={{ fontSize: 11, color: 'var(--text3)' }}>…</span>
@@ -1005,6 +1062,95 @@ export default function JobWorkspacePage() {
 
                 {detailTab === 'score' && (
                   <>
+                    {detail.overall_score != null && detail.overall_score >= AI_REVIEW_THRESHOLD && !detail.has_dealbreaker && (
+                      <div style={{ padding: '0 16px 16px' }}>
+                        <div style={{
+                          background: 'rgba(234, 179, 8, 0.08)',
+                          border: '1px solid rgba(234, 179, 8, 0.25)',
+                          borderRadius: 8, padding: '12px 14px',
+                        }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#92400e', marginBottom: 4 }}>
+                            ⚑ High match — verify authenticity
+                          </div>
+                          <div style={{ fontSize: 12, color: '#78350f', lineHeight: 1.5, marginBottom: aiCheckResult ? 0 : 10 }}>
+                            This resume scores {detail.overall_score}/100 with no dealbreakers.
+                            High-scoring resumes are sometimes AI-optimized. We recommend reviewing
+                            the original resume and verifying key experience directly.
+                          </div>
+
+                          {!aiCheckResult && (
+                            <button
+                              onClick={() => runAiCheck(detail.id)}
+                              className="btn-ghost"
+                              style={{ fontSize: 12, padding: '6px 12px' }}
+                              disabled={aiChecking}
+                            >
+                              {aiChecking ? 'Analyzing…' : '⚑ Run AI authenticity check'}
+                            </button>
+                          )}
+
+                          {aiCheckResult && (
+                            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(234, 179, 8, 0.25)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                <span style={{
+                                  fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20,
+                                  color: aiCheckResult.likely_ai ? '#92400e' : '#166534',
+                                  background: aiCheckResult.likely_ai ? 'rgba(234, 179, 8, 0.18)' : 'rgba(34, 197, 94, 0.14)',
+                                }}>
+                                  {aiCheckResult.likely_ai ? 'Likely AI-generated' : 'Likely authentic'}
+                                </span>
+                                <span style={{ fontSize: 11, color: 'var(--text3)' }}>
+                                  {aiCheckResult.confidence} confidence
+                                </span>
+                              </div>
+
+                              <div style={{ fontSize: 12.5, color: 'var(--text2)', marginBottom: 8, lineHeight: 1.5 }}>
+                                {aiCheckResult.summary}
+                              </div>
+
+                              {aiCheckResult.signals.length > 0 && (
+                                <div style={{ marginBottom: 8 }}>
+                                  <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                                    Signals
+                                  </div>
+                                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--text2)', lineHeight: 1.6 }}>
+                                    {aiCheckResult.signals.map((s, i) => <li key={i}>{s}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {aiCheckResult.human_signals.length > 0 && (
+                                <div style={{ marginBottom: 8 }}>
+                                  <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                                    Human signals
+                                  </div>
+                                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--text2)', lineHeight: 1.6 }}>
+                                    {aiCheckResult.human_signals.map((s, i) => <li key={i}>{s}</li>)}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {aiCheckResult.likely_ai && (
+                                <div style={{ fontSize: 11.5, color: 'var(--text3)', lineHeight: 1.5, marginBottom: 8, fontStyle: 'italic' }}>
+                                  If this candidate used ModuleHire, their resume was built from real experience
+                                  modules — but may read as AI-optimized. Consider asking for a quick explanation
+                                  of a specific bullet point to verify.
+                                </div>
+                              )}
+
+                              <button
+                                onClick={() => runAiCheck(detail.id)}
+                                disabled={aiChecking}
+                                style={{ background: 'none', border: 'none', color: 'var(--teal)', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, fontFamily: 'var(--font)', padding: 0 }}
+                              >
+                                {aiChecking ? 'Re-running…' : 'Re-run →'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Score overview */}
                     <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border)' }}>
                       {detail.overall_score != null ? (
