@@ -94,6 +94,9 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - All four new tables have RLS enabled with `_own` policies
 - `ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_credits INTEGER NOT NULL DEFAULT 0;` (applied directly via Supabase MCP)
 - `increment_resume_credits(p_user_id uuid, p_amount integer)` function created
+- `education` table (id, user_id, school, degree, field, year, sort_order, updated_at, created_at) — pre-existed in production with data; migration backfilled in `supabase/migrations/20260820_education.sql`
+- `user_profiles` table + `modules.profile_id` + `users.active_profile_id` + `generated_resumes.profile_id` — applied via MCP, tracked in `supabase/migrations/20260819_user_profiles.sql`
+- `applicants.ai_check_result` (jsonb) + `applicants.ai_checked_at` — applied via MCP, tracked in `supabase/migrations/20260819_applicants_ai_flag.sql`
 
 ## Gotchas
 - `git add` with parentheses in paths trips up zsh — always use `git add -A`
