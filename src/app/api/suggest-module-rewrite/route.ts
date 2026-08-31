@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
+import { getUserPreferences, buildPreferenceContext } from '@/lib/preferences'
 
 export const maxDuration = 60
 
@@ -48,7 +49,10 @@ export async function POST(req: Request) {
     const themes: string[] = jd.extracted_themes || []
     const phrases: string[] = jd.extracted_phrases || []
 
-    const prompt = `You are helping a job seeker tailor a resume module to better match a specific job description.
+    const prefs = await getUserPreferences(supabase, user.id)
+    const prefContext = buildPreferenceContext(prefs)
+
+    const prompt = `${prefContext ? prefContext + '\n\n' : ''}You are helping a job seeker tailor a resume module to better match a specific job description.
 
 Module title: ${moduleRow.title}
 Module content:

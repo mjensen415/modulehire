@@ -56,6 +56,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Ensure public.users row exists — heals accounts where the auth trigger failed
+    // (e.g. duplicate email on OAuth signup). Admin client bypasses RLS.
+    const adminSb = await createAdminClient()
+    await adminSb.from('users').upsert(
+      {
+        id: user.id,
+        email: user.email ?? '',
+        name:
+          (user.user_metadata?.full_name as string) ||
+          (user.user_metadata?.name as string) ||
+          (user.email ?? '').split('@')[0],
+      },
+      { onConflict: 'id', ignoreDuplicates: true }
+    )
+
     // Upload-limit gate (skipped for pro/beta_pro)
     const { data: profileRow } = await supabase
       .from('users')

@@ -15,6 +15,7 @@ import {
   IconResume,
   IconPerson,
   IconSettings,
+  IconSliders,
   IconUpgrade,
   IconBuilding,
 } from './AppSidebar'
@@ -59,6 +60,7 @@ export default function MobileTabBar({ tier }: { tier?: string }) {
     { href: '/resumes', label: 'My Resumes', icon: IconResume },
     { href: '/my-info', label: 'My Info', icon: IconPerson },
     { href: '/account', label: 'Account', icon: IconSettings },
+    { href: '/preferences', label: 'AI Preferences', icon: IconSliders },
     ...(!isProTier(tier) ? [{ href: '/billing', label: 'Upgrade', icon: IconUpgrade }] : []),
     { href: '/business/dashboard', label: 'For Business', icon: IconBuilding },
   ]
