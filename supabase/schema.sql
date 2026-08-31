@@ -38,6 +38,7 @@ create table public.modules (
   -- Classification
   type text not null check (type in ('experience', 'skill', 'story', 'positioning')),
   weight text not null default 'strong' check (weight in ('anchor', 'strong', 'supporting')),
+  pinned boolean not null default false,
   status text not null default 'needs-review' check (status in ('complete', 'needs-review', 'needs-add')),
 
   -- Content

@@ -8,6 +8,7 @@ type Module = {
   title: string
   content: string
   weight: string
+  pinned: boolean
   type: string
   source_company: string | null
   source_role_title: string | null
@@ -16,7 +17,7 @@ type Module = {
   employment_type: string | null
 }
 
-export default function EditModuleForm({ module: initial }: { module: Module }) {
+export default function EditModuleForm({ module: initial, pinnedElsewhere }: { module: Module; pinnedElsewhere: number }) {
   const router = useRouter()
   const [fields, setFields] = useState({
     title: initial.title ?? '',
@@ -29,6 +30,8 @@ export default function EditModuleForm({ module: initial }: { module: Module }) 
     date_end: initial.date_end ?? '',
     employment_type: initial.employment_type ?? '',
   })
+  const [pinned, setPinned] = useState(initial.pinned ?? false)
+  const canPin = pinned || pinnedElsewhere < 2
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
@@ -46,6 +49,7 @@ export default function EditModuleForm({ module: initial }: { module: Module }) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...fields,
+          pinned,
           source_company: fields.source_company || null,
           source_role_title: fields.source_role_title || null,
           date_start: fields.date_start || null,
@@ -128,6 +132,16 @@ export default function EditModuleForm({ module: initial }: { module: Module }) 
               </div>
             )}
           </div>
+        </div>
+
+        <div className="mod-edit-row">
+          <label
+            style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: canPin ? 'pointer' : 'not-allowed', opacity: canPin ? 1 : 0.5 }}
+            title={!canPin ? 'You can pin up to 2 modules — unpin one first.' : undefined}
+          >
+            <input type="checkbox" checked={pinned} disabled={!canPin} onChange={e => setPinned(e.target.checked)} />
+            📌 Always include in matches, regardless of job fit
+          </label>
         </div>
 
         <div className="mod-edit-cols">

@@ -15,6 +15,7 @@ type Module = {
   date_start: string | null
   date_end: string | null
   weight: string
+  pinned: boolean
   role_types: string[]
   themes: string[]
   company_stage: string[]
@@ -73,13 +74,15 @@ type EditFormProps = {
   initial: ReviewModule
   onSave: (updated: Partial<ReviewModule>) => void
   onCancel: () => void
+  canPin: boolean
 }
 
-function EditForm({ initial, onSave, onCancel }: EditFormProps) {
+function EditForm({ initial, onSave, onCancel, canPin }: EditFormProps) {
   const [fields, setFields] = useState({
     title: initial.title,
     content: initial.content,
     weight: initial.weight,
+    pinned: initial.pinned,
     source_company: initial.source_company ?? '',
     source_role_title: initial.source_role_title ?? '',
     date_start: initial.date_start ?? '',
@@ -114,6 +117,20 @@ function EditForm({ initial, onSave, onCancel }: EditFormProps) {
           <input className="mod-edit-input" value={fields.source_company} onChange={e => set('source_company', e.target.value)} />
         </div>
       </div>
+      <div className="mod-edit-row">
+        <label
+          style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: canPin || fields.pinned ? 'pointer' : 'not-allowed', opacity: canPin || fields.pinned ? 1 : 0.5 }}
+          title={!canPin && !fields.pinned ? 'You can pin up to 2 modules — unpin one first.' : undefined}
+        >
+          <input
+            type="checkbox"
+            checked={fields.pinned}
+            disabled={!canPin && !fields.pinned}
+            onChange={e => setFields(f => ({ ...f, pinned: e.target.checked }))}
+          />
+          📌 Always include in matches
+        </label>
+      </div>
       <div className="mod-edit-cols">
         <div className="mod-edit-row">
           <label>Role title</label>
@@ -143,11 +160,13 @@ function ModCard({
   onEdit,
   onDiscard,
   onUndo,
+  canPin,
 }: {
   mod: ReviewModule
   onEdit: (updates: Partial<ReviewModule>) => void
   onDiscard: () => void
   onUndo: () => void
+  canPin: boolean
 }) {
   const [editing, setEditing] = useState(mod._isNew)
   const color = weightColor(mod.weight)
@@ -157,6 +176,7 @@ function ModCard({
       <div className={`mod-card ${color}`} style={mod._discarded ? { opacity: 0.4 } : undefined}>
         <EditForm
           initial={mod}
+          canPin={canPin}
           onSave={updates => { onEdit(updates); setEditing(false) }}
           onCancel={() => { if (mod._isNew && !mod.title) onDiscard(); else setEditing(false) }}
         />
@@ -171,8 +191,9 @@ function ModCard({
     >
       <div className="mod-domain">{mod.title}</div>
       <div className="mod-content">{mod.content.slice(0, 120)}{mod.content.length > 120 ? '…' : ''}</div>
-      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+      <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
         <span className={`plan-chip plan-${mod.weight}`} style={{ fontSize: 9 }}>{mod.weight}</span>
+        {mod.pinned && <span title="Always included in matches" style={{ fontSize: 10 }}>📌</span>}
         {mod.source_role_title && (
           <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{mod.source_role_title}</span>
         )}
@@ -213,7 +234,7 @@ export default function ModuleReview() {
     sessionStorage.removeItem('pendingModules')
     const { resume_id, modules: mods } = JSON.parse(raw) as { resume_id: string; modules: Module[] }
     setResumeId(resume_id)
-    setModules(mods.map(m => ({ ...m, _discarded: false, _isNew: false })))
+    setModules(mods.map(m => ({ ...m, pinned: m.pinned ?? false, _discarded: false, _isNew: false })))
     setLoaded(true)
   }, [router])
 
@@ -233,6 +254,7 @@ export default function ModuleReview() {
   const groups = groupByCompany(modules)
   const typeCounts = countBy(active, 'type')
   const weightCounts = countBy(active, 'weight')
+  const pinnedCount = active.filter(m => m.pinned).length
   const companies = [...new Set(active.map(m => m.source_company).filter(Boolean))]
 
   function updateModule(id: string, updates: Partial<ReviewModule>) {
@@ -256,6 +278,7 @@ export default function ModuleReview() {
       date_start: null,
       date_end: null,
       weight: 'strong',
+      pinned: false,
       role_types: [],
       themes: [],
       company_stage: ['any'],
@@ -345,6 +368,7 @@ export default function ModuleReview() {
                     onEdit={updates => updateModule(m.id, updates)}
                     onDiscard={() => discardModule(m.id)}
                     onUndo={() => undoDiscard(m.id)}
+                    canPin={m.pinned || pinnedCount < 2}
                   />
                 ))}
               </div>

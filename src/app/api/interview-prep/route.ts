@@ -5,6 +5,7 @@ import { jsonrepair } from 'jsonrepair'
 import { isProTier } from '@/lib/plan'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
+import { getUserPreferences, buildPreferenceContext } from '@/lib/preferences'
 
 export const maxDuration = 60
 
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
     const profileId = await getActiveProfileId(supabase, user.id)
     const { data: modules, error: modulesError } = await supabase
       .from('modules')
-      .select('title, content, source_company, source_role_title, weight')
+      .select('title, content, source_company, source_role_title, weight, pinned')
       .eq('user_id', user.id)
       .eq('profile_id', profileId)
       .is('deleted_at', null)
@@ -77,7 +78,10 @@ export async function POST(req: Request) {
     if (modulesError) throw modulesError
 
     const weightOrder: Record<string, number> = { anchor: 0, strong: 1, supporting: 2 }
-    const sortedModules = [...(modules ?? [])].sort((a, b) => (weightOrder[a.weight] ?? 3) - (weightOrder[b.weight] ?? 3))
+    const sortedModules = [...(modules ?? [])].sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+      return (weightOrder[a.weight] ?? 3) - (weightOrder[b.weight] ?? 3)
+    })
 
     let resumeContent = ''
     for (const m of sortedModules) {
@@ -93,7 +97,10 @@ export async function POST(req: Request) {
     const jobTitle = jd.extracted_job_title || 'this role'
     const company = jd.extracted_company || 'this company'
 
-    const prompt = `You are helping a job candidate prepare for an interview. Surface THEIR OWN experience in the context of this job description — do not write answers for them, just help them see the connections.
+    const prefs = await getUserPreferences(supabase, user.id)
+    const prefContext = buildPreferenceContext(prefs)
+
+    const prompt = `${prefContext ? prefContext + '\n\n' : ''}You are helping a job candidate prepare for an interview. Surface THEIR OWN experience in the context of this job description — do not write answers for them, just help them see the connections.
 
 JOB TITLE: ${jobTitle}
 COMPANY: ${company}

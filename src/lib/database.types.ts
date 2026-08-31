@@ -740,6 +740,7 @@ export type Database = {
           deleted_at: string | null
           employment_type: string | null
           id: string
+          pinned: boolean
           profile_id: string | null
           role_types: string[]
           source_company: string | null
@@ -762,6 +763,7 @@ export type Database = {
           deleted_at?: string | null
           employment_type?: string | null
           id?: string
+          pinned?: boolean
           profile_id?: string | null
           role_types?: string[]
           source_company?: string | null
@@ -784,6 +786,7 @@ export type Database = {
           deleted_at?: string | null
           employment_type?: string | null
           id?: string
+          pinned?: boolean
           profile_id?: string | null
           role_types?: string[]
           source_company?: string | null

@@ -12,7 +12,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('modules')
-      .select('id, title, weight, themes, type, source_company')
+      .select('id, title, weight, pinned, themes, type, source_company')
       .eq('user_id', user.id)
       .eq('profile_id', profileId)
       .is('deleted_at', null)

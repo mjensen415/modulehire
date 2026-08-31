@@ -6,6 +6,7 @@ import { jsonrepair } from 'jsonrepair'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
+import { getUserPreferences, buildPreferenceContext } from '@/lib/preferences'
 
 export const maxDuration = 60
 
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
     const profileId = await getActiveProfileId(supabase, user.id)
     const { data: modules, error: modError } = await supabase
       .from('modules')
-      .select('id, title, themes, weight, type, content, source_company, source_role_title, date_start, date_end')
+      .select('id, title, themes, weight, pinned, type, content, source_company, source_role_title, date_start, date_end')
       .eq('user_id', user.id)
       .eq('profile_id', profileId)
     if (modError) throw modError
@@ -64,6 +65,9 @@ export async function POST(req: Request) {
     const moduleList = modules.map(m =>
       `- id: ${m.id} | title: ${m.title} | themes: ${(m.themes || []).join(', ')} | weight: ${m.weight}`
     ).join('\n')
+
+    const prefs = await getUserPreferences(supabase, user.id)
+    const prefContext = buildPreferenceContext(prefs)
 
     const prompt = `You are a resume reviewer. Read the job description and the list of resume modules below, then fill in the JSON template at the bottom.
 
@@ -79,9 +83,9 @@ Key phrases: ${(jd.extracted_phrases || []).join(', ')}
 RESUME MODULES:
 ${moduleList}
 
-SCORING RULES:
-- match_score is 0-100 based on how well the module matches the job description themes
-- anchor weight modules always score 100
+${prefContext ? prefContext + '\n\n' : ''}SCORING RULES:
+- match_score is 0-100 based on how well the module's actual relevance matches the job description themes
+- score every module honestly on fit to this specific job — do not give any module an automatic high score
 - include_reason is a max 8-word phrase (not a full sentence) — be extremely concise
 
 Fill in this exact JSON and output nothing else:
@@ -122,15 +126,36 @@ JSON:`
       }
     }
 
-    // Enrich ranked_modules with full module data
+    // Weight is a minor, code-applied nudge — never an override. This is deliberately not part
+    // of the prompt: trusting the model to self-limit an "always score 100" rule is exactly what
+    // broke this before (over-tagged anchor modules auto-maxed regardless of JD fit).
+    const WEIGHT_PRIOR: Record<string, number> = { anchor: 8, strong: 3, supporting: 0 }
     const moduleMap = new Map(modules.map(m => [m.id, m]))
-    const enrichedModules = result.ranked_modules
+
+    const adjustedRanked = result.ranked_modules.map(rm => {
+      const m = moduleMap.get(rm.module_id)
+      const prior = m ? (WEIGHT_PRIOR[m.weight] ?? 0) : 0
+      return { ...rm, match_score: Math.min(100, Math.round(rm.match_score) + prior) }
+    })
+
+    // Enrich with full module data
+    const enrichedModules = adjustedRanked
       .map(rm => {
         const m = moduleMap.get(rm.module_id)
         if (!m) return null
         return { ...rm, ...m, module_id: rm.module_id }
       })
-      .filter(Boolean)
+      .filter((m): m is NonNullable<typeof m> => m !== null)
+
+    // recommended_stack: pinned modules always included (their real score still shows honestly),
+    // then fill the remaining 4-8 slots with the next highest-scoring non-pinned modules.
+    const pinnedIds = enrichedModules.filter(m => m.pinned).map(m => m.module_id)
+    const nonPinnedRanked = [...enrichedModules]
+      .filter(m => !m.pinned)
+      .sort((a, b) => b.match_score - a.match_score)
+    const targetSize = Math.max(4, Math.min(8, pinnedIds.length + 6))
+    const fillCount = Math.max(0, targetSize - pinnedIds.length)
+    const recommendedStack = [...pinnedIds, ...nonPinnedRanked.slice(0, fillCount).map(m => m.module_id)]
 
     // Also return all modules so the UI can show unmatched ones
     const rankedIds = new Set(result.ranked_modules.map(r => r.module_id))
@@ -140,7 +165,7 @@ JSON:`
 
     return NextResponse.json({
       ranked_modules: enrichedModules,
-      recommended_stack: result.recommended_stack,
+      recommended_stack: recommendedStack,
       unmatched_modules: unmatchedModules,
     })
   } catch (error) {

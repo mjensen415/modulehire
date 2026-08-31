@@ -8,7 +8,7 @@ import MergeConfirmModal from '@/components/MergeConfirmModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Job = { id: string; company: string; title: string | null; start_date: string | null; end_date: string | null; location: string | null; employment_type: string | null }
-type Module = { id: string; title: string; weight: string | null; themes: string[] | null; type: string | null; source_company: string | null }
+type Module = { id: string; title: string; weight: string | null; pinned: boolean; themes: string[] | null; type: string | null; source_company: string | null }
 type MJA = { module_id: string; job_id: string }
 // NB: live schema uses job_id + name (not job_experience_id + skill).
 type SkillCategory = 'technical' | 'domain' | 'leadership' | null
@@ -130,6 +130,7 @@ export default function LibraryPage() {
   const [editModuleTitle, setEditModuleTitle] = useState('')
   const [editModuleContent, setEditModuleContent] = useState('')
   const [editModuleWeight, setEditModuleWeight] = useState('supporting')
+  const [editModulePinned, setEditModulePinned] = useState(false)
   const [editModuleThemes, setEditModuleThemes] = useState('')
   const [editModuleLoading, setEditModuleLoading] = useState(false)
   const [savingModule, setSavingModule] = useState(false)
@@ -212,6 +213,7 @@ export default function LibraryPage() {
       setEditModuleTitle(data.module.title ?? '')
       setEditModuleContent(data.module.content ?? '')
       setEditModuleWeight(data.module.weight ?? 'supporting')
+      setEditModulePinned(data.module.pinned ?? false)
       setEditModuleThemes((data.module.themes ?? []).join(', '))
     }
     setEditModuleLoading(false)
@@ -220,7 +222,7 @@ export default function LibraryPage() {
   function closeEditModal() {
     setEditingModuleId(null)
     setEditModuleTitle(''); setEditModuleContent('')
-    setEditModuleWeight('supporting'); setEditModuleThemes('')
+    setEditModuleWeight('supporting'); setEditModulePinned(false); setEditModuleThemes('')
   }
 
   async function saveModuleEdit() {
@@ -230,13 +232,16 @@ export default function LibraryPage() {
     const res = await fetch(`/api/modules/${editingModuleId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: editModuleTitle, content: editModuleContent, weight: editModuleWeight, themes }),
+      body: JSON.stringify({ title: editModuleTitle, content: editModuleContent, weight: editModuleWeight, pinned: editModulePinned, themes }),
     })
     if (res.ok) {
       setModules(prev => prev.map(m =>
-        m.id === editingModuleId ? { ...m, title: editModuleTitle, weight: editModuleWeight, themes } : m
+        m.id === editingModuleId ? { ...m, title: editModuleTitle, weight: editModuleWeight, pinned: editModulePinned, themes } : m
       ))
       closeEditModal()
+    } else {
+      const d = await res.json().catch(() => ({}))
+      alert(d.error ?? 'Could not save module.')
     }
     setSavingModule(false)
   }
@@ -897,7 +902,10 @@ export default function LibraryPage() {
                               </div>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                              <Pips weight={m.weight} />
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                {m.pinned && <span title="Always included in matches" style={{ fontSize: 10 }}>📌</span>}
+                                <Pips weight={m.weight} />
+                              </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                 <button
                                   onClick={() => openEditModal(m.id)}
@@ -1281,6 +1289,28 @@ export default function LibraryPage() {
                       placeholder="leadership, data, community…"
                     />
                   </div>
+                </div>
+
+                {/* Pin */}
+                <div>
+                  {(() => {
+                    const pinnedElsewhere = modules.filter(m => m.pinned && m.id !== editingModuleId).length
+                    const canPin = editModulePinned || pinnedElsewhere < 2
+                    return (
+                      <label
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text2)', cursor: canPin ? 'pointer' : 'not-allowed', opacity: canPin ? 1 : 0.5 }}
+                        title={!canPin ? 'You can pin up to 2 modules — unpin one first.' : undefined}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={editModulePinned}
+                          disabled={!canPin}
+                          onChange={e => setEditModulePinned(e.target.checked)}
+                        />
+                        📌 Always include in matches, regardless of job fit
+                      </label>
+                    )
+                  })()}
                 </div>
 
                 {/* Actions */}

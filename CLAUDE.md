@@ -97,6 +97,9 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - `education` table (id, user_id, school, degree, field, year, sort_order, updated_at, created_at) — pre-existed in production with data; migration backfilled in `supabase/migrations/20260820_education.sql`
 - `user_profiles` table + `modules.profile_id` + `users.active_profile_id` + `generated_resumes.profile_id` — applied via MCP, tracked in `supabase/migrations/20260819_user_profiles.sql`
 - `applicants.ai_check_result` (jsonb) + `applicants.ai_checked_at` — applied via MCP, tracked in `supabase/migrations/20260819_applicants_ai_flag.sql`
+- `ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences jsonb NOT NULL DEFAULT '{}'::jsonb;` — applied via MCP, tracked in `supabase/migrations/20260820_user_preferences.sql`
+- `prompt_feedback` table (id, user_id, lab_type, input_snapshot, output_snapshot, feedback, notes, created_at) + admin-only RLS policy (`users.is_admin = true`) — applied via MCP, tracked in `supabase/migrations/20260826_prompt_feedback.sql`. Backs the admin-only Prompt Lab (`/admin/prompt-lab`) for testing/rating JD parse, module match, and module rewrite prompts.
+- `ALTER TABLE public.modules ADD COLUMN IF NOT EXISTS pinned boolean NOT NULL DEFAULT false;` — applied via MCP, tracked in `supabase/migrations/20260828_module_pinned.sql`, already reflected in `schema.sql`. Splits "always include in matches" (now `pinned`, user-set, capped at 2 per profile) out of `weight` (now a minor scoring nudge only — see `match-modules/route.ts`).
 
 ## Gotchas
 - `git add` with parentheses in paths trips up zsh — always use `git add -A`

@@ -54,10 +54,24 @@ export async function POST(req: Request) {
         date_start: optionalString(body.date_start, 20, 'date_start'),
         date_end: optionalString(body.date_end, 20, 'date_end'),
         employment_type: VALID_EMP_TYPES.has(body.employment_type) ? body.employment_type : null,
+        pinned: body.pinned === true,
       }
     } catch (e) {
       if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 })
       throw e
+    }
+
+    if (row.pinned) {
+      const { count: pinnedCount } = await supabase
+        .from('modules')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('profile_id', profileId)
+        .eq('pinned', true)
+        .is('deleted_at', null)
+      if ((pinnedCount ?? 0) >= 2) {
+        return NextResponse.json({ error: 'You can pin up to 2 modules — unpin one first.' }, { status: 400 })
+      }
     }
 
     const { data, error } = await supabase.from('modules').insert(row).select().single()

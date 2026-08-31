@@ -7,7 +7,7 @@ import { ROLE_TEMPLATES, getRoleTemplate } from '@/data/role-templates'
 const DEFAULT_CONTENT_PLACEHOLDER =
   'Describe what you did, the impact, and any metrics. This content will be used directly in your resume.'
 
-export default function NewModuleForm() {
+export default function NewModuleForm({ pinnedCount }: { pinnedCount: number }) {
   const router = useRouter()
   const [fields, setFields] = useState({
     title: '',
@@ -20,6 +20,8 @@ export default function NewModuleForm() {
     date_end: '',
     employment_type: '',
   })
+  const [pinned, setPinned] = useState(false)
+  const canPin = pinnedCount < 2
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -62,6 +64,7 @@ export default function NewModuleForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...fields,
+          pinned,
           source_company: fields.source_company || null,
           source_role_title: fields.source_role_title || null,
           date_start: fields.date_start || null,
@@ -222,8 +225,8 @@ export default function NewModuleForm() {
           <div className="mod-edit-row">
             <label>Weight</label>
             <select className="mod-edit-select" value={fields.weight} onChange={e => set('weight', e.target.value)}>
-              <option value="anchor">Anchor — core story, always include</option>
-              <option value="strong">Strong — valuable, usually include</option>
+              <option value="anchor">Anchor — core story, ranks highest</option>
+              <option value="strong">Strong — valuable, ranks well</option>
               <option value="supporting">Supporting — context, use selectively</option>
             </select>
           </div>
@@ -248,6 +251,16 @@ export default function NewModuleForm() {
               </div>
             )}
           </div>
+        </div>
+
+        <div className="mod-edit-row">
+          <label
+            style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: canPin ? 'pointer' : 'not-allowed', opacity: canPin ? 1 : 0.5 }}
+            title={!canPin ? 'You can pin up to 2 modules — unpin one first.' : undefined}
+          >
+            <input type="checkbox" checked={pinned} disabled={!canPin} onChange={e => setPinned(e.target.checked)} />
+            📌 Always include in matches, regardless of job fit
+          </label>
         </div>
 
         <div className="mod-edit-cols">

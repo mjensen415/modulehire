@@ -35,6 +35,7 @@ type RankedModule = {
   source_company: string | null
   source_role_title: string | null
   weight: string
+  pinned: boolean
   type: string
   content: string
   themes: string[]
@@ -48,6 +49,7 @@ type LibModule = {
   title: string
   source_company: string | null
   weight: string
+  pinned: boolean
   type: string
   content: string
   themes: string[]
@@ -987,7 +989,7 @@ export default function GeneratePage() {
       setRankedModules(mods => [...mods, {
         module_id: m.id, match_score: 0, include_reason: 'Manually added',
         id: m.id, title: m.title, source_company: m.source_company, source_role_title: null,
-        weight: m.weight, type: m.type, content: m.content, themes: m.themes, role_types: [],
+        weight: m.weight, pinned: m.pinned, type: m.type, content: m.content, themes: m.themes, role_types: [],
         date_start: null, date_end: null,
       }])
     }
@@ -2532,13 +2534,10 @@ export default function GeneratePage() {
             {/* Estimated ATS score */}
             {selectedIds.length > 0 && (() => {
               const selected = rankedModules.filter(m => selectedIds.includes(m.module_id))
-              const anchors = selected.filter(m => m.weight === 'anchor').length
-              const strongs = selected.filter(m => m.weight === 'strong').length
-              const supporting = selected.length - anchors - strongs
-              const estimatedScore = Math.min(
-                95,
-                50 + Math.min(30, anchors * 10) + Math.min(20, strongs * 5) + Math.min(10, supporting * 2)
-              )
+              const avgMatchScore = selected.length > 0
+                ? selected.reduce((sum, m) => sum + m.match_score, 0) / selected.length
+                : 0
+              const estimatedScore = Math.round(Math.min(95, avgMatchScore))
               return (
                 <div style={{ marginBottom: 24 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

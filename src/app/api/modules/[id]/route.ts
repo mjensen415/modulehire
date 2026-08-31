@@ -4,7 +4,7 @@ import { getActiveProfileId } from '@/lib/profile'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
-const ALLOWED_FIELDS = ['title', 'content', 'weight', 'type', 'source_company', 'source_role_title', 'date_start', 'date_end', 'employment_type', 'themes', 'role_types', 'company_stage']
+const ALLOWED_FIELDS = ['title', 'content', 'weight', 'type', 'source_company', 'source_role_title', 'date_start', 'date_end', 'employment_type', 'themes', 'role_types', 'company_stage', 'pinned']
 
 export async function GET(_req: Request, { params }: RouteContext) {
   try {
@@ -16,7 +16,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
     const profileId = await getActiveProfileId(supabase, user.id)
     const { data, error } = await supabase
       .from('modules')
-      .select('id, title, content, weight, themes, type, source_company, source_role_title, date_start, date_end')
+      .select('id, title, content, weight, themes, type, source_company, source_role_title, date_start, date_end, pinned')
       .eq('id', id)
       .eq('user_id', user.id)
       .eq('profile_id', profileId)
@@ -43,6 +43,25 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     const updates: Record<string, unknown> = {}
     for (const key of ALLOWED_FIELDS) {
       if (key in body) updates[key] = body[key]
+    }
+
+    if ('pinned' in updates) {
+      if (typeof updates.pinned !== 'boolean') {
+        return NextResponse.json({ error: 'pinned must be a boolean' }, { status: 400 })
+      }
+      if (updates.pinned) {
+        const { count: pinnedCount } = await supabase
+          .from('modules')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('profile_id', profileId)
+          .eq('pinned', true)
+          .neq('id', id)
+          .is('deleted_at', null)
+        if ((pinnedCount ?? 0) >= 2) {
+          return NextResponse.json({ error: 'You can pin up to 2 modules — unpin one first.' }, { status: 400 })
+        }
+      }
     }
 
     const { data, error } = await supabase
