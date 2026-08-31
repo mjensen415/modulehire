@@ -239,11 +239,36 @@ export function IconSettings() {
     </svg>
   );
 }
+export function IconSliders() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <path d="M2 4h11M2 7.5h11M2 11h11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      <circle cx="5.5" cy="4" r="1.5" fill="var(--surface)" stroke="currentColor" strokeWidth="1.3"/>
+      <circle cx="10.5" cy="7.5" r="1.5" fill="var(--surface)" stroke="currentColor" strokeWidth="1.3"/>
+      <circle cx="6.5" cy="11" r="1.5" fill="var(--surface)" stroke="currentColor" strokeWidth="1.3"/>
+    </svg>
+  );
+}
 export function IconUpgrade() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <path d="M7.5 1.5l4.5 4.5H9V11H6V6H3l4.5-4.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
       <path d="M2 13h11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  );
+}
+export function IconFunnel() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <path d="M1.5 2h12L9 7.5v4.5l-3 1.5V7.5L1.5 2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    </svg>
+  );
+}
+export function IconFlask() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <path d="M6 1.5h3M6.2 1.5v3.8L2.8 11a1.5 1.5 0 0 0 1.3 2.3h6.8a1.5 1.5 0 0 0 1.3-2.3L8.8 5.3V1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M4.3 9.5h6.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
     </svg>
   );
 }
@@ -353,6 +378,10 @@ export default function AppSidebar({ footer, tier, isAdmin, activeProfileName, a
           <span className="nav-item-icon"><IconSettings /></span>
           Account
         </Link>
+        <Link href="/preferences" className={`nav-item${pathname === '/preferences' ? ' active' : ''}`}>
+          <span className="nav-item-icon"><IconSliders /></span>
+          AI Preferences
+        </Link>
         {!isProTier(tier) && (
           <Link href="/billing" className={`nav-item${pathname === '/billing' ? ' active' : ''}`}>
             <span className="nav-item-icon"><IconUpgrade /></span>
@@ -360,9 +389,21 @@ export default function AppSidebar({ footer, tier, isAdmin, activeProfileName, a
           </Link>
         )}
         {isAdmin && (
-          <Link href="/admin" className={`nav-item${pathname.startsWith('/admin') ? ' active' : ''}`}>
+          <Link href="/admin" className={`nav-item${pathname === '/admin' || pathname.startsWith('/admin/users') ? ' active' : ''}`}>
             <span className="nav-item-icon"><IconShield /></span>
             Admin
+          </Link>
+        )}
+        {isAdmin && (
+          <Link href="/admin/prompt-lab" className={`nav-item${pathname.startsWith('/admin/prompt-lab') ? ' active' : ''}`}>
+            <span className="nav-item-icon" style={{ color: 'var(--teal)' }}><IconFlask /></span>
+            Prompt Lab
+          </Link>
+        )}
+        {isAdmin && (
+          <Link href="/admin/pipeline" className={`nav-item${pathname.startsWith('/admin/pipeline') ? ' active' : ''}`}>
+            <span className="nav-item-icon"><IconFunnel /></span>
+            JD Pipeline
           </Link>
         )}
         <Link href="/support" className={`nav-item${pathname.startsWith('/support') ? ' active' : ''}`}>

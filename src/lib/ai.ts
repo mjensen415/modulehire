@@ -8,7 +8,7 @@ type Message = { role: 'user' | 'assistant' | 'system'; content: string }
  * Reads AI_PROVIDER env var: 'claude' (default) | 'ollama'
  * For ollama: uses openai package pointed at OLLAMA_BASE_URL with model OLLAMA_MODEL
  */
-export async function aiComplete(messages: Message[], maxTokens = 4096): Promise<string> {
+export async function aiComplete(messages: Message[], maxTokens = 4096, opts?: { model?: string }): Promise<string> {
   const provider = process.env.AI_PROVIDER ?? 'claude'
 
   if (provider === 'ollama') {
@@ -41,7 +41,7 @@ export async function aiComplete(messages: Message[], maxTokens = 4096): Promise
   // Default: Claude API
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const res = await client.messages.create({
-    model: process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5-20251001',
+    model: opts?.model || process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
     max_tokens: maxTokens,
     messages: messages.filter(m => m.role !== 'system').map(m => ({
       role: m.role as 'user' | 'assistant',
