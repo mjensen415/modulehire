@@ -697,6 +697,48 @@ export type Database = {
           },
         ]
       }
+      match_runs: {
+        Row: {
+          id: string
+          user_id: string
+          jd_id: string
+          ranked_modules: Json
+          recommended_stack: string[]
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          jd_id: string
+          ranked_modules: Json
+          recommended_stack?: string[]
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          jd_id?: string
+          ranked_modules?: Json
+          recommended_stack?: string[]
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_runs_jd_id_fkey"
+            columns: ["jd_id"]
+            isOneToOne: false
+            referencedRelation: "job_descriptions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "match_runs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       module_job_assignments: {
         Row: {
           created_at: string | null

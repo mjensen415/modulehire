@@ -61,19 +61,22 @@ export async function POST(req: Request) {
       `- id: ${m.id}\n  title: ${m.title}\n  themes: ${(m.themes ?? []).join(', ')}\n  content: ${String(m.content ?? '').slice(0, 1500)}`
     ).join('\n\n')
 
-    const prompt = `You are reviewing a candidate's resume modules against a job description.
+    // Cacheable prefix: this exact module selection, reused if the same set is checked again
+    // (e.g. a recalculate) within the same session.
+    const modulesBlock = `You are reviewing a candidate's resume modules against a job description.
 
-JOB DESCRIPTION THEMES:
+CANDIDATE MODULES (selected for this resume):
+${moduleList}
+`
+
+    const taskBlock = `JOB DESCRIPTION THEMES:
 ${jdThemes.join(', ')}
 
 JOB DESCRIPTION KEY PHRASES:
 ${jdPhrases.join(', ')}
 
-CANDIDATE MODULES (selected for this resume):
-${moduleList}
-
 TASK:
-1. For each JD theme, decide whether ANY of the modules clearly addresses it (in title, themes, or content).
+1. For each JD theme, decide whether ANY of the modules above clearly addresses it (in title, themes, or content).
 2. List themes that ARE clearly addressed in "matched".
 3. For up to 6 themes that are NOT clearly addressed, identify the SINGLE module that comes closest in scope and could plausibly be re-framed to highlight that theme.
 4. For each gap, write a "suggestion" — a 1-3 sentence rewrite that EXTENDS or RE-FRAMES the existing module content using JD language. The suggestion MUST stay grounded in facts present in the original content; do NOT invent metrics, companies, headcounts, or outcomes that aren't already implied. If the gap can't be honestly bridged from the existing content, omit it from the gaps array.
@@ -88,7 +91,11 @@ Output ONLY valid JSON in this exact shape, no markdown:
 
     let result: { matched?: string[]; gaps?: Gap[] } = { matched: [], gaps: [] }
     try {
-      const raw = await aiComplete([{ role: 'user', content: prompt }], 4096)
+      const raw = await aiComplete(
+        [{ role: 'user', content: [{ text: modulesBlock, cache: true }, { text: taskBlock }] }],
+        4096,
+        { model: process.env.ANTHROPIC_MODEL_QUALITY || 'claude-sonnet-5' }
+      )
       const stripped = raw.replace(/```json/g, '').replace(/```/g, '')
       const start = stripped.indexOf('{')
       const end = stripped.lastIndexOf('}')

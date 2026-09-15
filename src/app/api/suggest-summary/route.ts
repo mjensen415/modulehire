@@ -65,7 +65,7 @@ Required shape:
     const raw = await aiComplete([
       { role: 'user', content: prompt },
       { role: 'assistant', content: '{' },
-    ], 600)
+    ], 600, { model: process.env.ANTHROPIC_MODEL_QUALITY || 'claude-sonnet-5' })
 
     // The model continues from after the '{', so reconstruct the full object.
     const full = '{' + raw

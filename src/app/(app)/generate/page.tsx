@@ -6,7 +6,7 @@ import ScoreGauge from '@/components/ScoreGauge'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
-type Step = 'input' | 'analyzing' | 'matching' | 'assembling' | 'confirm' | 'generating' | 'done'
+type Step = 'input' | 'analyzing' | 'reviewThemes' | 'matching' | 'assembling' | 'confirm' | 'generating' | 'done'
 
 type AlignmentSuggestion = {
   theme: string
@@ -105,7 +105,7 @@ const STEP_LABELS: Record<string, string> = {
 function StepIndicator({ current }: { current: Step }) {
   // Map transient steps to their display step
   const display: Step =
-    current === 'analyzing' ? 'input' :
+    current === 'analyzing' || current === 'reviewThemes' ? 'input' :
     current === 'generating' ? 'confirm' :
     current
   const displaySteps: Step[] = ['input', 'matching', 'assembling', 'confirm']
@@ -223,6 +223,7 @@ export default function GeneratePage() {
   const [confirmedPhrases, setConfirmedPhrases] = useState<string[]>([])
   const [confirmedThemes, setConfirmedThemes] = useState<string[]>([])
   const [phraseInput, setPhraseInput] = useState('')
+  const [themeInput, setThemeInput] = useState('')
   const [confirmLoading, setConfirmLoading] = useState(false)
   const [alignmentSuggestions, setAlignmentSuggestions] = useState<AlignmentSuggestion[]>([])
   const [alignmentMatched, setAlignmentMatched] = useState<string[]>([])
@@ -803,35 +804,9 @@ export default function GeneratePage() {
       setConfirmedPhrases(phrases)
       setConfirmedThemes(themes)
 
-      // Step 2: Auto-confirm keywords (no manual confirmation step)
-      await fetch(`/api/job-descriptions/${analyzeData.jd_id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ extracted_phrases: phrases, extracted_themes: themes }),
-      })
-
-      // Step 3: Match modules
-      const matchRes = await fetch('/api/match-modules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jd_id: analyzeData.jd_id }),
-      })
-      const matchData = await matchRes.json()
-      if (!matchRes.ok) throw new Error(matchData.error ?? 'Matching failed')
-
-      const ranked: RankedModule[] = matchData.ranked_modules ?? []
-      setRankedModules(ranked)
-      setUnmatchedModules(matchData.unmatched_modules ?? [])
-      setSelectedIds(ranked.filter(m => m.match_score >= 70).map(m => m.module_id))
-
-      const skillModules = ranked.filter(m => m.type === 'skill' && m.match_score >= 70)
-      if (skillModules.length > 0) {
-        setSkills(skillModules.map(m => m.title))
-      }
-
-      // Land on the fast-track / manual fork (rendered in the input step once
-      // jdData is set) rather than jumping straight into the building step.
-      setStep('input')
+      // Let the user confirm/edit what we extracted before it drives matching — a bad
+      // extraction should be caught here, not silently propagate into a bad match.
+      setStep('reviewThemes')
     } catch (e) {
       setErrorMessage((e as Error).message)
       setStep('input')
@@ -863,7 +838,7 @@ export default function GeneratePage() {
     }
   }
 
-  // ── Step 1.5: confirm keywords then match (legacy — kept for restoreDraft) ──
+  // ── Step 1.5: confirm (possibly edited) keywords from the reviewThemes step, then match ──
 
   async function handleConfirm() {
     setConfirmLoading(true)
@@ -893,12 +868,31 @@ export default function GeneratePage() {
         setSkills(skillModules.map(m => m.title))
       }
 
-      setStep('matching')
+      // Land on the fast-track / manual fork (rendered in the input step once
+      // jdData is set) rather than jumping straight into the building step.
+      setStep('input')
     } catch (e) {
       setErrorMessage((e as Error).message)
     } finally {
       setConfirmLoading(false)
     }
+  }
+
+  function removeConfirmedTheme(theme: string) {
+    setConfirmedThemes(prev => prev.filter(t => t !== theme))
+  }
+  function addConfirmedTheme(theme: string) {
+    const trimmed = theme.trim()
+    if (!trimmed || confirmedThemes.includes(trimmed)) return
+    setConfirmedThemes(prev => [...prev, trimmed])
+  }
+  function removeConfirmedPhrase(phrase: string) {
+    setConfirmedPhrases(prev => prev.filter(p => p !== phrase))
+  }
+  function addConfirmedPhrase(phrase: string) {
+    const trimmed = phrase.trim()
+    if (!trimmed || confirmedPhrases.includes(trimmed)) return
+    setConfirmedPhrases(prev => [...prev, trimmed])
   }
 
   // ── Step 2.5: theme alignment (manual retry — background fetch runs automatically) ─
@@ -1407,7 +1401,7 @@ export default function GeneratePage() {
       </div>
 
       {/* ── INPUT ─────────────────────────────────────────────────────────── */}
-      {(step === 'input' || step === 'analyzing') && (
+      {(step === 'input' || step === 'analyzing' || step === 'reviewThemes') && (
         <div className="dash-content" style={{ maxWidth: 680, margin: '0 auto', width: '100%', padding: '40px 24px' }}>
           <div className="page-title">Generate a tailored resume</div>
           <p className="page-sub" style={{ marginBottom: 24 }}>Paste a job description or paste a URL — we&apos;ll match it to your module library and build a resume.</p>
@@ -1533,6 +1527,88 @@ export default function GeneratePage() {
               <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 8 }}>This usually takes 10–15 seconds</div>
               <div style={{ width: '100%', height: 3, background: 'var(--bg3)', borderRadius: 999, marginTop: 26, overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: '85%', background: '#1d9e75', borderRadius: 999, animation: 'mh-analyze-progress 12s ease-out forwards' }} />
+              </div>
+            </div>
+          )}
+
+          {/* Review & confirm extracted keywords before matching runs against them */}
+          {step === 'reviewThemes' && jdData && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>
+                Here&apos;s what we pulled from <strong style={{ color: 'var(--text)' }}>{jdData.extracted_company ?? 'this role'}</strong>{jdData.extracted_role_type ? ` · ${jdData.extracted_role_type}` : ''}. Remove anything off-target and add anything we missed — this drives your match.
+              </div>
+
+              <div>
+                <div className="form-label" style={{ marginBottom: 8 }}>Themes ({confirmedThemes.length})</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {confirmedThemes.map(theme => (
+                    <span key={theme} className="theme-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {theme}
+                      <button
+                        type="button"
+                        onClick={() => removeConfirmedTheme(theme)}
+                        aria-label={`Remove ${theme}`}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12, lineHeight: 1, padding: 0, opacity: 0.7 }}
+                      >×</button>
+                    </span>
+                  ))}
+                  {confirmedThemes.length === 0 && <span style={{ fontSize: 12.5, color: 'var(--text3)' }}>No themes — add some below.</span>}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    className="form-input"
+                    placeholder="Add a theme…"
+                    value={themeInput}
+                    onChange={e => setThemeInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addConfirmedTheme(themeInput); setThemeInput('') } }}
+                    style={{ fontSize: 13 }}
+                  />
+                  <button type="button" className="btn-ghost" onClick={() => { addConfirmedTheme(themeInput); setThemeInput('') }}>Add</button>
+                </div>
+              </div>
+
+              <div>
+                <div className="form-label" style={{ marginBottom: 8 }}>ATS phrases ({confirmedPhrases.length})</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {confirmedPhrases.map(phrase => (
+                    <span key={phrase} className="theme-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {phrase}
+                      <button
+                        type="button"
+                        onClick={() => removeConfirmedPhrase(phrase)}
+                        aria-label={`Remove ${phrase}`}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 12, lineHeight: 1, padding: 0, opacity: 0.7 }}
+                      >×</button>
+                    </span>
+                  ))}
+                  {confirmedPhrases.length === 0 && <span style={{ fontSize: 12.5, color: 'var(--text3)' }}>No phrases — add some below.</span>}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    className="form-input"
+                    placeholder="Add a phrase…"
+                    value={phraseInput}
+                    onChange={e => setPhraseInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addConfirmedPhrase(phraseInput); setPhraseInput('') } }}
+                    style={{ fontSize: 13 }}
+                  />
+                  <button type="button" className="btn-ghost" onClick={() => { addConfirmedPhrase(phraseInput); setPhraseInput('') }}>Add</button>
+                </div>
+              </div>
+
+              {errorMessage && (
+                <div style={{ background: 'var(--rose-dim, oklch(0.4 0.18 10 / 0.15))', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)' }}>
+                  {errorMessage}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button type="button" className="btn-primary" onClick={handleConfirm} disabled={confirmLoading}>
+                  {confirmLoading ? 'Finding matches…' : 'Confirm & Find Matches →'}
+                </button>
+                <button type="button" className="btn-ghost" style={{ fontSize: 12 }} onClick={reset} disabled={confirmLoading}>
+                  ← Use a different job description
+                </button>
               </div>
             </div>
           )}

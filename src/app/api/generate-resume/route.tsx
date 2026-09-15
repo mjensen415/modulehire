@@ -1664,7 +1664,7 @@ experience_groups (one work_experience entry per group — do not reorder or rea
 ${JSON.stringify(experienceGroups)}
 `
 
-      const rawCombo = await aiComplete([{ role: 'user', content: comboPrompt }], 4096)
+      const rawCombo = await aiComplete([{ role: 'user', content: comboPrompt }], 4096, { model: process.env.ANTHROPIC_MODEL_QUALITY || 'claude-sonnet-5' })
       const strippedCombo = rawCombo.replace(/```json/g, '').replace(/```/g, '')
       const cs = strippedCombo.indexOf('{'), ce = strippedCombo.lastIndexOf('}')
       if (cs === -1 || ce === -1) throw new Error(`Combination template: model did not return JSON. Got: ${strippedCombo.slice(0, 200)}`)
@@ -1755,7 +1755,7 @@ Respond with ONLY this JSON structure — no markdown, no explanation:
 experience_groups (one experience entry per group — do not reorder or reassign):
 ${JSON.stringify(experienceGroups)}`
 
-      const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 4096)
+      const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 4096, { model: process.env.ANTHROPIC_MODEL_QUALITY || 'claude-sonnet-5' })
       const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
       const jsonStart = stripped.indexOf('{'), jsonEnd = stripped.lastIndexOf('}')
       if (jsonStart === -1 || jsonEnd === -1) throw new Error(`Model did not return JSON. Response: ${stripped.slice(0, 200)}`)
@@ -1912,7 +1912,7 @@ Rules:
 - Close with a clear call to action
 - Plain text output only — no JSON, no markdown, no headers`
 
-      coverLetterText = await aiComplete([{ role: 'user', content: clPrompt }], 1024)
+      coverLetterText = await aiComplete([{ role: 'user', content: clPrompt }], 1024, { model: process.env.ANTHROPIC_MODEL_QUALITY || 'claude-sonnet-5' })
 
       const coverPath = `${user.id}/${resumeId}-cover.txt`
       await supabase.storage.from('temp').upload(

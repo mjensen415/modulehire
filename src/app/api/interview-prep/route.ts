@@ -100,18 +100,21 @@ export async function POST(req: Request) {
     const prefs = await getUserPreferences(supabase, user.id)
     const prefContext = buildPreferenceContext(prefs)
 
-    const prompt = `${prefContext ? prefContext + '\n\n' : ''}You are helping a job candidate prepare for an interview. Surface THEIR OWN experience in the context of this job description — do not write answers for them, just help them see the connections.
+    // Cacheable prefix: this profile's module library, unchanged across different JDs prepped
+    // for in the same session.
+    const libraryBlock = `You are helping a job candidate prepare for an interview. Surface THEIR OWN experience in the context of a job description — do not write answers for them, just help them see the connections.
 
-JOB TITLE: ${jobTitle}
+CANDIDATE'S EXPERIENCE (from their resume/module library):
+${resumeContent}
+`
+
+    const taskBlock = `${prefContext ? prefContext + '\n\n' : ''}JOB TITLE: ${jobTitle}
 COMPANY: ${company}
 
 JOB DESCRIPTION:
 ${jd.raw_text.slice(0, 12_000)}
 
-CANDIDATE'S EXPERIENCE (from their resume/module library):
-${resumeContent}
-
-Extract 5-7 key requirements from the job description. For each, identify the most relevant experience from the candidate's background and suggest a brief framing for how to talk about it — guidance, not a script.
+Extract 5-7 key requirements from the job description. For each, identify the most relevant experience from the candidate's background above and suggest a brief framing for how to talk about it — guidance, not a script.
 
 Return ONLY a valid JSON object — no explanation, no markdown, no code fences:
 {
@@ -129,7 +132,11 @@ Return ONLY a valid JSON object — no explanation, no markdown, no code fences:
   "red_flags": ["gaps between JD requirements and their resume, so they can prepare honest answers — empty array if none"]
 }`
 
-    const raw = await aiComplete([{ role: 'user', content: prompt }], 2048)
+    const raw = await aiComplete(
+      [{ role: 'user', content: [{ text: libraryBlock, cache: true }, { text: taskBlock }] }],
+      2048,
+      { model: process.env.ANTHROPIC_MODEL_QUALITY || 'claude-sonnet-5' }
+    )
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
     const jsonStr = cleaned.startsWith('{') ? cleaned : cleaned.slice(cleaned.indexOf('{'))
     const prep = JSON.parse(jsonrepair(jsonStr)) as PrepData

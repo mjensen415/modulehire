@@ -100,6 +100,7 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - `ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences jsonb NOT NULL DEFAULT '{}'::jsonb;` — applied via MCP, tracked in `supabase/migrations/20260820_user_preferences.sql`
 - `prompt_feedback` table (id, user_id, lab_type, input_snapshot, output_snapshot, feedback, notes, created_at) + admin-only RLS policy (`users.is_admin = true`) — applied via MCP, tracked in `supabase/migrations/20260826_prompt_feedback.sql`. Backs the admin-only Prompt Lab (`/admin/prompt-lab`) for testing/rating JD parse, module match, and module rewrite prompts.
 - `ALTER TABLE public.modules ADD COLUMN IF NOT EXISTS pinned boolean NOT NULL DEFAULT false;` — applied via MCP, tracked in `supabase/migrations/20260828_module_pinned.sql`, already reflected in `schema.sql`. Splits "always include in matches" (now `pinned`, user-set, capped at 2 per profile) out of `weight` (now a minor scoring nudge only — see `match-modules/route.ts`).
+- `match_runs` table (id, user_id, jd_id, ranked_modules jsonb, recommended_stack text[], created_at) + own-rows RLS policy — applied via MCP, tracked in `supabase/migrations/20260915_match_runs.sql`. Logs every production Match call's output (not just admin Prompt Lab dry-runs) so match quality can be validated against real usage later; join with `generated_resumes` on `(user_id, jd_id)` for outcome analysis.
 
 ## Gotchas
 - `git add` with parentheses in paths trips up zsh — always use `git add -A`
