@@ -152,6 +152,94 @@ function expandToSingleJobModules(m: Record<string, unknown>): Record<string, un
   return roles.map(r => ({ ...m, source_company: companies[0] ?? null, source_role_title: r }))
 }
 
+type EducationEntry = { school: string; degree: string; field: string; year: string }
+type ContactInfo = {
+  full_name: string | null
+  email: string | null
+  phone: string | null
+  linkedin_url: string | null
+  location: string | null
+  summary: string | null
+  education: EducationEntry[]
+}
+
+const EMPTY_CONTACT: ContactInfo = {
+  full_name: null, email: null, phone: null, linkedin_url: null, location: null, summary: null, education: [],
+}
+
+// Extract contact info + summary + education from the resume (small, fast call). Only depends
+// on rawText, so the caller starts this concurrently with the (much larger) module-parse call
+// instead of waiting for it to finish first. Best-effort — never throws; falls back to
+// EMPTY_CONTACT so a failure here can't break the surrounding parse.
+async function extractContactInfo(rawText: string): Promise<ContactInfo> {
+  try {
+    const contactPrompt = `Extract contact information, the candidate's summary section, and the education section from this resume.
+Return JSON only:
+{
+  "full_name": "...",
+  "email": "...",
+  "phone": "...",
+  "linkedin_url": "...",
+  "location": "...",
+  "summary": "...",
+  "education": [
+    { "school": "...", "degree": "...", "field": "...", "year": "..." }
+  ]
+}
+For "summary": include the verbatim Summary / Profile / Objective / About paragraph(s) at the top of the resume if present (typically 2-4 sentences). If there is no such section, return null. Do NOT fabricate a summary.
+For "education":
+  - Return an array (empty array [] if no education section).
+  - "school" is the institution name (e.g. "Stanford University").
+  - "degree" is the degree name (e.g. "B.A.", "MBA", "Ph.D."). Empty string if none stated.
+  - "field" is the major / area of study (e.g. "Computer Science"). Empty string if none stated.
+  - "year" is the graduation year or year range as written (e.g. "2018", "2014-2018"). Empty string if none stated.
+  - Do NOT fabricate entries. Only include entries actually present in the resume.
+Use null for any other field not found.
+
+Resume:
+${rawText.slice(0, 4000)}
+
+JSON:`
+
+    const contactRaw = await aiComplete([{ role: 'user', content: contactPrompt }], 1000)
+    const stripped = contactRaw.replace(/```json/g, '').replace(/```/g, '').trim()
+    const jsonStart = stripped.indexOf('{')
+    const jsonEnd = stripped.lastIndexOf('}')
+    if (jsonStart === -1 || jsonEnd === -1) return EMPTY_CONTACT
+
+    const parsed = JSON.parse(jsonrepair(stripped.slice(jsonStart, jsonEnd + 1)))
+    const educationRaw = Array.isArray(parsed.education) ? parsed.education : []
+    const education: EducationEntry[] = educationRaw
+      .map((e: unknown): EducationEntry | null => {
+        if (!e || typeof e !== 'object') return null
+        const r = e as Record<string, unknown>
+        const school = typeof r.school === 'string' ? r.school.trim() : ''
+        const degree = typeof r.degree === 'string' ? r.degree.trim() : ''
+        const field  = typeof r.field  === 'string' ? r.field.trim()  : ''
+        const year   = typeof r.year   === 'string' ? r.year.trim()   : ''
+        if (!school && !degree && !field && !year) return null
+        return { school, degree, field, year }
+      })
+      .filter((e: EducationEntry | null): e is EducationEntry => e !== null)
+      .slice(0, 20)
+
+    return {
+      full_name: parsed.full_name ?? null,
+      email: parsed.email ?? null,
+      phone: parsed.phone ?? null,
+      linkedin_url: parsed.linkedin_url ?? null,
+      location: parsed.location ?? null,
+      summary: typeof parsed.summary === 'string' && parsed.summary.trim().length > 0
+        ? parsed.summary.trim()
+        : null,
+      education,
+    }
+  } catch {
+    // Contact extraction is best-effort — don't fail the whole parse
+    return EMPTY_CONTACT
+  }
+}
+
 export async function parseModules(
   supabase: SupabaseClient,
   userId: string,
@@ -223,6 +311,11 @@ Resume:
 ${rawText}
 
 JSON array:`
+
+  // Contact/summary/education extraction only needs rawText, same as the module-parse call
+  // above — start it now so it runs concurrently with module parsing and the DB work that
+  // follows, instead of waiting until both are done sequentially.
+  const contactPromise = extractContactInfo(rawText)
 
   // 8192 tokens — Haiku 4.5 max output; a dense 3-page resume can exceed 4096
   const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 8192)
@@ -414,83 +507,10 @@ JSON array:`
     console.error('[parse-modules/skills] skill auto-population failed:', err)
   }
 
-  // Extract contact info + summary + education from the resume (small fast call)
-  type EducationEntry = { school: string; degree: string; field: string; year: string }
-  let contact: {
-    full_name: string | null
-    email: string | null
-    phone: string | null
-    linkedin_url: string | null
-    location: string | null
-    summary: string | null
-    education: EducationEntry[]
-  } = { full_name: null, email: null, phone: null, linkedin_url: null, location: null, summary: null, education: [] }
-
-  try {
-    const contactPrompt = `Extract contact information, the candidate's summary section, and the education section from this resume.
-Return JSON only:
-{
-  "full_name": "...",
-  "email": "...",
-  "phone": "...",
-  "linkedin_url": "...",
-  "location": "...",
-  "summary": "...",
-  "education": [
-    { "school": "...", "degree": "...", "field": "...", "year": "..." }
-  ]
-}
-For "summary": include the verbatim Summary / Profile / Objective / About paragraph(s) at the top of the resume if present (typically 2-4 sentences). If there is no such section, return null. Do NOT fabricate a summary.
-For "education":
-  - Return an array (empty array [] if no education section).
-  - "school" is the institution name (e.g. "Stanford University").
-  - "degree" is the degree name (e.g. "B.A.", "MBA", "Ph.D."). Empty string if none stated.
-  - "field" is the major / area of study (e.g. "Computer Science"). Empty string if none stated.
-  - "year" is the graduation year or year range as written (e.g. "2018", "2014-2018"). Empty string if none stated.
-  - Do NOT fabricate entries. Only include entries actually present in the resume.
-Use null for any other field not found.
-
-Resume:
-${rawText.slice(0, 4000)}
-
-JSON:`
-
-    const contactRaw = await aiComplete([{ role: 'user', content: contactPrompt }], 1000)
-    const stripped = contactRaw.replace(/```json/g, '').replace(/```/g, '').trim()
-    const jsonStart = stripped.indexOf('{')
-    const jsonEnd = stripped.lastIndexOf('}')
-    if (jsonStart !== -1 && jsonEnd !== -1) {
-      const parsed = JSON.parse(jsonrepair(stripped.slice(jsonStart, jsonEnd + 1)))
-      const educationRaw = Array.isArray(parsed.education) ? parsed.education : []
-      const education: EducationEntry[] = educationRaw
-        .map((e: unknown): EducationEntry | null => {
-          if (!e || typeof e !== 'object') return null
-          const r = e as Record<string, unknown>
-          const school = typeof r.school === 'string' ? r.school.trim() : ''
-          const degree = typeof r.degree === 'string' ? r.degree.trim() : ''
-          const field  = typeof r.field  === 'string' ? r.field.trim()  : ''
-          const year   = typeof r.year   === 'string' ? r.year.trim()   : ''
-          if (!school && !degree && !field && !year) return null
-          return { school, degree, field, year }
-        })
-        .filter((e: EducationEntry | null): e is EducationEntry => e !== null)
-        .slice(0, 20)
-
-      contact = {
-        full_name: parsed.full_name ?? null,
-        email: parsed.email ?? null,
-        phone: parsed.phone ?? null,
-        linkedin_url: parsed.linkedin_url ?? null,
-        location: parsed.location ?? null,
-        summary: typeof parsed.summary === 'string' && parsed.summary.trim().length > 0
-          ? parsed.summary.trim()
-          : null,
-        education,
-      }
-    }
-  } catch {
-    // Contact extraction is best-effort — don't fail the whole parse
-  }
+  // Contact/summary/education call was started concurrently at the top of this function —
+  // by now it's almost certainly already resolved, since it's a smaller call that ran
+  // alongside the module-parse call and all the DB work above, not after them.
+  const contact = await contactPromise
 
   return { modules: insertedModules, contact, jobSyncError, jobExperienceIds }
 }

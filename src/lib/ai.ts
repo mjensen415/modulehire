@@ -1,7 +1,15 @@
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 
-type Message = { role: 'user' | 'assistant' | 'system'; content: string }
+// A content block lets a caller mark part of a prompt as a stable, reusable prefix.
+// `cache: true` becomes an Anthropic `cache_control: { type: 'ephemeral' }` breakpoint —
+// ignored (flattened to plain text) on the ollama provider, which has no such concept.
+type ContentBlock = { text: string; cache?: boolean }
+type Message = { role: 'user' | 'assistant' | 'system'; content: string | ContentBlock[] }
+
+function flattenContent(content: string | ContentBlock[]): string {
+  return typeof content === 'string' ? content : content.map(b => b.text).join('')
+}
 
 /**
  * Unified AI completion function.
@@ -24,7 +32,11 @@ export async function aiComplete(messages: Message[], maxTokens = 4096, opts?: {
 
     try {
       const res = await client.chat.completions.create(
-        { model, messages, max_tokens: maxTokens },
+        {
+          model,
+          messages: messages.map(m => ({ role: m.role, content: flattenContent(m.content) })),
+          max_tokens: maxTokens,
+        },
         { signal: controller.signal }
       )
       return res.choices[0].message.content ?? ''
@@ -45,10 +57,16 @@ export async function aiComplete(messages: Message[], maxTokens = 4096, opts?: {
     max_tokens: maxTokens,
     messages: messages.filter(m => m.role !== 'system').map(m => ({
       role: m.role as 'user' | 'assistant',
-      content: m.content,
+      content: typeof m.content === 'string'
+        ? m.content
+        : m.content.map(b => ({
+            type: 'text' as const,
+            text: b.text,
+            ...(b.cache ? { cache_control: { type: 'ephemeral' as const } } : {}),
+          })),
     })),
     ...(messages.find(m => m.role === 'system')
-      ? { system: messages.find(m => m.role === 'system')!.content }
+      ? { system: flattenContent(messages.find(m => m.role === 'system')!.content) }
       : {}),
   })
   return (res.content[0] as { text: string }).text
