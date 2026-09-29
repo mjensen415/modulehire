@@ -65,7 +65,8 @@ Return only raw JSON:
       { role: 'user', content: prompt },
       { role: 'assistant', content: '{' },
     ],
-    1200
+    1200,
+    { tier: 'quality' }
   )
   const parsed = JSON.parse(jsonrepair('{' + raw)) as {
     candidate_name?: string | null

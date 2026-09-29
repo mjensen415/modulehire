@@ -8,7 +8,7 @@ import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
 import { getUserPreferences, buildPreferenceContext } from '@/lib/preferences'
 
-export const maxDuration = 60
+export const maxDuration = 120
 
 export async function POST(req: Request) {
   try {
@@ -108,7 +108,8 @@ JSON:`
 
     const rawResponseText = await aiComplete(
       [{ role: 'user', content: [{ text: libraryBlock, cache: true }, { text: taskBlock }] }],
-      4096
+      4096,
+      { tier: 'fast' }
     )
 
     const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
@@ -193,7 +194,7 @@ JSON:`
         const pass2Raw = await aiComplete(
           [{ role: 'user', content: pass2Prompt }],
           2048,
-          { model: process.env.ANTHROPIC_MODEL_QUALITY || 'claude-sonnet-5' }
+          { tier: 'quality', userId: user.id, action: 'match_job_pass2' }
         )
         const p2stripped = pass2Raw.replace(/```json/g, '').replace(/```/g, '')
         const p2start = p2stripped.indexOf('{')

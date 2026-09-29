@@ -42,6 +42,47 @@ export async function checkAndLog(
 }
 
 /**
+ * Org-level daily cap on AI-scored applicants (scoreApplicant calls now run on the
+ * `quality` tier — several times the cost of Haiku — so a single org can't run
+ * unbounded CSV batches). Counts `applicants.scored_at` in the last 24h for the org;
+ * skipped entirely for `tier = 'enterprise'` orgs. Fail-open on infra error, same as
+ * checkAndLog.
+ */
+export async function checkOrgDailyScoreCap(
+  supabase: SupabaseClient,
+  orgId: string,
+  max = 500
+): Promise<RateLimitResult> {
+  const { data: org, error: orgError } = await supabase
+    .from('organizations')
+    .select('tier')
+    .eq('id', orgId)
+    .single()
+  if (orgError) {
+    console.error('[rate-limit] org tier lookup failed:', orgError)
+    return { ok: true }
+  }
+  if (org?.tier === 'enterprise') return { ok: true }
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const { count, error } = await supabase
+    .from('applicants')
+    .select('*', { count: 'exact', head: true })
+    .eq('org_id', orgId)
+    .gte('scored_at', cutoff)
+
+  if (error) {
+    console.error('[rate-limit] org daily score count failed:', error)
+    return { ok: true }
+  }
+
+  if ((count ?? 0) >= max) {
+    return { ok: false, retryAfter: 24 * 60 * 60 }
+  }
+  return { ok: true }
+}
+
+/**
  * TODO: wire this into src/app/api/auth/forgot-password/route.ts when that
  * feature is committed. The `rate_limits` table is already live in prod, but
  * this helper currently has no committed caller — the forgot-password wiring is

@@ -4,7 +4,7 @@ import { getOrgRole } from '@/lib/business/org-access'
 import { aiComplete } from '@/lib/ai'
 import { jsonrepair } from 'jsonrepair'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 type AiCheckResult = {
   likely_ai: boolean
@@ -53,7 +53,7 @@ ${applicant.raw_text.slice(0, 4000)}
 
 Return only valid JSON, no markdown.`
 
-    const raw = await aiComplete([{ role: 'user', content: prompt }], 1000)
+    const raw = await aiComplete([{ role: 'user', content: prompt }], 1000, { tier: 'quality' })
 
     let parsed: AiCheckResult
     try {

@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getOrgRole } from '@/lib/business/org-access'
 import { scoreApplicant } from '@/lib/business/score-applicant'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {

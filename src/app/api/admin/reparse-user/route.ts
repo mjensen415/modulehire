@@ -8,6 +8,8 @@ import { getActiveProfileId } from '@/lib/profile'
 // the site owner by session email.
 const ADMIN_EMAIL = 'mjensen415@gmail.com'
 
+export const maxDuration = 300
+
 export async function POST(req: Request) {
   try {
     // Gate on the logged-in user's email from the session.

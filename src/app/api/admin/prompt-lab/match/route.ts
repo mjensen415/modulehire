@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { aiComplete } from '@/lib/ai'
+import { aiComplete, resolveModel } from '@/lib/ai'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/admin-guard'
 import { isUuid } from '@/lib/validate'
@@ -7,7 +7,7 @@ import { getActiveProfileId } from '@/lib/profile'
 import { getUserPreferences, buildPreferenceContext } from '@/lib/preferences'
 import { jsonrepair } from 'jsonrepair'
 
-export const maxDuration = 60
+export const maxDuration = 120
 
 // Split into a cacheable library block (front-loaded, reused across JDs for the same profile)
 // and a dynamic task block — mirrors the same split in match-modules/route.ts.
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
         ? [{ role: 'user', content: prompt_override }]
         : [{ role: 'user', content: [{ text: built!.libraryBlock, cache: true }, { text: built!.taskBlock }] }],
       4096,
-      { model: typeof model === 'string' ? model : undefined }
+      { model: typeof model === 'string' ? model : undefined, tier: 'fast' }
     )
 
     const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
@@ -176,7 +176,7 @@ JSON:`
           const pass2Raw = await aiComplete(
             [{ role: 'user', content: pass2Prompt }],
             2048,
-            { model: (typeof model === 'string' && model) || process.env.ANTHROPIC_MODEL_QUALITY || 'claude-sonnet-5' }
+            { model: typeof model === 'string' ? model : undefined, tier: 'quality' }
           )
           const p2stripped = pass2Raw.replace(/```json/g, '').replace(/```/g, '')
           const p2start = p2stripped.indexOf('{')
@@ -227,7 +227,7 @@ JSON:`
       unmatched_modules: unmatchedModules,
       raw_ai_response: rawResponseText,
       prompt_used: prompt,
-      model_used: model || process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
+      model_used: model || resolveModel('fast'),
     })
   } catch (error) {
     console.error('[admin/prompt-lab/match]', error)

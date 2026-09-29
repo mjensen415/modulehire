@@ -52,7 +52,7 @@ Output ONLY a raw JSON array, no other text — one entry per module above, in a
 
 JSON:`
 
-      const raw = await aiComplete([{ role: 'user', content: prompt }], 2048)
+      const raw = await aiComplete([{ role: 'user', content: prompt }], 2048, { tier: 'fast' })
       const stripped = raw.replace(/```json/g, '').replace(/```/g, '').trim()
       const start = stripped.indexOf('[')
       const end = stripped.lastIndexOf(']')

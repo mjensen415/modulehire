@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { aiComplete } from '@/lib/ai'
+import { aiComplete, resolveModel } from '@/lib/ai'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/admin-guard'
 import { isUuid } from '@/lib/validate'
@@ -70,14 +70,14 @@ export async function POST(req: Request) {
       ? prompt_override
       : buildPrompt(moduleRow, themes, phrases, prefContext)
 
-    const raw = await aiComplete([{ role: 'user', content: prompt }], 512, { model: typeof model === 'string' ? model : undefined })
+    const raw = await aiComplete([{ role: 'user', content: prompt }], 512, { model: typeof model === 'string' ? model : undefined, tier: 'quality' })
 
     return NextResponse.json({
       suggestion: raw.trim(),
       original: moduleRow.content,
       raw_ai_response: raw,
       prompt_used: prompt,
-      model_used: model || process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
+      model_used: model || resolveModel('quality'),
     })
   } catch (error) {
     console.error('[admin/prompt-lab/rewrite]', error)

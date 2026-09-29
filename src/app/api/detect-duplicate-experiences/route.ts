@@ -67,7 +67,7 @@ Rules:
 - Each new_id must come from NEW and each existing_id from EXISTING.
 - If there are no duplicates, return [].`
 
-    const raw = await aiComplete([{ role: 'user', content: prompt }], 1024)
+    const raw = await aiComplete([{ role: 'user', content: prompt }], 1024, { tier: 'fast' })
     const stripped = raw.replace(/```json/g, '').replace(/```/g, '')
     const start = stripped.indexOf('['), end = stripped.lastIndexOf(']')
     let pairs: Pair[] = []

@@ -48,7 +48,8 @@ export async function extractSkillsFromContent(content: string): Promise<Extract
       { role: 'system', content: SKILL_EXTRACTION_PROMPT },
       { role: 'user', content },
     ],
-    600
+    600,
+    { tier: 'fast' }
   )
 
   const stripped = raw.replace(/```json/g, '').replace(/```/g, '').trim()
@@ -202,7 +203,7 @@ ${rawText.slice(0, 4000)}
 
 JSON:`
 
-    const contactRaw = await aiComplete([{ role: 'user', content: contactPrompt }], 1000)
+    const contactRaw = await aiComplete([{ role: 'user', content: contactPrompt }], 1000, { tier: 'fast' })
     const stripped = contactRaw.replace(/```json/g, '').replace(/```/g, '').trim()
     const jsonStart = stripped.indexOf('{')
     const jsonEnd = stripped.lastIndexOf('}')
@@ -319,8 +320,8 @@ JSON array:`
   // follows, instead of waiting until both are done sequentially.
   const contactPromise = extractContactInfo(rawText)
 
-  // 8192 tokens — Haiku 4.5 max output; a dense 3-page resume can exceed 4096
-  const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 8192)
+  // 8192 tokens headroom — a dense 3-page resume can produce a long module list
+  const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 8192, { tier: 'quality', userId, action: 'parse_modules' })
 
   const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '').trim()
   const jsonStart = stripped.indexOf('[')

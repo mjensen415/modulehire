@@ -7,7 +7,7 @@ import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
 import { getUserPreferences, buildPreferenceContext } from '@/lib/preferences'
 
-export const maxDuration = 60
+export const maxDuration = 120
 
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
@@ -135,7 +135,7 @@ Return ONLY a valid JSON object — no explanation, no markdown, no code fences:
     const raw = await aiComplete(
       [{ role: 'user', content: [{ text: libraryBlock, cache: true }, { text: taskBlock }] }],
       2048,
-      { model: process.env.ANTHROPIC_MODEL_QUALITY || 'claude-sonnet-5' }
+      { tier: 'quality' }
     )
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
     const jsonStr = cleaned.startsWith('{') ? cleaned : cleaned.slice(cleaned.indexOf('{'))

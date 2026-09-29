@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { isUuid } from '@/lib/validate'
-import { checkAndLog } from '@/lib/rate-limit'
+import { checkAndLog, checkOrgDailyScoreCap } from '@/lib/rate-limit'
 import { getOrgRole } from '@/lib/business/org-access'
 import { scoreApplicant } from '@/lib/business/score-applicant'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 function nameFromFilename(filename: string): string | null {
   const base = filename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ').trim()
@@ -70,6 +70,11 @@ export async function POST(req: Request) {
 
     const role = await getOrgRole(supabase, job.org_id, user.id)
     if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const orgCap = await checkOrgDailyScoreCap(supabase, job.org_id)
+    if (!orgCap.ok) {
+      return NextResponse.json({ error: 'Daily AI-scoring limit reached for this org. Try again tomorrow.' }, { status: 429, headers: { 'Retry-After': String(orgCap.retryAfter) } })
+    }
 
     const file = formData.get('file') as File | null
     const resumeTextField = formData.get('resume_text')

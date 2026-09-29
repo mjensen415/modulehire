@@ -4,6 +4,8 @@ import { checkAndLog } from '@/lib/rate-limit'
 import { parseModules } from '@/lib/parse-modules'
 import { getActiveProfileId } from '@/lib/profile'
 
+export const maxDuration = 300
+
 // Lets an authenticated user wipe and rebuild their own module library from
 // their most recent uploaded resume. Rate-limited so it can't be hammered.
 export async function POST() {

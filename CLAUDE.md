@@ -10,7 +10,7 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - Supabase (Postgres + Auth + Storage + RLS)
 - Vercel deployment
 - Stripe for billing
-- AI via `src/lib/ai.ts` (aiComplete helper)
+- AI via `src/lib/ai.ts` (`aiComplete` / `aiCompleteJson`, tiered — see "AI model tiering" below)
 
 ## Key data model
 - `users` — profile: name, email, phone, linkedin_url, location, plan
@@ -102,6 +102,32 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - `ALTER TABLE public.modules ADD COLUMN IF NOT EXISTS pinned boolean NOT NULL DEFAULT false;` — applied via MCP, tracked in `supabase/migrations/20260828_module_pinned.sql`, already reflected in `schema.sql`. Splits "always include in matches" (now `pinned`, user-set, capped at 2 per profile) out of `weight` (now a minor scoring nudge only — see `match-modules/route.ts`).
 - `match_runs` table (id, user_id, jd_id, ranked_modules jsonb, recommended_stack text[], created_at) + own-rows RLS policy — applied via MCP, tracked in `supabase/migrations/20260915_match_runs.sql`. Logs every production Match call's output (not just admin Prompt Lab dry-runs) so match quality can be validated against real usage later; join with `generated_resumes` on `(user_id, jd_id)` for outcome analysis.
 - `modules.dimensions text[]` + `job_descriptions.extracted_criteria/match_report/match_report_at/match_report_profile_id jsonb` — applied via MCP, tracked in `supabase/migrations/20260929_dimensions.sql`. Six-dimension tagging (`src/lib/dimensions.ts`: role/seniority/responsibility/skill/domain/collaboration) shared by modules and typed, weighted JD criteria — data foundation for the JD Match Report feature (score per criterion with evidence).
+- `ALTER TABLE public.usage_events ADD COLUMN IF NOT EXISTS metadata jsonb;` — applied via MCP, tracked in `supabase/migrations/20260929_usage_events_metadata.sql`. AI call sites that pass `{ userId, action }` to `aiComplete`/`aiCompleteJson` fire-and-forget log `{ model, input_tokens, output_tokens }` here for cost-per-action visibility.
+
+## AI model tiering (`src/lib/ai.ts`)
+Every AI call site picks a tier explicitly — `ANTHROPIC_MODEL` is NOT flipped globally.
+`resolveModel(tier)` resolves `'fast'` → `ANTHROPIC_MODEL_FAST` (Haiku) and `'quality'` →
+`ANTHROPIC_MODEL_QUALITY` (Sonnet 5); `aiComplete`/`aiCompleteJson` take `{ tier }` (default
+`'fast'` via the untiered `'default'` resolution) and an optional `model` override (used by the
+Prompt Lab's model selector). `aiCompleteJson<T>(messages, schema, maxTokens, opts)` uses forced
+Anthropic tool-use for structured output — used by the new `/api/match-report` route; existing
+JSON-scraping routes (`analyze-jd`, `match-modules`, `parse-modules`, `score-applicant`) were left
+on brace-slicing for this pass to limit blast radius, and are candidates for migrating later.
+
+| Tier | Call sites |
+|---|---|
+| `fast` | contact extraction + skill extraction (`parse-modules.ts`), `detect-duplicate-experiences`, `admin/backfill-dimensions`, `match-modules` pass 1 (+ prompt-lab mirror) |
+| `quality` | module extraction (`parse-modules.ts`), `analyze-jd` (+ prompt-lab mirror), `match-modules` pass 2 (+ prompt-lab mirror), `match-report`, `suggest-module-rewrite` (+ prompt-lab mirror), `interview-prep`, `score-applicant`, `business/applicants/[id]/ai-check`, `business/job-postings`, `generate-resume` (all 3 calls), `suggest-summary`, `theme-alignment` |
+
+`maxDuration` raised to 300 for `parse-resume`, `reparse-my-modules`, `admin/reparse-user`,
+`business/applicants/upload`, `business/applicants/[id]/rescore`, `business/applicants/[id]/ai-check`;
+120 for `analyze-jd`, `match-modules` (+ prompt-lab mirror), `match-report`, `interview-prep`,
+`admin/prompt-lab/jd-parse`.
+
+`checkOrgDailyScoreCap()` in `src/lib/rate-limit.ts` caps AI-scored applicants at 500/day per org
+(`organizations.tier != 'enterprise'` only), checked before `scoreApplicant()` in the CSV and
+single-upload business routes — bulk scoring now runs on the `quality` tier, several times the
+cost of Haiku.
 
 ## Gotchas
 - `git add` with parentheses in paths trips up zsh — always use `git add -A`

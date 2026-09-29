@@ -5,7 +5,7 @@ import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
 import { DIMENSIONS, sanitizeCriteria } from '@/lib/dimensions'
 
-export const maxDuration = 60
+export const maxDuration = 120
 
 export async function POST(req: Request) {
   try {
@@ -84,7 +84,7 @@ ${raw_text}
 
 JSON:`
 
-    const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 2048)
+    const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 2048, { tier: 'quality', userId: user.id, action: 'analyze_jd' })
 
     const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
     const jsonStart = stripped.indexOf('{')

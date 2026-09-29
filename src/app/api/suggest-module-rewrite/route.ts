@@ -70,7 +70,7 @@ Rewrite the module content to better match this role. Rules:
 
 Return ONLY the rewritten module content, no preamble, no explanation.`
 
-    const raw = await aiComplete([{ role: 'user', content: prompt }], 512)
+    const raw = await aiComplete([{ role: 'user', content: prompt }], 512, { tier: 'quality' })
 
     return NextResponse.json({ suggestion: raw.trim() })
   } catch (error) {

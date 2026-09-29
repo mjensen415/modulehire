@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { aiComplete } from '@/lib/ai'
+import { aiComplete, resolveModel } from '@/lib/ai'
 import { requireAdmin } from '@/lib/admin-guard'
 import { DIMENSIONS, sanitizeCriteria } from '@/lib/dimensions'
 
-export const maxDuration = 60
+export const maxDuration = 120
 
 export const DEFAULT_JD_PARSE_PROMPT = `Extract structured data from this job description. Output MUST be a raw JSON object starting with { and ending with }. No other text, no markdown.
 
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
       ? template.replace('{{raw_text}}', raw_text)
       : `${template}\n\nJob Description:\n${raw_text}\n\nJSON:`
 
-    const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 2048, { model: typeof model === 'string' ? model : undefined })
+    const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 2048, { model: typeof model === 'string' ? model : undefined, tier: 'quality' })
 
     const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
     const jsonStart = stripped.indexOf('{')
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
       extracted,
       raw_ai_response: rawResponseText,
       prompt_used: prompt,
-      model_used: model || process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
+      model_used: model || resolveModel('quality'),
     })
   } catch (error) {
     console.error('[admin/prompt-lab/jd-parse]', error)

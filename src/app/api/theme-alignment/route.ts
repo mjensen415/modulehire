@@ -94,7 +94,7 @@ Output ONLY valid JSON in this exact shape, no markdown:
       const raw = await aiComplete(
         [{ role: 'user', content: [{ text: modulesBlock, cache: true }, { text: taskBlock }] }],
         4096,
-        { model: process.env.ANTHROPIC_MODEL_QUALITY || 'claude-sonnet-5' }
+        { tier: 'quality' }
       )
       const stripped = raw.replace(/```json/g, '').replace(/```/g, '')
       const start = stripped.indexOf('{')
