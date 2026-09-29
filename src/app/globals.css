@@ -391,12 +391,15 @@ body.app-body { overflow: hidden; }
 .health-text strong { color: oklch(0.87 0.14 58); }
 .health-arrow { color: var(--amber); opacity: 0.7; }
 
+.dash-two-col-b { display: grid; grid-template-columns: minmax(0, 38%) 1fr; gap: 16px; align-items: start; }
+
 @media (max-width: 900px) {
   .app-sidebar { display: none; }
   .app-main { margin-left: 0 !important; }
   .mobile-banner { display: block; }
   .dash-stats { grid-template-columns: 1fr 1fr; }
   .dash-two-col { grid-template-columns: 1fr; }
+  .dash-two-col-b { grid-template-columns: 1fr; }
   .table-head { display: none; }
   .table-row { grid-template-columns: 1fr; gap: 6px; }
 }

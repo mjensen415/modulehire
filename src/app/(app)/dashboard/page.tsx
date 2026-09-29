@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { moduleLimit, isProTier, FREE_MONTHLY_GENERATIONS } from '@/lib/plan';
 import { getActiveProfileId } from '@/lib/profile';
+import { DIMENSIONS, DIMENSION_LABELS, type Dimension } from '@/lib/dimensions';
+import MatchReport, { type MatchReportData } from '@/components/MatchReport';
+import DashboardProfileSwitch from './DashboardProfileSwitch';
 
 // ─── ICONS ───
 function IconBlocks() {
@@ -76,79 +79,32 @@ function IconSearchLarge() {
     </svg>
   );
 }
-function IconWarningTriangle() {
+function IconCheck() {
   return (
-    <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
-      <path d="M7.5 1.5 14 13H1L7.5 1.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-      <path d="M7.5 6v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-      <circle cx="7.5" cy="10.8" r="0.6" fill="currentColor"/>
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+      <circle cx="6.5" cy="6.5" r="6" stroke="var(--teal)" strokeWidth="1.2"/>
+      <path d="M4 6.5 5.8 8.3 9 5" stroke="var(--teal)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
 
-// ─── COLOR HELPERS ───
-type ModuleRecord = { id: string; title: string; weight?: string; themes?: string[]; role_types?: string[]; type?: string; source_company?: string };
-
-function getModuleColor(m: ModuleRecord): string {
-  if (m.weight === 'anchor') return 'c-teal';
-  if (m.weight === 'strong') return 'c-indigo';
-  const themeMap: Record<string, string> = {
-    'community-building': 'c-teal', 'developer-relations': 'c-indigo',
-    'leadership': 'c-amber', 'content-strategy': 'c-rose',
-    'data-driven': 'c-green', 'growth': 'c-green', 'events': 'c-amber',
-  };
-  for (const t of m.themes ?? []) {
-    if (themeMap[t]) return themeMap[t];
-  }
-  return 'c-amber';
-}
-
-function getModuleDomain(m: ModuleRecord): string {
-  for (const r of m.role_types ?? []) {
-    if (r.includes('community')) return 'Community';
-    if (r.includes('developer') || r.includes('devrel')) return 'DevRel';
-    if (r.includes('content')) return 'Content';
-    if (r.includes('ops')) return 'Operations';
-    if (r.includes('marketing')) return 'Marketing';
-  }
-  for (const t of m.themes ?? []) {
-    if (t.includes('leadership') || t.includes('executive')) return 'Leadership';
-    if (t.includes('content')) return 'Content';
-    if (t.includes('data')) return 'Analytics';
-    if (t.includes('events')) return 'Events';
-    if (t.includes('partner')) return 'Partnerships';
-    if (t.includes('brand')) return 'Brand';
-  }
-  if (m.type === 'positioning') return 'Career Narrative';
-  if (m.type === 'skill') return 'Skill';
-  return 'Experience';
-}
-
-function StrengthPips({ weight }: { weight?: string }) {
-  const filled = weight === 'anchor' ? 5 : weight === 'strong' ? 3 : 2;
+function strengthDots(filled: number) {
   return (
-    <div className="mod-chip-pips">
-      {[0,1,2,3,4].map(i => (
-        <div key={i} className={`pip${i < filled ? ' on' : ''}`} />
+    <span style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: 1 }}>
+      {[1, 2, 3, 4, 5].map(n => (
+        <span key={n} style={{ color: n <= filled ? 'var(--text)' : 'var(--border2)' }}>●</span>
       ))}
-    </div>
+    </span>
   );
 }
 
-function ModuleChip({ m }: { m: ModuleRecord }) {
-  const color = getModuleColor(m);
-  const domain = getModuleDomain(m);
-  return (
-    <Link href="/library" className={`mod-chip ${color}`} style={{ textDecoration: 'none' }}>
-      <div className="mod-chip-bar" />
-      <div className="mod-chip-domain">{domain}</div>
-      <div className="mod-chip-name">{m.title || 'Untitled'}</div>
-      <div className="mod-chip-meta">
-        <span className="mod-chip-count">{(m.themes ?? []).length} themes</span>
-        <StrengthPips weight={m.weight} />
-      </div>
-    </Link>
-  );
+function strengthFromCount(count: number) {
+  if (count === 0) return 0;
+  if (count <= 2) return 1;
+  if (count <= 5) return 2;
+  if (count <= 10) return 3;
+  if (count <= 20) return 4;
+  return 5;
 }
 
 export default async function Dashboard() {
@@ -158,7 +114,7 @@ export default async function Dashboard() {
 
   const { data: onboardingProfile } = await supabase
     .from('users')
-    .select('onboarding_complete')
+    .select('onboarding_complete, location, preferences')
     .eq('id', user.id)
     .single();
   if (!onboardingProfile?.onboarding_complete) redirect('/onboarding');
@@ -177,21 +133,22 @@ export default async function Dashboard() {
     { data: scoreRows },
     { data: profileRow },
     { count: resumesThisMonthCount },
+    { data: activeProfile },
+    { data: latestResume },
+    { count: jobExperienceCount },
   ] = await Promise.all([
     supabase
       .from('modules')
-      .select('id, title, weight, themes, role_types, type, source_company', { count: 'exact' })
+      .select('id, title, weight, themes, role_types, type, source_company, dimensions', { count: 'exact' })
       .eq('user_id', user!.id)
       .eq('profile_id', activeProfileId)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(6),
+      .is('deleted_at', null),
     supabase
       .from('generated_resumes')
       .select('id, title, created_at, positioning_variant, ats_score', { count: 'exact' })
       .eq('user_id', user!.id)
       .order('created_at', { ascending: false })
-      .limit(4),
+      .limit(3),
     supabase
       .from('job_descriptions')
       .select('id, extracted_company, extracted_role_type, created_at', { count: 'exact' })
@@ -200,11 +157,12 @@ export default async function Dashboard() {
       .limit(4),
     supabase
       .from('job_descriptions')
-      .select('id, extracted_company, extracted_role_type, extracted_phrases, extracted_themes')
+      .select('id, extracted_job_title, extracted_role_type, extracted_company, extracted_phrases, extracted_themes, extracted_criteria, match_report, match_report_profile_id, source_url')
       .eq('user_id', user!.id)
+      .not('extracted_criteria', 'is', null)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single(),
+      .maybeSingle(),
     supabase
       .from('generated_resumes')
       .select('ats_score')
@@ -222,6 +180,23 @@ export default async function Dashboard() {
       .eq('user_id', user!.id)
       .eq('action', 'generate_resume')
       .gte('created_at', monthStart.toISOString()),
+    supabase
+      .from('user_profiles')
+      .select('id, name')
+      .eq('id', activeProfileId)
+      .single(),
+    supabase
+      .from('resumes')
+      .select('filename, created_at')
+      .eq('user_id', user!.id)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('job_experiences')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user!.id),
   ]);
 
   const displayName = user?.user_metadata?.full_name?.split(' ')[0]
@@ -236,6 +211,7 @@ export default async function Dashboard() {
     ? Math.round(scoredResumes.reduce((sum, r) => sum + r.ats_score, 0) / scoredResumes.length)
     : null;
 
+  type ModuleRecord = { id: string; title: string; weight?: string; themes?: string[]; type?: string; dimensions?: string[] };
   const typedModules: ModuleRecord[] = (modules ?? []) as ModuleRecord[];
   const typedResumes = resumes ?? [];
   const typedJds = (jds ?? []) as Array<{ id: string; extracted_role_type?: string; extracted_company?: string; created_at: string }>;
@@ -243,10 +219,14 @@ export default async function Dashboard() {
 
   const latestJd = recentJdFull as {
     id: string;
-    extracted_company: string | null;
+    extracted_job_title: string | null;
     extracted_role_type: string | null;
+    extracted_company: string | null;
     extracted_phrases: string[] | null;
     extracted_themes: string[] | null;
+    match_report: MatchReportData | null;
+    match_report_profile_id: string | null;
+    source_url: string | null;
   } | null;
 
   // "Next move" — determine the primary action to surface
@@ -279,43 +259,6 @@ export default async function Dashboard() {
     };
   }
 
-  // Module gaps for health section
-  const allModuleThemes = new Set(typedModules.flatMap(m => m.themes ?? []));
-  const latestJdThemes = latestJd?.extracted_themes ?? [];
-  const moduleGaps = latestJdThemes.filter(t => !allModuleThemes.has(t)).slice(0, 5);
-
-  // Coverage estimate (% of JD themes covered by at least one module)
-  const coveragePct = latestJdThemes.length > 0
-    ? Math.round(((latestJdThemes.length - moduleGaps.length) / latestJdThemes.length) * 100)
-    : null;
-
-  const healthStats = [
-    {
-      label: 'Avg ATS score',
-      value: avgScore !== null ? String(avgScore) : '—',
-      sub: avgScore !== null ? `across ${scoredResumes.length} resume${scoredResumes.length !== 1 ? 's' : ''}` : 'generate a resume to see',
-      color: avgScore !== null ? (avgScore >= 80 ? 'var(--green)' : avgScore >= 60 ? 'var(--amber)' : '#ef4444') : 'var(--teal)',
-    },
-    {
-      label: 'Modules',
-      value: String(moduleCount ?? 0),
-      sub: 'in your library',
-      color: 'var(--teal)',
-    },
-    {
-      label: 'JDs analyzed',
-      value: String(jdCount ?? 0),
-      sub: jdCount ? 'job descriptions' : 'paste one to start',
-      color: 'var(--amber)',
-    },
-    {
-      label: 'Skill coverage',
-      value: coveragePct !== null ? `${coveragePct}%` : '—',
-      sub: coveragePct !== null ? 'of latest JD themes' : 'add a JD to see',
-      color: coveragePct !== null ? (coveragePct >= 70 ? 'var(--green)' : 'var(--amber)') : 'var(--indigo)',
-    },
-  ];
-
   // Plan gate state
   const plan = (profileRow?.plan ?? 'free') as string;
   const tier = (profileRow?.tier ?? 'free') as string;
@@ -330,6 +273,19 @@ export default async function Dashboard() {
   const atModuleLimit = !isAdmin && Number.isFinite(moduleCap) && currentModuleCount >= moduleCap;
   const nearResumeLimit = !isAdmin && Number.isFinite(resumeCap) && resumesThisMonth >= resumeCap - 1;
   const atResumeLimit = !isAdmin && Number.isFinite(resumeCap) && resumesThisMonth >= resumeCap;
+
+  // ─── Resume breakdown (Part B) ───
+  const anyTagged = typedModules.some(m => (m.dimensions ?? []).length > 0);
+  const breakdown = DIMENSIONS.map((dim: Dimension) => {
+    const inDim = typedModules.filter(m => (m.dimensions ?? []).includes(dim));
+    const weighted = inDim.reduce((sum, m) => sum + (m.weight === 'anchor' || m.weight === 'strong' ? 1.5 : 1), 0);
+    return { dim, count: inDim.length, strength: strengthFromCount(Math.round(weighted)) };
+  });
+
+  const preferences = (onboardingProfile?.preferences ?? {}) as { target_roles?: string[]; career_level?: string };
+  const targetRole = preferences.target_roles?.[0] ?? null;
+  const careerLevelLabel: Record<string, string> = { mid: 'Mid-level', senior: 'Senior', executive: 'Executive' };
+  const targetLevel = preferences.career_level ? (careerLevelLabel[preferences.career_level] ?? preferences.career_level) : null;
 
   return (
     <>
@@ -365,249 +321,7 @@ export default async function Dashboard() {
           </div>
         )}
 
-        {/* NEXT MOVE */}
-        {hasContent && (
-          <div className="section-card" style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '20px 24px', marginBottom: 16 }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: 12, flexShrink: 0,
-              background: 'rgba(29,158,117,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
-              {nextMove.type === 'upload' ? <IconUploadLarge /> : nextMove.type === 'paste_jd' ? <IconSearchLarge /> : <IconBolt />}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal)', letterSpacing: '0.06em', marginBottom: 4 }}>
-                YOUR NEXT MOVE
-              </div>
-              {nextMove.type === 'upload' && <>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Upload your resume to get started</div>
-                <div style={{ fontSize: 13, color: 'var(--text3)' }}>We&apos;ll parse it into skill modules you can mix and match for any role.</div>
-              </>}
-              {nextMove.type === 'paste_jd' && <>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Paste a job description to find your best modules</div>
-                <div style={{ fontSize: 13, color: 'var(--text3)' }}>We&apos;ll rank your {moduleCount} modules against the role and show what fits.</div>
-              </>}
-              {nextMove.type === 'generate' && <>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
-                  Generate your first resume{nextMove.company ? ` for ${nextMove.company}` : ''}
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text3)' }}>
-                  You&apos;ve analyzed{nextMove.role ? ` the ${nextMove.role} role` : ' a role'} — now build the resume.
-                </div>
-              </>}
-              {nextMove.type === 'improve' && <>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
-                  {nextMove.company
-                    ? `Your ${nextMove.company} resume scores ${nextMove.score}`
-                    : `Your latest resume scores ${nextMove.score}`}
-                  {nextMove.topGap ? ` — missing "${nextMove.topGap}"` : ' — you\'re in good shape'}
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text3)' }}>
-                  {nextMove.topGap
-                    ? `Adding a module covering "${nextMove.topGap}" could push your score higher.`
-                    : 'Add more job descriptions to keep your modules aligned to new roles.'}
-                </div>
-              </>}
-              <Link
-                href={nextMove.type === 'upload' ? '/upload' : nextMove.type === 'improve' ? '/library' : '/generate'}
-                style={{ display: 'inline-block', marginTop: 10, fontSize: 12.5, fontWeight: 600, color: 'var(--teal)', textDecoration: 'none' }}
-              >
-                {nextMove.type === 'upload' ? 'Upload resume →'
-                  : nextMove.type === 'paste_jd' ? 'Find matches →'
-                  : nextMove.type === 'generate' ? 'Generate resume →'
-                  : nextMove.topGap ? 'Add a module →'
-                  : 'Add a job description →'}
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {/* HEALTH ROW */}
-        <div className="dash-stats">
-          {healthStats.map(s => (
-            <div className="stat-card" key={s.label}>
-              <div className="stat-label">{s.label}</div>
-              <div className="stat-value">{s.value}</div>
-              <div className="stat-change">{s.sub}</div>
-              <div className="stat-accent" style={{ background: s.color }} />
-            </div>
-          ))}
-        </div>
-
-        {/* MODULE GAPS */}
-        {moduleGaps.length > 0 && (
-          <div className="section-card" style={{ marginBottom: 16 }}>
-            <div className="section-head">
-              <div className="section-head-title">
-                <IconWarningTriangle /> Module gaps
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-                Skills in your latest JD{latestJd?.extracted_company ? ` (${latestJd.extracted_company})` : ''} not covered by any module
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '4px 0 8px' }}>
-              {moduleGaps.map(gap => (
-                <Link
-                  key={gap}
-                  href="/library"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    fontSize: 12.5, fontWeight: 500,
-                    background: 'var(--amber-dim)', color: 'var(--amber)',
-                    border: '1px solid var(--amber)', borderRadius: 6,
-                    padding: '5px 12px', textDecoration: 'none',
-                  }}
-                >
-                  + {gap}
-                </Link>
-              ))}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', paddingTop: 4 }}>
-              Click any gap to open your module library and add coverage.
-            </div>
-          </div>
-        )}
-
-        {/* TWO COLUMN */}
-        <div className="dash-two-col">
-
-          {/* LEFT: MODULES */}
-          <div className="section-card">
-            <div className="section-head">
-              <div className="section-head-title">
-                <IconBlocks /> My Modules
-              </div>
-              <Link href="/library" className="section-head-action">Manage →</Link>
-            </div>
-            {typedModules.length > 0 ? (
-              <div className="modules-grid">
-                {typedModules.map(m => <ModuleChip key={m.id} m={m} />)}
-              </div>
-            ) : (
-              <div style={{ padding: '32px 20px', textAlign: 'center' }}>
-                <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16 }}>
-                  No modules yet — upload a resume to get started.
-                </div>
-                <Link href="/upload" className="btn-primary" style={{ display: 'inline-flex' }}>
-                  <IconUpload /> Upload resume
-                </Link>
-              </div>
-            )}
-          </div>
-
-          {/* RIGHT */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-            {/* RESUME */}
-            <div className="section-card">
-              <div className="section-head">
-                <div className="section-head-title"><IconUpload /> Resume</div>
-                <Link href="/upload" className="section-head-action">
-                  {typedModules.length > 0 ? 'Replace' : 'Upload'}
-                </Link>
-              </div>
-              {typedModules.length > 0 && (
-                <div className="resume-row">
-                  <div className="resume-row-icon"><IconFiles /></div>
-                  <div>
-                    <div className="resume-row-name">
-                      {typedModules[0]?.source_company
-                        ? `${typedModules[0].source_company} resume`
-                        : 'Your resume'}
-                    </div>
-                    <div className="resume-row-meta">
-                      {moduleCount} modules extracted
-                    </div>
-                  </div>
-                </div>
-              )}
-              <Link href="/upload" className="upload-zone">
-                <IconUpload />
-                <div className="upload-zone-title">
-                  {typedModules.length > 0 ? 'Drop an updated resume' : 'Upload your first resume'}
-                </div>
-                <div className="upload-zone-sub">PDF or DOCX · re-parses and merges modules</div>
-              </Link>
-            </div>
-
-            {/* QUICK ACTIONS */}
-            <div className="section-card">
-              <div className="section-head">
-                <div className="section-head-title">Quick actions</div>
-              </div>
-              <div className="quick-actions">
-                {[
-                  { icon: '🔍', color: 'var(--teal-dim)', title: 'Find matches', desc: 'Paste a job description', href: '/generate', blocked: false },
-                  { icon: '⚡', color: 'var(--amber-dim)', title: 'Generate resume', desc: 'Pick modules + role', href: '/generate', blocked: atResumeLimit },
-                  { icon: '✏️', color: 'var(--indigo-dim)', title: 'Edit a module', desc: 'Refine your skills', href: '/library', blocked: false },
-                  { icon: '📤', color: 'var(--green-dim)', title: 'Upload resume', desc: 'Add or replace source', href: '/upload', blocked: atModuleLimit },
-                ].map(a => (
-                  <Link
-                    href={a.blocked ? '/pricing' : a.href}
-                    className="quick-action"
-                    key={a.title}
-                    style={a.blocked ? { opacity: 0.5 } : undefined}
-                  >
-                    <div className="quick-action-icon" style={{ background: a.color }}>
-                      <span style={{ fontSize: 14 }}>{a.icon}</span>
-                    </div>
-                    <div className="quick-action-title">{a.blocked ? 'Upgrade' : a.title}</div>
-                    <div className="quick-action-desc">{a.blocked ? 'Limit reached — upgrade plan' : a.desc}</div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* JOB DESCRIPTIONS */}
-        {typedJds.length > 0 && (
-          <div className="section-card" style={{ marginBottom: 16 }}>
-            <div className="section-head">
-              <div className="section-head-title"><IconBriefcase /> Recent Job Descriptions</div>
-              <Link href="/generate" className="section-head-action">New match →</Link>
-            </div>
-            {typedJds.map(jd => (
-              <div className="job-item" key={jd.id}>
-                <div className="job-co-logo">
-                  {(jd.extracted_company ?? 'JD').slice(0, 3).toUpperCase()}
-                </div>
-                <div className="job-info">
-                  <div className="job-title">{jd.extracted_role_type || 'Untitled role'}</div>
-                  <div className="job-company">{jd.extracted_company || 'Unknown company'}</div>
-                </div>
-                <div className="job-right">
-                  <Link href="/generate" className="generate-btn">Generate ↗</Link>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* RECENT RESUMES */}
-        {typedResumes.length > 0 && (
-          <div className="section-card">
-            <div className="section-head">
-              <div className="section-head-title"><IconFiles /> Recent Generations</div>
-              <Link href="/resumes" className="section-head-action">View all →</Link>
-            </div>
-            {(typedResumes as Array<{ id: string; title?: string; positioning_variant?: string; created_at: string }>).map((r, i) => (
-              <div className="app-row" key={r.id}>
-                <div className={`app-dot ${i === 0 ? 'sent' : i === 1 ? 'viewed' : 'draft'}`} />
-                <div className="app-row-title">{r.title || 'Untitled resume'}</div>
-                <div className="app-row-co">{r.positioning_variant ?? ''}</div>
-                <div className="app-row-date">
-                  {new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                </div>
-                <div className={`app-badge ${i === 0 ? 'sent' : i === 1 ? 'viewed' : 'draft'}`}>
-                  {i === 0 ? 'Latest' : i === 1 ? 'Prev' : 'Older'}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* EMPTY STATE — guided onboarding */}
-        {!hasContent && (
+        {!hasContent ? (
           <div className="section-card">
             <div style={{ padding: '40px 32px' }}>
               <div style={{ textAlign: 'center', marginBottom: 36 }}>
@@ -622,60 +336,18 @@ export default async function Dashboard() {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, maxWidth: 680, margin: '0 auto 32px' }}>
                 {[
-                  {
-                    step: '1',
-                    icon: '📤',
-                    title: 'Upload your resume',
-                    desc: 'We\'ll parse it into skill blocks called modules.',
-                    href: '/upload',
-                    cta: 'Upload resume',
-                    color: 'var(--teal)',
-                    done: false,
-                  },
-                  {
-                    step: '2',
-                    icon: '🔍',
-                    title: 'Paste a job description',
-                    desc: 'We match your modules to the role and rank them.',
-                    href: '/generate',
-                    cta: 'Find matches',
-                    color: 'var(--amber)',
-                    done: false,
-                  },
-                  {
-                    step: '3',
-                    icon: '⚡',
-                    title: 'Generate your resume',
-                    desc: 'Tailored, keyword-matched, ready to download.',
-                    href: '/generate',
-                    cta: 'Generate',
-                    color: 'var(--indigo)',
-                    done: false,
-                  },
+                  { step: '1', icon: '📤', title: 'Upload your resume', desc: 'We\'ll parse it into skill blocks called modules.', href: '/upload', cta: 'Upload resume', color: 'var(--teal)' },
+                  { step: '2', icon: '🔍', title: 'Paste a job description', desc: 'We match your modules to the role and rank them.', href: '/generate', cta: 'Find matches', color: 'var(--amber)' },
+                  { step: '3', icon: '⚡', title: 'Generate your resume', desc: 'Tailored, keyword-matched, ready to download.', href: '/generate', cta: 'Generate', color: 'var(--indigo)' },
                 ].map(s => (
-                  <div key={s.step} style={{
-                    background: 'var(--bg3)',
-                    border: '1px solid var(--border2)',
-                    borderRadius: 12,
-                    padding: '20px 18px',
-                    textAlign: 'center',
-                  }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: '50%',
-                      background: s.color + '22', border: `1.5px solid ${s.color}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 18, margin: '0 auto 12px',
-                    }}>
+                  <div key={s.step} style={{ background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 12, padding: '20px 18px', textAlign: 'center' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: s.color + '22', border: `1.5px solid ${s.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, margin: '0 auto 12px' }}>
                       {s.icon}
                     </div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: s.color, letterSpacing: '0.06em', marginBottom: 6, fontFamily: 'var(--mono)' }}>
-                      STEP {s.step}
-                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: s.color, letterSpacing: '0.06em', marginBottom: 6, fontFamily: 'var(--mono)' }}>STEP {s.step}</div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>{s.title}</div>
                     <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5, marginBottom: 14 }}>{s.desc}</div>
-                    <Link href={s.href} className="btn-ghost" style={{ fontSize: 12, textDecoration: 'none', display: 'inline-block' }}>
-                      {s.cta} →
-                    </Link>
+                    <Link href={s.href} className="btn-ghost" style={{ fontSize: 12, textDecoration: 'none', display: 'inline-block' }}>{s.cta} →</Link>
                   </div>
                 ))}
               </div>
@@ -687,8 +359,217 @@ export default async function Dashboard() {
               </div>
             </div>
           </div>
+        ) : (
+          <div className="dash-two-col-b">
+            {/* ── LEFT COLUMN ── */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Resume card */}
+              <div className="section-card" style={{ padding: '16px 18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 10, minWidth: 0 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--teal-dim)', color: 'var(--teal)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <IconFiles />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>{activeProfile?.name ?? 'Default profile'}</div>
+                      <div style={{ fontSize: 11.5, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {latestResume?.filename ?? 'No resume uploaded'}
+                      </div>
+                    </div>
+                  </div>
+                  <DashboardProfileSwitch activeProfileId={activeProfileId} />
+                </div>
+              </div>
+
+              {/* What you're targeting */}
+              <div className="section-card" style={{ padding: '16px 18px' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 10 }}>
+                  What you&apos;re targeting
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {[
+                    { label: 'Role', value: targetRole },
+                    { label: 'Level', value: targetLevel },
+                    { label: 'Location', value: onboardingProfile?.location ?? null },
+                  ].map(row => (
+                    <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                      <span style={{ color: 'var(--text3)' }}>{row.label}</span>
+                      <span style={{ color: row.value ? 'var(--text)' : 'var(--text3)', fontStyle: row.value ? 'normal' : 'italic' }}>{row.value ?? 'Not set'}</span>
+                    </div>
+                  ))}
+                </div>
+                <Link href="/preferences" style={{ display: 'inline-block', marginTop: 10, fontSize: 12, color: 'var(--teal)', textDecoration: 'none' }}>
+                  Edit targets →
+                </Link>
+              </div>
+
+              {/* Resume breakdown */}
+              <div className="section-card" style={{ padding: '16px 18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Resume breakdown</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Strength</span>
+                </div>
+                {!anyTagged && typedModules.length > 0 ? (
+                  <div style={{ fontSize: 12.5, color: 'var(--text3)', padding: '8px 0' }}>
+                    Breakdown will appear after your library is analyzed.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {breakdown.map(row => (
+                      <Link
+                        key={row.dim}
+                        href={`/library?dimension=${row.dim}`}
+                        title={row.strength <= 2 ? 'Few modules show this — add one from a past role.' : undefined}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 4px', borderRadius: 6, textDecoration: 'none' }}
+                      >
+                        <span style={{ fontSize: 12.5, color: 'var(--text2)' }}>{DIMENSION_LABELS[row.dim]}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 11.5, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{row.count} module{row.count === 1 ? '' : 's'}</span>
+                          {strengthDots(row.strength)}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)' }}>
+                    <IconCheck /> {moduleCount ?? 0} modules in library
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)' }}>
+                    <IconCheck /> {jobExperienceCount ?? 0} jobs in work history
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── RIGHT COLUMN ── */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+              {/* Next step */}
+              <div className="section-card" style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '20px 24px' }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, flexShrink: 0, background: 'rgba(29,158,117,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {nextMove.type === 'upload' ? <IconUploadLarge /> : nextMove.type === 'paste_jd' ? <IconSearchLarge /> : <IconBolt />}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: 'var(--teal)', letterSpacing: '0.06em', marginBottom: 4 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--teal)' }} /> NEXT STEP
+                  </div>
+                  {nextMove.type === 'upload' && <>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Upload your resume to get started</div>
+                    <div style={{ fontSize: 13, color: 'var(--text3)' }}>We&apos;ll parse it into skill modules you can mix and match for any role.</div>
+                  </>}
+                  {nextMove.type === 'paste_jd' && <>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Paste a job description to find your best modules</div>
+                    <div style={{ fontSize: 13, color: 'var(--text3)' }}>We&apos;ll rank your {moduleCount} modules against the role and show what fits.</div>
+                  </>}
+                  {nextMove.type === 'generate' && <>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
+                      Generate your first resume{nextMove.company ? ` for ${nextMove.company}` : ''}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--text3)' }}>
+                      You&apos;ve analyzed{nextMove.role ? ` the ${nextMove.role} role` : ' a role'} — now build the resume.
+                    </div>
+                  </>}
+                  {nextMove.type === 'improve' && <>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
+                      {nextMove.company ? `Your ${nextMove.company} resume scores ${nextMove.score}` : `Your latest resume scores ${nextMove.score}`}
+                      {nextMove.topGap ? ` — missing "${nextMove.topGap}"` : ' — you\'re in good shape'}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--text3)' }}>
+                      {nextMove.topGap ? `Adding a module covering "${nextMove.topGap}" could push your score higher.` : 'Add more job descriptions to keep your modules aligned to new roles.'}
+                    </div>
+                  </>}
+                  <Link
+                    href={nextMove.type === 'upload' ? '/upload' : nextMove.type === 'improve' ? '/library' : '/generate'}
+                    style={{ display: 'inline-block', marginTop: 10, fontSize: 12.5, fontWeight: 600, color: 'var(--teal)', textDecoration: 'none' }}
+                  >
+                    {nextMove.type === 'upload' ? 'Upload resume →'
+                      : nextMove.type === 'paste_jd' ? 'Find matches →'
+                      : nextMove.type === 'generate' ? 'Generate resume →'
+                      : nextMove.topGap ? 'Add a module →'
+                      : 'Add a job description →'}
+                  </Link>
+                </div>
+              </div>
+
+              {/* Latest match */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Latest match</span>
+                  {latestJd && <Link href={`/matches/${latestJd.id}`} style={{ fontSize: 12, color: 'var(--teal)', textDecoration: 'none' }}>Open full report →</Link>}
+                </div>
+                {latestJd ? (
+                  <MatchReport
+                    variant="compact"
+                    report={latestJd.match_report_profile_id === activeProfileId ? latestJd.match_report : null}
+                    jd={{
+                      title: latestJd.extracted_job_title || latestJd.extracted_role_type || 'This role',
+                      company: latestJd.extracted_company ?? null,
+                    }}
+                  />
+                ) : (
+                  <div className="section-card" style={{ padding: '20px 18px', fontSize: 13, color: 'var(--text3)' }}>
+                    <Link href="/generate" style={{ color: 'var(--teal)', textDecoration: 'none' }}>Paste a job description to see how you match →</Link>
+                  </div>
+                )}
+              </div>
+
+              {/* Recent resumes */}
+              {typedResumes.length > 0 && (
+                <div className="section-card">
+                  <div className="section-head">
+                    <div className="section-head-title"><IconFiles /> Recent Resumes</div>
+                    <Link href="/resumes" className="section-head-action">View all →</Link>
+                  </div>
+                  {(typedResumes as Array<{ id: string; title?: string; positioning_variant?: string; created_at: string; ats_score?: number | null }>).map((r) => (
+                    <div className="app-row" key={r.id}>
+                      <div className="app-row-title">{r.title || 'Untitled resume'}</div>
+                      <div className="app-row-co">{r.positioning_variant ?? ''}</div>
+                      <div className="app-row-date">{new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                      {typeof r.ats_score === 'number' && (
+                        <div className="app-badge sent">{r.ats_score}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
+        {/* JOB DESCRIPTIONS */}
+        {typedJds.length > 0 && (
+          <div className="section-card" style={{ marginTop: 16 }}>
+            <div className="section-head">
+              <div className="section-head-title"><IconBriefcase /> Recent Job Descriptions</div>
+              <Link href="/generate" className="section-head-action">New match →</Link>
+            </div>
+            {typedJds.map(jd => (
+              <div className="job-item" key={jd.id}>
+                <div className="job-co-logo">{(jd.extracted_company ?? 'JD').slice(0, 3).toUpperCase()}</div>
+                <div className="job-info">
+                  <div className="job-title">{jd.extracted_role_type || 'Untitled role'}</div>
+                  <div className="job-company">{jd.extracted_company || 'Unknown company'}</div>
+                </div>
+                <div className="job-right">
+                  <Link href="/generate" className="generate-btn">Generate ↗</Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* MODULE LIBRARY QUICK LINK */}
+        {hasContent && (
+          <div className="section-card" style={{ marginTop: 16 }}>
+            <div className="section-head">
+              <div className="section-head-title"><IconBlocks /> My Modules</div>
+              <Link href="/library" className="section-head-action">Manage →</Link>
+            </div>
+            <div style={{ padding: '14px 20px', fontSize: 12.5, color: 'var(--text3)' }}>
+              {moduleCount ?? 0} modules in your library — edit, add, or organize them in the library.
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

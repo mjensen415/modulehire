@@ -130,6 +130,17 @@ on brace-slicing for this pass to limit blast radius, and are candidates for mig
 single-upload business routes — bulk scoring now runs on the `quality` tier, several times the
 cost of Haiku.
 
+## Dashboard layout
+Two columns via `.dash-two-col-b` (defined in `globals.css`, ~38%/62% split above 900px, stacks
+to one column at/below it — the same breakpoint `.dash-two-col` uses). Left: resume/profile card
+(`DashboardProfileSwitch.tsx` for the profile picker), "What you're targeting" (from
+`users.preferences.target_roles[0]`/`career_level` and `users.location`), and the per-dimension
+module breakdown (count + 5-dot strength, `anchor`/`strong` modules weighted 1.5×) — each row
+links to `/library?dimension=<name>`, which the library page reads into `dimensionFilter` state
+alongside its existing weight/assignment filter chips. Right: the existing `nextMove` card
+(restyled), a compact `MatchReport` for the most recent JD with `extracted_criteria`, and recent
+resumes. Job descriptions and a module-library link render full-width below both columns.
+
 ## JD Match Report
 `POST /api/match-report` (`{ jd_id }`) scores each of a JD's `extracted_criteria` against the
 active profile's modules in one `aiCompleteJson` call (only modules tagged with the criterion's

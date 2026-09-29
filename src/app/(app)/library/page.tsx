@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
 import MergeConfirmModal from '@/components/MergeConfirmModal'
+import { isDimension, DIMENSION_LABELS, type Dimension } from '@/lib/dimensions'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Job = { id: string; company: string; title: string | null; start_date: string | null; end_date: string | null; location: string | null; employment_type: string | null }
-type Module = { id: string; title: string; weight: string | null; pinned: boolean; themes: string[] | null; type: string | null; source_company: string | null }
+type Module = { id: string; title: string; weight: string | null; pinned: boolean; themes: string[] | null; type: string | null; source_company: string | null; dimensions?: string[] | null }
 type MJA = { module_id: string; job_id: string }
 // NB: live schema uses job_id + name (not job_experience_id + skill).
 type SkillCategory = 'technical' | 'domain' | 'leadership' | null
@@ -155,6 +156,11 @@ export default function LibraryPage() {
   // Repository
   const [repoSearch, setRepoSearch] = useState('')
   const [repoFilter, setRepoFilter] = useState<'all' | 'anchor' | 'strong' | 'supporting' | 'unassigned'>('all')
+  const searchParams = useSearchParams()
+  const [dimensionFilter, setDimensionFilter] = useState<Dimension | null>(() => {
+    const d = searchParams.get('dimension')
+    return isDimension(d) ? d : null
+  })
 
   // Merge duplicate job experiences
   const [mergeMode, setMergeMode] = useState(false)
@@ -275,7 +281,8 @@ export default function LibraryPage() {
       repoFilter === 'strong' ? m.weight === 'strong' :
       repoFilter === 'supporting' ? (m.weight !== 'anchor' && m.weight !== 'strong') :
       repoFilter === 'unassigned' ? !mja.some(a => a.module_id === m.id) : true
-    return matchSearch && matchFilter
+    const matchDimension = !dimensionFilter || (m.dimensions ?? []).includes(dimensionFilter)
+    return matchSearch && matchFilter && matchDimension
   })
 
   // ─── Actions ────────────────────────────────────────────────────────────────
@@ -1146,6 +1153,18 @@ export default function LibraryPage() {
                     {f === 'all' ? `All (${modules.length})` : f === 'unassigned' ? `Unassigned (${modules.filter(m => !mja.some(a => a.module_id === m.id)).length})` : f.charAt(0).toUpperCase() + f.slice(1)}
                   </button>
                 ))}
+                {dimensionFilter && (
+                  <button
+                    onClick={() => setDimensionFilter(null)}
+                    style={{
+                      fontSize: 11, padding: '3px 10px', borderRadius: 20, cursor: 'pointer', fontFamily: 'var(--font)',
+                      background: 'var(--teal-dim)', color: 'var(--teal)', border: '1px solid var(--teal-glow)',
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                    }}
+                  >
+                    {DIMENSION_LABELS[dimensionFilter]} ×
+                  </button>
+                )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8, padding: '12px 16px', maxHeight: 240, overflowY: 'auto' }}>
