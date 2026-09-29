@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, KeyboardEvent, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import ScoreGauge from '@/components/ScoreGauge'
+import { DIMENSION_LABELS, type JdCriterion } from '@/lib/dimensions'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,7 @@ type JDData = {
   extracted_themes: string[]
   extracted_phrases: string[]
   extracted_seniority: string | null
+  extracted_criteria?: JdCriterion[]
 }
 
 type RankedModule = {
@@ -222,6 +224,7 @@ export default function GeneratePage() {
   const [atsScore, setAtsScore] = useState<number | null>(null)
   const [confirmedPhrases, setConfirmedPhrases] = useState<string[]>([])
   const [confirmedThemes, setConfirmedThemes] = useState<string[]>([])
+  const [confirmedCriteria, setConfirmedCriteria] = useState<JdCriterion[]>([])
   const [phraseInput, setPhraseInput] = useState('')
   const [themeInput, setThemeInput] = useState('')
   const [confirmLoading, setConfirmLoading] = useState(false)
@@ -803,6 +806,7 @@ export default function GeneratePage() {
       const themes = analyzeData.extracted_themes ?? []
       setConfirmedPhrases(phrases)
       setConfirmedThemes(themes)
+      setConfirmedCriteria(analyzeData.extracted_criteria ?? [])
 
       // Let the user confirm/edit what we extracted before it drives matching — a bad
       // extraction should be caught here, not silently propagate into a bad match.
@@ -847,7 +851,7 @@ export default function GeneratePage() {
       await fetch(`/api/job-descriptions/${jdData!.jd_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ extracted_phrases: confirmedPhrases, extracted_themes: confirmedThemes }),
+        body: JSON.stringify({ extracted_phrases: confirmedPhrases, extracted_themes: confirmedThemes, extracted_criteria: confirmedCriteria }),
       })
 
       const matchRes = await fetch('/api/match-modules', {
@@ -878,6 +882,12 @@ export default function GeneratePage() {
     }
   }
 
+  function removeConfirmedCriterion(label: string) {
+    setConfirmedCriteria(prev => prev.filter(c => c.label !== label))
+  }
+  function setConfirmedCriterionWeight(label: string, weight: number) {
+    setConfirmedCriteria(prev => prev.map(c => c.label === label ? { ...c, weight } : c))
+  }
   function removeConfirmedTheme(theme: string) {
     setConfirmedThemes(prev => prev.filter(t => t !== theme))
   }
@@ -1537,6 +1547,62 @@ export default function GeneratePage() {
               <div style={{ fontSize: 13, color: 'var(--text2)' }}>
                 Here&apos;s what we pulled from <strong style={{ color: 'var(--text)' }}>{jdData.extracted_company ?? 'this role'}</strong>{jdData.extracted_role_type ? ` · ${jdData.extracted_role_type}` : ''}. Remove anything off-target and add anything we missed — this drives your match.
               </div>
+
+              {confirmedCriteria.length > 0 && (
+                <div>
+                  <div className="form-label" style={{ marginBottom: 8 }}>Criteria ({confirmedCriteria.length})</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {confirmedCriteria.map(c => (
+                      <div
+                        key={c.label}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                          padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span
+                            style={{
+                              fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.04em', textTransform: 'uppercase',
+                              padding: '2px 7px', borderRadius: 5, border: '1px solid var(--border)', color: 'var(--text3)', flexShrink: 0,
+                            }}
+                          >
+                            {DIMENSION_LABELS[c.dimension]}
+                          </span>
+                          <span
+                            style={{ fontSize: 13, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            title={c.description}
+                          >
+                            {c.label}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 13, letterSpacing: 1 }}>
+                            {[1, 2, 3, 4, 5].map(n => (
+                              <button
+                                key={n}
+                                type="button"
+                                onClick={() => setConfirmedCriterionWeight(c.label, n)}
+                                aria-label={`Set weight ${n}`}
+                                style={{
+                                  background: 'none', border: 'none', cursor: 'pointer', padding: '0 1px',
+                                  color: n <= c.weight ? 'var(--teal)' : 'var(--border)',
+                                }}
+                              >●</button>
+                            ))}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeConfirmedCriterion(c.label)}
+                            aria-label={`Remove ${c.label}`}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 14, lineHeight: 1, padding: 0, opacity: 0.7 }}
+                          >×</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <div className="form-label" style={{ marginBottom: 8 }}>Themes ({confirmedThemes.length})</div>

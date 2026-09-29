@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { PromptOverridePanel, RawOutputDrawer, RatedCard, RunButton, Spinner, ResultsHeader, SaveFeedbackBar, EmptyState, ModelSelect } from './shared';
+import { DIMENSION_LABELS, type Dimension, type JdCriterion } from '@/lib/dimensions';
 
 const DEFAULT_PROMPT_LABEL = '(loaded from route on first expand)';
 
@@ -12,11 +13,35 @@ type Extracted = {
   extracted_seniority?: string;
   extracted_themes?: string[];
   extracted_phrases?: string[];
+  extracted_criteria?: JdCriterion[];
 };
 
 type FieldRating = 'good' | 'bad' | null;
 
 type TagState = 'neutral' | 'good' | 'bad';
+
+function WeightDots({ weight }: { weight: number }) {
+  return (
+    <span style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: 1, color: 'var(--text3)' }}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <span key={n} style={{ color: n <= weight ? 'var(--teal)' : 'var(--border)' }}>●</span>
+      ))}
+    </span>
+  );
+}
+
+function DimensionChip({ dimension }: { dimension: Dimension }) {
+  return (
+    <span
+      style={{
+        fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.04em', textTransform: 'uppercase',
+        padding: '2px 7px', borderRadius: 5, border: '1px solid var(--border)', color: 'var(--text3)',
+      }}
+    >
+      {DIMENSION_LABELS[dimension]}
+    </span>
+  );
+}
 
 export default function JdParserTab() {
   const [rawText, setRawText] = useState('');
@@ -32,6 +57,7 @@ export default function JdParserTab() {
   const [corrections, setCorrections] = useState<Record<string, string>>({});
   const [themeStates, setThemeStates] = useState<Record<string, TagState>>({});
   const [phraseStates, setPhraseStates] = useState<Record<string, TagState>>({});
+  const [criteriaStates, setCriteriaStates] = useState<Record<string, TagState>>({});
   const [newTheme, setNewTheme] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -46,6 +72,7 @@ export default function JdParserTab() {
     setCorrections({});
     setThemeStates({});
     setPhraseStates({});
+    setCriteriaStates({});
     setNotes('');
     setSaved(false);
     try {
@@ -74,8 +101,9 @@ export default function JdParserTab() {
 
   const ratedCount = Object.values(fieldRatings).filter(Boolean).length
     + (Object.values(themeStates).some(v => v !== 'neutral') ? 1 : 0)
-    + (Object.values(phraseStates).some(v => v !== 'neutral') ? 1 : 0);
-  const totalFields = 4 + (result ? 2 : 0);
+    + (Object.values(phraseStates).some(v => v !== 'neutral') ? 1 : 0)
+    + (Object.values(criteriaStates).some(v => v !== 'neutral') ? 1 : 0);
+  const totalFields = 4 + (result ? 3 : 0);
 
   async function saveFeedback() {
     if (!result || saving) return;
@@ -88,7 +116,7 @@ export default function JdParserTab() {
           lab_type: 'jd_parse',
           input_snapshot: { raw_text: rawText, prompt_used: result.prompt_used, model_used: result.model_used },
           output_snapshot: { extracted: result.extracted, raw_ai_response: result.raw_ai_response },
-          feedback: { field_ratings: fieldRatings, corrections, theme_states: themeStates, phrase_states: phraseStates },
+          feedback: { field_ratings: fieldRatings, corrections, theme_states: themeStates, phrase_states: phraseStates, criteria_states: criteriaStates },
           notes,
         }),
       });
@@ -265,6 +293,57 @@ export default function JdParserTab() {
                     >
                       {p} {state === 'good' ? '✓' : state === 'bad' ? '✗' : ''}
                     </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+                Criteria ({(result.extracted.extracted_criteria ?? []).length})
+              </div>
+              {(result.extracted.extracted_criteria ?? []).length === 0 && (
+                <div style={{ fontSize: 12.5, color: 'var(--text3)' }}><em>empty</em></div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {(result.extracted.extracted_criteria ?? []).map((c, i) => {
+                  const key = `${i}:${c.label}`;
+                  const state = criteriaStates[key] ?? 'neutral';
+                  return (
+                    <div
+                      key={key}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                        padding: '8px 10px', borderRadius: 8,
+                        border: `1px solid ${state === 'good' ? 'var(--teal)' : state === 'bad' ? 'var(--rose)' : 'var(--border)'}`,
+                        background: state === 'good' ? 'var(--teal-dim)' : state === 'bad' ? 'var(--rose-dim)' : 'transparent',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        <DimensionChip dimension={c.dimension} />
+                        <span
+                          style={{
+                            fontSize: 13, color: state === 'bad' ? 'var(--rose)' : 'var(--text1)',
+                            textDecoration: state === 'bad' ? 'line-through' : 'none',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}
+                          title={c.description}
+                        >
+                          {c.label}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                        <WeightDots weight={c.weight} />
+                        <button
+                          type="button"
+                          onClick={() => cycleTag(criteriaStates, setCriteriaStates, key)}
+                          className="theme-chip"
+                          style={{ cursor: 'pointer', padding: '2px 8px', fontSize: 11 }}
+                        >
+                          {state === 'good' ? '✓' : state === 'bad' ? '✗' : 'rate'}
+                        </button>
+                      </div>
+                    </div>
                   );
                 })}
               </div>

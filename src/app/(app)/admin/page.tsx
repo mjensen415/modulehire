@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { PlanSelect, AdminToggleButton, PurgeButton } from './UserActions';
 import { BetaAdminWrapper } from './BetaAdminWrapper';
 import FeedbackTable from './FeedbackTable';
+import { BackfillDimensionsButton } from './BackfillDimensionsButton';
 
 function IconShield() {
   return (
@@ -170,6 +171,19 @@ export default async function AdminPage({
               <div className="stat-accent" style={{ background: 'var(--teal)' }} />
             </div>
           ))}
+        </div>
+
+        {/* MAINTENANCE */}
+        <div className="section-card" style={{ marginBottom: 24 }}>
+          <div className="section-head">
+            <div className="section-head-title">Maintenance</div>
+          </div>
+          <div style={{ padding: '16px 20px' }}>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>
+              Tags modules missing dimensions (role/seniority/responsibility/skill/domain/collaboration) — runs across all users, 40 modules per call, loops until done.
+            </div>
+            <BackfillDimensionsButton />
+          </div>
         </div>
 
         {/* USER TABLE */}

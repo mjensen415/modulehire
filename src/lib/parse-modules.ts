@@ -2,6 +2,7 @@ import { aiComplete } from './ai'
 import { jsonrepair } from 'jsonrepair'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { isDimension } from './dimensions'
 
 function getAdminClient() {
   return createSupabaseClient(
@@ -304,7 +305,8 @@ Each module object must have exactly these keys:
   "weight": "anchor" | "strong" | "supporting",
   "role_types": ["values from ROLE TYPES list above"],
   "themes": ["values from THEMES list above"],
-  "company_stage": ["startup" | "growth" | "enterprise" | "any"]
+  "company_stage": ["startup" | "growth" | "enterprise" | "any"],
+  "dimensions": ["1-3 of: role, seniority, responsibility, skill, domain, collaboration — which aspects of a candidate this module is evidence for"]
 }
 
 Resume:
@@ -353,6 +355,7 @@ JSON array:`
     role_types:    toArray(m.role_types),
     themes:        toArray(m.themes),
     company_stage: toArray(m.company_stage),
+    dimensions:    toArray(m.dimensions).filter(isDimension).slice(0, 3),
     type:            VALID_TYPES.has(m.type as string)           ? m.type           : 'experience',
     weight:          VALID_WEIGHTS.has(m.weight as string)       ? m.weight         : 'supporting',
     employment_type: VALID_EMP_TYPES.has(m.employment_type as string) ? m.employment_type : 'full-time',

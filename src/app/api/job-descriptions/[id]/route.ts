@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { sanitizeCriteria } from '@/lib/dimensions'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -13,7 +14,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
 
     const { data, error } = await supabase
       .from('job_descriptions')
-      .select('id, raw_text, extracted_company, extracted_role_type, extracted_job_title, extracted_themes, extracted_phrases, extracted_seniority')
+      .select('id, raw_text, extracted_company, extracted_role_type, extracted_job_title, extracted_themes, extracted_phrases, extracted_seniority, extracted_criteria')
       .eq('id', id)
       .eq('user_id', user.id)
       .single()
@@ -29,6 +30,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
         extracted_themes: data.extracted_themes ?? [],
         extracted_phrases: data.extracted_phrases ?? [],
         extracted_seniority: data.extracted_seniority,
+        extracted_criteria: data.extracted_criteria ?? [],
       },
       jd_text: data.raw_text ?? '',
     })
@@ -52,6 +54,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     if (typeof body.extracted_job_title === 'string') {
       update.extracted_job_title = body.extracted_job_title.trim().slice(0, 200) || null
     }
+    if (Array.isArray(body.extracted_criteria)) update.extracted_criteria = sanitizeCriteria(body.extracted_criteria)
     if (Object.keys(update).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
     }

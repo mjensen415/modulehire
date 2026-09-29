@@ -512,6 +512,10 @@ export type Database = {
           extracted_role_type: string | null
           extracted_seniority: string | null
           extracted_themes: string[]
+          extracted_criteria: Json | null
+          match_report: Json | null
+          match_report_at: string | null
+          match_report_profile_id: string | null
           id: string
           raw_text: string
           source_type: string
@@ -527,6 +531,10 @@ export type Database = {
           extracted_role_type?: string | null
           extracted_seniority?: string | null
           extracted_themes?: string[]
+          extracted_criteria?: Json | null
+          match_report?: Json | null
+          match_report_at?: string | null
+          match_report_profile_id?: string | null
           id?: string
           raw_text: string
           source_type: string
@@ -542,6 +550,10 @@ export type Database = {
           extracted_role_type?: string | null
           extracted_seniority?: string | null
           extracted_themes?: string[]
+          extracted_criteria?: Json | null
+          match_report?: Json | null
+          match_report_at?: string | null
+          match_report_profile_id?: string | null
           id?: string
           raw_text?: string
           source_type?: string
@@ -780,6 +792,7 @@ export type Database = {
           date_end: string | null
           date_start: string | null
           deleted_at: string | null
+          dimensions: string[]
           employment_type: string | null
           id: string
           pinned: boolean
@@ -803,6 +816,7 @@ export type Database = {
           date_end?: string | null
           date_start?: string | null
           deleted_at?: string | null
+          dimensions?: string[]
           employment_type?: string | null
           id?: string
           pinned?: boolean
@@ -826,6 +840,7 @@ export type Database = {
           date_end?: string | null
           date_start?: string | null
           deleted_at?: string | null
+          dimensions?: string[]
           employment_type?: string | null
           id?: string
           pinned?: boolean

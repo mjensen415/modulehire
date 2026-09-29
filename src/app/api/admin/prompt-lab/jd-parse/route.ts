@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { aiComplete } from '@/lib/ai'
 import { requireAdmin } from '@/lib/admin-guard'
+import { DIMENSIONS, sanitizeCriteria } from '@/lib/dimensions'
 
 export const maxDuration = 60
 
@@ -13,8 +14,22 @@ Required keys:
   "extracted_role_type": "Identify the role type from the overall nature of the work and responsibilities described — not by matching keywords in the title. A 'Data Analyst' role doing SQL, dashboards, and reporting is 'data-scientist' ONLY if the role genuinely requires ML/modeling. If the role is fundamentally analytical/BI work, use 'operations' or 'other'. Best match from: vp-community, head-of-community, director-community, senior-manager-community, community-manager, developer-relations, developer-advocacy, developer-community-manager, community-marketing, community-ops, community-enablement, content-strategy, ic-community, software-engineer, product-manager, designer, data-scientist, marketing-manager, sales, operations, finance, hr, other",
   "extracted_themes": ["5-12 short skill or competency themes that this role requires — use plain English phrases like 'cross-functional collaboration', 'data analysis', 'team leadership', 'product strategy', 'customer success', 'technical writing', 'go-to-market', 'stakeholder management'. Extract every distinct competency the role genuinely requires; do not invent themes not implied by the JD, but do not drop real requirements to stay under a count. Choose themes that reflect the actual requirements of THIS specific job description, not a predefined list."],
   "extracted_seniority": "Infer seniority from the required years of experience, scope of responsibilities, and whether the role manages people or budget — not from words like 'senior' or 'manager' appearing in job requirements. A job requiring 2-4 years with no direct reports is 'ic'. One of: ic, manager, senior-manager, director, vp, c-suite",
-  "extracted_phrases": ["5-10 exact verbatim phrases from the job description that a resume should echo to pass ATS"]
+  "extracted_phrases": ["5-10 exact verbatim phrases from the job description that a resume should echo to pass ATS"],
+  "extracted_criteria": [
+    {
+      "label": "Short criterion name, 2-5 words (e.g. 'Community Executive Leadership')",
+      "dimension": "one of: ${DIMENSIONS.join(', ')}",
+      "weight": "1-5 (5 = clearly a must-have, stated repeatedly or up front; 1 = nice-to-have)",
+      "description": "One sentence: what the JD actually asks for, in plain English"
+    }
+  ]
 }
+
+Guidance for extracted_criteria: produce 5-9 criteria. Include exactly one "role" criterion and
+exactly one "seniority" criterion; spread the rest across the other four dimensions
+(responsibility, skill, domain, collaboration) based on what this specific JD actually
+emphasizes — do not force a criterion for a dimension the JD barely touches. Order the array by
+weight descending.
 
 Job Description:
 {{raw_text}}
@@ -41,7 +56,7 @@ export async function POST(req: Request) {
       ? template.replace('{{raw_text}}', raw_text)
       : `${template}\n\nJob Description:\n${raw_text}\n\nJSON:`
 
-    const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 1024, { model: typeof model === 'string' ? model : undefined })
+    const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 2048, { model: typeof model === 'string' ? model : undefined })
 
     const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
     const jsonStart = stripped.indexOf('{')
@@ -58,6 +73,7 @@ export async function POST(req: Request) {
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/,(\s*[}\]])/g, '$1')
     const extracted = JSON.parse(cleanJson)
+    extracted.extracted_criteria = sanitizeCriteria(extracted.extracted_criteria)
 
     return NextResponse.json({
       extracted,
