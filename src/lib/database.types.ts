@@ -521,6 +521,7 @@ export type Database = {
           source_type: string
           source_url: string | null
           user_id: string
+          updated_at: string
         }
         Insert: {
           created_at?: string
@@ -540,6 +541,7 @@ export type Database = {
           source_type: string
           source_url?: string | null
           user_id: string
+          updated_at?: string
         }
         Update: {
           created_at?: string
@@ -559,6 +561,7 @@ export type Database = {
           source_type?: string
           source_url?: string | null
           user_id?: string
+          updated_at?: string
         }
         Relationships: [
           {

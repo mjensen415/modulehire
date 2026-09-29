@@ -58,6 +58,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     if (Object.keys(update).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
     }
+    update.updated_at = new Date().toISOString()
 
     const { data, error } = await supabase
       .from('job_descriptions')

@@ -10,7 +10,7 @@ export async function GET() {
     const [jdsRes, prepRes] = await Promise.all([
       supabase
         .from('job_descriptions')
-        .select('id, extracted_job_title, extracted_company, source_url, created_at')
+        .select('id, extracted_job_title, extracted_company, extracted_role_type, source_url, created_at, extracted_criteria, match_report, match_report_at')
         .eq('user_id', user.id)
         .is('deleted_at', null)
         .order('created_at', { ascending: false }),

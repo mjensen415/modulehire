@@ -4,10 +4,11 @@ import { useState, useEffect, useRef, KeyboardEvent, useCallback, useMemo } from
 import { useSearchParams } from 'next/navigation'
 import ScoreGauge from '@/components/ScoreGauge'
 import { DIMENSION_LABELS, type JdCriterion } from '@/lib/dimensions'
+import MatchReport, { type MatchReportData } from '@/components/MatchReport'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
-type Step = 'input' | 'analyzing' | 'reviewThemes' | 'matching' | 'assembling' | 'confirm' | 'generating' | 'done'
+type Step = 'input' | 'analyzing' | 'reviewThemes' | 'matchReport' | 'matching' | 'assembling' | 'confirm' | 'generating' | 'done'
 
 type AlignmentSuggestion = {
   theme: string
@@ -108,6 +109,7 @@ function StepIndicator({ current }: { current: Step }) {
   // Map transient steps to their display step
   const display: Step =
     current === 'analyzing' || current === 'reviewThemes' ? 'input' :
+    current === 'matchReport' ? 'matching' :
     current === 'generating' ? 'confirm' :
     current
   const displaySteps: Step[] = ['input', 'matching', 'assembling', 'confirm']
@@ -225,6 +227,8 @@ export default function GeneratePage() {
   const [confirmedPhrases, setConfirmedPhrases] = useState<string[]>([])
   const [confirmedThemes, setConfirmedThemes] = useState<string[]>([])
   const [confirmedCriteria, setConfirmedCriteria] = useState<JdCriterion[]>([])
+  const [matchReportData, setMatchReportData] = useState<MatchReportData | null>(null)
+  const [matchReportLoading, setMatchReportLoading] = useState(false)
   const [phraseInput, setPhraseInput] = useState('')
   const [themeInput, setThemeInput] = useState('')
   const [confirmLoading, setConfirmLoading] = useState(false)
@@ -872,9 +876,23 @@ export default function GeneratePage() {
         setSkills(skillModules.map(m => m.title))
       }
 
-      // Land on the fast-track / manual fork (rendered in the input step once
-      // jdData is set) rather than jumping straight into the building step.
-      setStep('input')
+      if (confirmedCriteria.length > 0) {
+        setStep('matchReport')
+        setMatchReportLoading(true)
+        fetch('/api/match-report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jd_id: jdData!.jd_id }),
+        })
+          .then(r => r.json())
+          .then(data => { if (!data.error) setMatchReportData(data) })
+          .catch(() => {})
+          .finally(() => setMatchReportLoading(false))
+      } else {
+        // No extracted criteria (older JD) — skip straight to the fast-track / manual
+        // fork rendered in the input step once jdData is set.
+        setStep('input')
+      }
     } catch (e) {
       setErrorMessage((e as Error).message)
     } finally {
@@ -1411,7 +1429,7 @@ export default function GeneratePage() {
       </div>
 
       {/* ── INPUT ─────────────────────────────────────────────────────────── */}
-      {(step === 'input' || step === 'analyzing' || step === 'reviewThemes') && (
+      {(step === 'input' || step === 'analyzing' || step === 'reviewThemes' || step === 'matchReport') && (
         <div className="dash-content" style={{ maxWidth: 680, margin: '0 auto', width: '100%', padding: '40px 24px' }}>
           <div className="page-title">Generate a tailored resume</div>
           <p className="page-sub" style={{ marginBottom: 24 }}>Paste a job description or paste a URL — we&apos;ll match it to your module library and build a resume.</p>
@@ -1673,6 +1691,35 @@ export default function GeneratePage() {
                   {confirmLoading ? 'Finding matches…' : 'Confirm & Find Matches →'}
                 </button>
                 <button type="button" className="btn-ghost" style={{ fontSize: 12 }} onClick={reset} disabled={confirmLoading}>
+                  ← Use a different job description
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 'matchReport' && jdData && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              {!matchReportLoading && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12.5, color: 'var(--text2)' }}>
+                  <span>✓ Requirements extracted</span>
+                  <span>✓ Matched to your library</span>
+                </div>
+              )}
+              <MatchReport
+                report={matchReportData}
+                jd={{
+                  title: jdData.extracted_job_title || jdData.extracted_role_type || 'This role',
+                  company: jdData.extracted_company ?? null,
+                  source_url: null,
+                }}
+                variant="full"
+                loading={matchReportLoading}
+              />
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button type="button" className="btn-primary" onClick={() => setStep('input')}>
+                  Continue building →
+                </button>
+                <button type="button" className="btn-ghost" style={{ fontSize: 12 }} onClick={reset}>
                   ← Use a different job description
                 </button>
               </div>

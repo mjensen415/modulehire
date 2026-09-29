@@ -13,12 +13,19 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('job_applications')
-      .select('*')
+      .select('*, job_descriptions(match_report)')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false })
     if (error) throw error
 
-    return NextResponse.json({ applications: data ?? [] })
+    // Flatten the joined report to a plain overall score so the client doesn't need to know
+    // about the nested relation shape.
+    const applications = (data ?? []).map(a => {
+      const { job_descriptions, ...rest } = a as typeof a & { job_descriptions: { match_report: { overall: number } | null } | null }
+      return { ...rest, match_score: job_descriptions?.match_report?.overall ?? null }
+    })
+
+    return NextResponse.json({ applications })
   } catch (error) {
     console.error('[job-tracker GET]', error)
     return NextResponse.json({ error: 'Could not load applications.' }, { status: 500 })

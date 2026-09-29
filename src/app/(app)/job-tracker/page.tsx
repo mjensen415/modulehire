@@ -19,6 +19,20 @@ type JobApplication = {
   applied_at: string | null
   created_at: string
   updated_at: string
+  match_score: number | null
+}
+
+function ScoreBadge({ score }: { score: number | null }) {
+  if (score == null) return null
+  const color = score >= 70 ? 'var(--teal)' : score >= 40 ? 'var(--amber)' : 'var(--rose)'
+  return (
+    <span style={{
+      fontFamily: 'var(--mono)', fontSize: 10.5, fontWeight: 700, color,
+      border: `1px solid ${color}`, borderRadius: 5, padding: '1px 6px', flexShrink: 0,
+    }}>
+      {score}%
+    </span>
+  )
 }
 
 const STATUS_CONFIG: Record<Status, { label: string; color: string; bg: string }> = {
@@ -359,8 +373,11 @@ export default function JobTrackerPage() {
                           <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {app.company}
                           </div>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {app.title}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {app.title}
+                            </div>
+                            <ScoreBadge score={app.match_score} />
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
                             Added {formatDate(app.created_at)}
@@ -474,8 +491,9 @@ export default function JobTrackerPage() {
                   <div style={{ fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {app.company}
                   </div>
-                  <div style={{ color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {app.title}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text2)', overflow: 'hidden' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.title}</span>
+                    <ScoreBadge score={app.match_score} />
                   </div>
                   <div>
                     <span style={{

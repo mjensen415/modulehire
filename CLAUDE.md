@@ -103,6 +103,7 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - `match_runs` table (id, user_id, jd_id, ranked_modules jsonb, recommended_stack text[], created_at) + own-rows RLS policy — applied via MCP, tracked in `supabase/migrations/20260915_match_runs.sql`. Logs every production Match call's output (not just admin Prompt Lab dry-runs) so match quality can be validated against real usage later; join with `generated_resumes` on `(user_id, jd_id)` for outcome analysis.
 - `modules.dimensions text[]` + `job_descriptions.extracted_criteria/match_report/match_report_at/match_report_profile_id jsonb` — applied via MCP, tracked in `supabase/migrations/20260929_dimensions.sql`. Six-dimension tagging (`src/lib/dimensions.ts`: role/seniority/responsibility/skill/domain/collaboration) shared by modules and typed, weighted JD criteria — data foundation for the JD Match Report feature (score per criterion with evidence).
 - `ALTER TABLE public.usage_events ADD COLUMN IF NOT EXISTS metadata jsonb;` — applied via MCP, tracked in `supabase/migrations/20260929_usage_events_metadata.sql`. AI call sites that pass `{ userId, action }` to `aiComplete`/`aiCompleteJson` fire-and-forget log `{ model, input_tokens, output_tokens }` here for cost-per-action visibility.
+- `ALTER TABLE public.job_descriptions ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();` — applied via MCP, tracked in `supabase/migrations/20260929_jd_updated_at.sql`. Bumped by `PATCH /api/job-descriptions/[id]` on every edit; used by `/api/match-report`'s cache-freshness check alongside `modules.updated_at`.
 
 ## AI model tiering (`src/lib/ai.ts`)
 Every AI call site picks a tier explicitly — `ANTHROPIC_MODEL` is NOT flipped globally.
@@ -128,6 +129,17 @@ on brace-slicing for this pass to limit blast radius, and are candidates for mig
 (`organizations.tier != 'enterprise'` only), checked before `scoreApplicant()` in the CSV and
 single-upload business routes — bulk scoring now runs on the `quality` tier, several times the
 cost of Haiku.
+
+## JD Match Report
+`POST /api/match-report` (`{ jd_id }`) scores each of a JD's `extracted_criteria` against the
+active profile's modules in one `aiCompleteJson` call (only modules tagged with the criterion's
+dimension, or untagged, are shown per criterion to keep the prompt small), computes a weighted
+overall score, and caches the result on `job_descriptions.match_report`/`match_report_at`/
+`match_report_profile_id` — reused until the JD or a module is edited afterward. Rendered by
+`src/components/MatchReport.tsx` (`full` variant on `/generate` after JD confirmation and on
+`/matches/[jd_id]`; `compact` variant on the `/matches` list, sorted by score, and as the tracker
+score badge in `src/app/(app)/job-tracker/page.tsx`). `match-modules` does not yet read the
+report's per-criterion scores into its own ranking — a follow-up, not done in this pass.
 
 ## Gotchas
 - `git add` with parentheses in paths trips up zsh — always use `git add -A`
