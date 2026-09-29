@@ -1,8 +1,8 @@
-import { aiComplete } from './ai'
+import { aiComplete, aiCompleteJson } from './ai'
 import { jsonrepair } from 'jsonrepair'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { isDimension } from './dimensions'
+import { DIMENSIONS, isDimension } from './dimensions'
 
 function getAdminClient() {
   return createSupabaseClient(
@@ -242,14 +242,35 @@ JSON:`
   }
 }
 
-export async function parseModules(
-  supabase: SupabaseClient,
-  userId: string,
-  resumeId: string,
-  rawText: string,
-  profileId: string
-) {
-  const prompt = `You are a resume parsing expert. Decompose the resume below into modular skill blocks.
+const MODULE_ITEM_SCHEMA = {
+  type: 'object',
+  properties: {
+    type: { type: 'string', enum: ['experience', 'skill', 'story', 'positioning'] },
+    title: { type: 'string', description: 'Skill domain name' },
+    content: { type: 'string', description: '2-4 sentence paragraph — preserve all metrics verbatim' },
+    source_company: { type: 'string' },
+    source_role_title: { type: 'string', description: 'Job title exactly as written' },
+    date_start: { type: 'string', description: 'YYYY-MM' },
+    date_end: { type: 'string', description: 'YYYY-MM or present' },
+    employment_type: { type: 'string', enum: ['full-time', 'consulting', 'contract', 'board', 'volunteer'] },
+    weight: { type: 'string', enum: ['anchor', 'strong', 'supporting'] },
+    role_types: { type: 'array', items: { type: 'string' } },
+    themes: { type: 'array', items: { type: 'string' } },
+    company_stage: { type: 'array', items: { type: 'string', enum: ['startup', 'growth', 'enterprise', 'any'] } },
+    dimensions: { type: 'array', items: { type: 'string', enum: DIMENSIONS as unknown as string[] }, description: '1-3 values — which aspects of a candidate this module is evidence for' },
+  },
+  required: ['type', 'title', 'content', 'source_company', 'source_role_title', 'date_start', 'date_end', 'employment_type', 'weight', 'role_types', 'themes', 'company_stage', 'dimensions'],
+}
+
+const PARSE_MODULES_SCHEMA = {
+  type: 'object',
+  properties: {
+    modules: { type: 'array', items: MODULE_ITEM_SCHEMA },
+  },
+  required: ['modules'],
+}
+
+const PARSE_MODULES_SYSTEM_PROMPT = `You are a resume parsing expert. Decompose the resume below into modular skill blocks.
 
 RULES:
 - Create one module per meaningful cluster of related work. Prefer specificity over consolidation — a notable project, achievement, or sub-specialization should be its own module even if it overlaps in topic with another module from the same job.
@@ -269,7 +290,6 @@ RULES:
 - DO NOT emit a module for the resume's top-level Summary, Profile, Objective, or About section.
   That content belongs on the user's profile, not in the module library — the caller extracts it
   separately. Skip it entirely.
-- Output MUST be a raw JSON array. Start with [ and end with ]. No other text.
 
 MODULE TYPE — choose the most accurate:
 - "experience": work delivered at a specific job (default for most modules)
@@ -293,51 +313,30 @@ community-building, community-marketing, community-programs, community-ops, comm
 ROLE TYPES — pick only from this exact list (omit any that don't apply):
 vp-community, head-of-community, director-community, senior-manager-community, community-manager, developer-relations, developer-advocacy, developer-community-manager, community-marketing, community-ops, community-enablement, content-strategy, ic-community
 
-Each module object must have exactly these keys:
-{
-  "type": "experience" | "skill" | "story" | "positioning",
-  "title": "skill domain name",
-  "content": "2–4 sentence paragraph — preserve all metrics verbatim",
-  "source_company": "company name",
-  "source_role_title": "job title exactly as written",
-  "date_start": "YYYY-MM",
-  "date_end": "YYYY-MM or present",
-  "employment_type": "full-time" | "consulting" | "contract" | "board" | "volunteer",
-  "weight": "anchor" | "strong" | "supporting",
-  "role_types": ["values from ROLE TYPES list above"],
-  "themes": ["values from THEMES list above"],
-  "company_stage": ["startup" | "growth" | "enterprise" | "any"],
-  "dimensions": ["1-3 of: role, seniority, responsibility, skill, domain, collaboration — which aspects of a candidate this module is evidence for"]
-}
+themes: values from the THEMES list above. role_types: values from the ROLE TYPES list above.`
 
-Resume:
-${rawText}
-
-JSON array:`
-
+export async function parseModules(
+  supabase: SupabaseClient,
+  userId: string,
+  resumeId: string,
+  rawText: string,
+  profileId: string
+) {
   // Contact/summary/education extraction only needs rawText, same as the module-parse call
   // above — start it now so it runs concurrently with module parsing and the DB work that
   // follows, instead of waiting until both are done sequentially.
   const contactPromise = extractContactInfo(rawText)
 
   // 8192 tokens headroom — a dense 3-page resume can produce a long module list
-  const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 8192, { tier: 'quality', userId, action: 'parse_modules' })
-
-  const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '').trim()
-  const jsonStart = stripped.indexOf('[')
-  const jsonEnd = stripped.lastIndexOf(']')
-  if (jsonStart === -1) {
-    throw new Error(`Model did not return a JSON array. Response: ${stripped.slice(0, 300)}`)
-  }
-
-  // Extract the array — use lastIndexOf(']') if present, else try to repair the truncated JSON
-  const rawJson = jsonEnd !== -1
-    ? stripped.slice(jsonStart, jsonEnd + 1)
-    : stripped.slice(jsonStart)
-
-  // jsonrepair handles: trailing commas, missing quotes, truncated output, unescaped chars
-  const repairedJson = jsonrepair(rawJson)
-  const rawModulesData: Record<string, unknown>[] = JSON.parse(repairedJson)
+  const { modules: rawModulesData } = await aiCompleteJson<{ modules: Record<string, unknown>[] }>(
+    [
+      { role: 'system', content: PARSE_MODULES_SYSTEM_PROMPT },
+      { role: 'user', content: `Resume:\n${rawText}` },
+    ],
+    PARSE_MODULES_SCHEMA,
+    8192,
+    { tier: 'quality', userId, action: 'parse_modules' }
+  )
 
   // Safety net: even with a strict prompt, the model occasionally merges multiple
   // jobs into one module ("CompanyA, CompanyB" / "Role1, Role2"). Expand each into

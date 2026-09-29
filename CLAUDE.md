@@ -112,9 +112,13 @@ Every AI call site picks a tier explicitly — `ANTHROPIC_MODEL` is NOT flipped 
 `ANTHROPIC_MODEL_QUALITY` (Sonnet 5); `aiComplete`/`aiCompleteJson` take `{ tier }` (default
 `'fast'` via the untiered `'default'` resolution) and an optional `model` override (used by the
 Prompt Lab's model selector). `aiCompleteJson<T>(messages, schema, maxTokens, opts)` uses forced
-Anthropic tool-use for structured output — used by the new `/api/match-report` route; existing
-JSON-scraping routes (`analyze-jd`, `match-modules`, `parse-modules`, `score-applicant`) were left
-on brace-slicing for this pass to limit blast radius, and are candidates for migrating later.
+Anthropic tool-use for structured output — used by `/api/match-report`, `analyze-jd` (+ prompt-lab
+mirror), `match-modules` pass 1 and pass 2 (+ prompt-lab mirror), `parse-modules` (module
+extraction), and `score-applicant`. A schema's root must be `type: 'object'` — `parse-modules`
+wraps its module array as `{ modules: [...] }` since Anthropic tool-use requires an object at the
+top level. `match-modules` also injects a `match_report`'s per-criterion scores into its prompt
+context when one exists for the active profile (`reportContext` in `match-modules/route.ts`), so
+module ranking agrees with the report instead of re-deriving an independent judgment.
 
 | Tier | Call sites |
 |---|---|

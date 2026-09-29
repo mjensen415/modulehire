@@ -1,14 +1,42 @@
 import { NextResponse } from 'next/server'
-import { aiComplete } from '@/lib/ai'
+import { aiCompleteJson } from '@/lib/ai'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
-import { jsonrepair } from 'jsonrepair'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
 import { getUserPreferences, buildPreferenceContext } from '@/lib/preferences'
 
 export const maxDuration = 120
+
+type RankedModule = { module_id: string; match_score: number; include_reason: string }
+
+const RANK_ITEM_SCHEMA = {
+  type: 'object',
+  properties: {
+    module_id: { type: 'string', description: 'Exact id from the module list above' },
+    match_score: { type: 'number', description: '0-100' },
+    include_reason: { type: 'string', description: 'Max 8-word phrase, not a full sentence' },
+  },
+  required: ['module_id', 'match_score', 'include_reason'],
+}
+
+const PASS1_SCHEMA = {
+  type: 'object',
+  properties: {
+    ranked_modules: { type: 'array', items: RANK_ITEM_SCHEMA },
+    recommended_stack: { type: 'array', items: { type: 'string' }, description: 'The 4-8 highest-scoring module ids, in order' },
+  },
+  required: ['ranked_modules', 'recommended_stack'],
+}
+
+const PASS2_SCHEMA = {
+  type: 'object',
+  properties: {
+    ranked_modules: { type: 'array', items: RANK_ITEM_SCHEMA },
+  },
+  required: ['ranked_modules'],
+}
 
 export async function POST(req: Request) {
   try {
@@ -69,18 +97,28 @@ export async function POST(req: Request) {
     const prefs = await getUserPreferences(supabase, user.id)
     const prefContext = buildPreferenceContext(prefs)
 
+    // If a Match Report already scored this JD against this profile, surface its per-criterion
+    // scores so ranking agrees with the report instead of re-deriving an independent judgment.
+    type StoredReport = { criteria: Array<{ label: string; weight: number; score: number; evidence: Array<{ id: string; title: string }> }> }
+    const storedReport = jd.match_report_profile_id === profileId ? (jd.match_report as StoredReport | null) : null
+    const reportContext = storedReport && storedReport.criteria?.length
+      ? `\n\nMATCH REPORT CONTEXT (this candidate was already scored against this JD's criteria — use it to calibrate, don't just copy it):\n${storedReport.criteria.map(c =>
+          `- "${c.label}" (weight ${c.weight}/5): ${c.score}% match${c.evidence?.length ? ` — strongest evidence: ${c.evidence.map(e => e.title).join(', ')}` : ''}`
+        ).join('\n')}`
+      : ''
+
     // Cacheable prefix: this user's full module library, unchanged across different JDs matched
     // in the same session — Anthropic reuses it (ephemeral, ~5 min) instead of re-billing it.
-    const libraryBlock = `You are a resume reviewer. Here is the candidate's full resume module library:
+    // Kept in the user message (not system) since cache_control on content blocks is only
+    // honored there — the system message is always flattened to a plain string.
+    const libraryBlock = `Here is the candidate's full resume module library:
 
 RESUME MODULES:
 ${moduleList}
 `
 
     // Dynamic suffix: everything specific to this JD/request.
-    const taskBlock = `Read the job description below and score every module above against it, then fill in the JSON template at the bottom.
-
-DO NOT write code. DO NOT explain your reasoning. Output ONLY the filled-in JSON.
+    const taskBlock = `Score every module above against the job description below.
 
 JOB DESCRIPTION:
 Company: ${jd.extracted_company}
@@ -92,49 +130,17 @@ Key phrases: ${(jd.extracted_phrases || []).join(', ')}
 ${prefContext ? prefContext + '\n\n' : ''}SCORING RULES:
 - match_score is 0-100 based on how well the module's actual relevance matches the job description themes
 - score every module honestly on fit to this specific job — do not give any module an automatic high score
-- include_reason is a max 8-word phrase (not a full sentence) — be extremely concise
+- recommended_stack should contain the 4-8 highest-scoring module ids, in order${reportContext}`
 
-Fill in this exact JSON and output nothing else:
-{
-  "ranked_modules": [
-    { "module_id": "<id from list above>", "match_score": <number>, "include_reason": "<one sentence>" }
-  ],
-  "recommended_stack": ["<id>", "<id>"]
-}
-
-The recommended_stack should contain the 4-8 highest-scoring module ids in order.
-
-JSON:`
-
-    const rawResponseText = await aiComplete(
-      [{ role: 'user', content: [{ text: libraryBlock, cache: true }, { text: taskBlock }] }],
+    const result = await aiCompleteJson<{ ranked_modules: RankedModule[]; recommended_stack: string[] }>(
+      [
+        { role: 'system', content: 'You are a resume reviewer.' },
+        { role: 'user', content: [{ text: libraryBlock, cache: true }, { text: taskBlock }] },
+      ],
+      PASS1_SCHEMA,
       4096,
       { tier: 'fast' }
     )
-
-    const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
-    const jsonStart = stripped.indexOf('{')
-    const jsonEnd = stripped.lastIndexOf('}')
-    if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error(`Model did not return JSON. Response: ${stripped.slice(0, 200)}`)
-    }
-    const rawJson = stripped.slice(jsonStart, jsonEnd + 1)
-    const cleanJson = rawJson
-      .replace(/\/\/[^\n]*/g, '')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/,(\s*[}\]])/g, '$1')
-
-    let result: { ranked_modules: Array<{ module_id: string; match_score: number; include_reason: string }>; recommended_stack: string[] }
-    try {
-      result = JSON.parse(cleanJson)
-    } catch {
-      try {
-        result = JSON.parse(jsonrepair(cleanJson))
-      } catch (e) {
-        console.error('match-modules JSON parse failed. Raw model output:\n', rawResponseText)
-        throw new Error(`JSON parse failed: ${(e as Error).message}. Raw: ${rawResponseText.slice(0, 400)}`)
-      }
-    }
 
     // Weight is a minor, code-applied nudge — never an override. This is deliberately not part
     // of the prompt: trusting the model to self-limit an "always score 100" rule is exactly what
@@ -164,7 +170,7 @@ JSON:`
         `- id: ${m.id} | title: ${m.title} | themes: ${(m.themes || []).join(', ')} | weight: ${m.weight}\n  content: ${String(m.content ?? '').slice(0, 1500)}`
       ).join('\n')
 
-      const pass2Prompt = `You are a resume reviewer. Re-score these shortlisted resume modules against the job description below, now that you can see their full content — not just title and themes.
+      const pass2Prompt = `Re-score these shortlisted resume modules against the job description below, now that you can see their full content — not just title and themes.
 
 JOB DESCRIPTION:
 Company: ${jd.extracted_company}
@@ -178,35 +184,19 @@ ${shortlistBlock}
 
 ${prefContext ? prefContext + '\n\n' : ''}SCORING RULES:
 - match_score is 0-100 based on how well the module's actual content matches the job description — a good title with weak or unrelated content should score lower than pass 1 suggested
-- score every module honestly on fit to this specific job — do not give any module an automatic high score
-- include_reason is a max 8-word phrase (not a full sentence) — be extremely concise
-
-Fill in this exact JSON and output nothing else:
-{
-  "ranked_modules": [
-    { "module_id": "<id from list above>", "match_score": <number>, "include_reason": "<one sentence>" }
-  ]
-}
-
-JSON:`
+- score every module honestly on fit to this specific job — do not give any module an automatic high score${reportContext}`
 
       try {
-        const pass2Raw = await aiComplete(
-          [{ role: 'user', content: pass2Prompt }],
+        const pass2Result = await aiCompleteJson<{ ranked_modules: RankedModule[] }>(
+          [
+            { role: 'system', content: 'You are a resume reviewer.' },
+            { role: 'user', content: pass2Prompt },
+          ],
+          PASS2_SCHEMA,
           2048,
           { tier: 'quality', userId: user.id, action: 'match_job_pass2' }
         )
-        const p2stripped = pass2Raw.replace(/```json/g, '').replace(/```/g, '')
-        const p2start = p2stripped.indexOf('{')
-        const p2end = p2stripped.lastIndexOf('}')
-        if (p2start !== -1 && p2end !== -1) {
-          const p2clean = p2stripped.slice(p2start, p2end + 1).replace(/,(\s*[}\]])/g, '$1')
-          let pass2Result: { ranked_modules: Array<{ module_id: string; match_score: number; include_reason: string }> }
-          try {
-            pass2Result = JSON.parse(p2clean)
-          } catch {
-            pass2Result = JSON.parse(jsonrepair(p2clean))
-          }
+        {
           const pass2Scores = new Map(pass2Result.ranked_modules.map(rm => {
             const m = moduleMap.get(rm.module_id)
             const prior = m ? (WEIGHT_PRIOR[m.weight] ?? 0) : 0
