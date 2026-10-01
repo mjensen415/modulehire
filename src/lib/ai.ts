@@ -41,11 +41,11 @@ function getAdminClient() {
 }
 
 // Fire-and-forget — a logging failure must never fail the AI call that triggered it.
-function logUsage(opts: AiOpts | undefined, model: string, usage: { input_tokens: number; output_tokens: number }) {
+function logUsage(opts: AiOpts | undefined, model: string, usage: { input_tokens: number; output_tokens: number; duration_ms: number }) {
   if (!opts?.userId || !opts?.action) return
   getAdminClient()
     .from('usage_events')
-    .insert({ user_id: opts.userId, action: opts.action, metadata: { model, input_tokens: usage.input_tokens, output_tokens: usage.output_tokens } })
+    .insert({ user_id: opts.userId, action: opts.action, metadata: { model, input_tokens: usage.input_tokens, output_tokens: usage.output_tokens, duration_ms: usage.duration_ms } })
     .then(({ error }) => { if (error) console.error('[ai] usage log failed:', error) })
 }
 
@@ -96,6 +96,7 @@ export async function aiComplete(messages: Message[], maxTokens = 4096, opts?: A
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const model = opts?.model || resolveModel(opts?.tier ?? 'default')
   const systemMessage = messages.find(m => m.role === 'system')
+  const startedAt = Date.now()
   const res = await client.messages.create({
     model,
     max_tokens: maxTokens,
@@ -111,13 +112,14 @@ export async function aiComplete(messages: Message[], maxTokens = 4096, opts?: A
     })),
     ...(systemMessage ? { system: flattenContent(systemMessage.content) } : {}),
   })
+  const durationMs = Date.now() - startedAt
 
   // Sonnet with extended thinking can return a `thinking` block before the `text`
   // block — find the text block explicitly rather than assuming content[0].
   const textBlock = res.content.find((b): b is Anthropic.TextBlock => b.type === 'text')
   if (!textBlock) throw new Error('AI response contained no text block')
 
-  logUsage(opts, model, { input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens })
+  logUsage(opts, model, { input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens, duration_ms: durationMs })
   return textBlock.text
 }
 
@@ -145,6 +147,7 @@ export async function aiCompleteJson<T>(
   const systemMessage = messages.find(m => m.role === 'system')
   const toolName = 'emit_result'
 
+  const startedAt = Date.now()
   const res = await client.messages.create({
     model,
     max_tokens: maxTokens,
@@ -162,10 +165,11 @@ export async function aiCompleteJson<T>(
     })),
     ...(systemMessage ? { system: flattenContent(systemMessage.content) } : {}),
   })
+  const durationMs = Date.now() - startedAt
 
   const toolUse = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === toolName)
   if (!toolUse) throw new Error('AI did not return structured output')
 
-  logUsage(opts, model, { input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens })
+  logUsage(opts, model, { input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens, duration_ms: durationMs })
   return toolUse.input as T
 }
