@@ -235,6 +235,23 @@ role, recent-JD list, recent-resumes label), `/matches`, `/matches/[jd_id]`, `/r
 {company} · {role_type}" banners, `applications`'s small subtitle line under the resume's own
 title) and admin-only tooling (`admin/pipeline`, `admin/prompt-lab`).
 
+## Billing: `plan` vs `tier`
+`users.plan` (`free`/`starter`/`pro`) is the Stripe-facing SKU bucket; `users.tier`
+(`free`/`pro`/`beta_pro`) is the actual entitlement gate every feature check reads
+(`isProTier()` in `src/lib/plan.ts` — upload limit, module limit, generation limit,
+interview-prep, business AI-check caps, etc.). The Stripe webhook (`api/stripe/webhook`)
+keeps both in sync on every subscription event, promoting/demoting `tier` alongside `plan`
+but never overwriting a complimentary `beta_pro` grant. The admin `/admin` page's `PlanSelect`
+dropdown (`PATCH /api/admin/users/[id]`, `{ plan }`) used to only write `plan`, silently
+leaving `tier` on `free` — found via a real user stuck behind "Upload limit reached for your
+plan" after being manually set to pro; 7 other accounts had the same drift (fixed via a one-off
+`UPDATE` querying `plan = 'pro' and tier not in ('pro','beta_pro')`). The route now syncs
+`tier` to match whenever `plan` is set to `pro` or `free` (same rule as the webhook: skip if
+current `tier` is `beta_pro`; `starter` doesn't map to any tier so it's left alone). The newer
+`/admin/users/[id]` page's `TierControl` (`POST /api/admin/set-user-tier`) always wrote `tier`
+directly and was never affected — prefer it over the old `/admin` page's plan dropdown when
+granting pro access manually.
+
 ## Gotchas
 - `git add` with parentheses in paths trips up zsh — always use `git add -A`
 - Sandbox leaves `.git/index.lock` files; delete from local machine before committing
