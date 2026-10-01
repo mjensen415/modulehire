@@ -85,7 +85,7 @@ export async function POST(req: Request) {
     const profileId = await getActiveProfileId(supabase, user.id)
     const { data: modules, error: modError } = await supabase
       .from('modules')
-      .select('id, title, themes, weight, pinned, type, content, source_company, source_role_title, date_start, date_end')
+      .select('id, title, themes, weight, pinned, type, content, source_company, source_role_title, date_start, date_end, dimensions')
       .eq('user_id', user.id)
       .eq('profile_id', profileId)
     if (modError) throw modError

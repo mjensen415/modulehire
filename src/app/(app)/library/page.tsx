@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
 import MergeConfirmModal from '@/components/MergeConfirmModal'
-import { isDimension, DIMENSION_LABELS, type Dimension } from '@/lib/dimensions'
+import { isDimension, DIMENSIONS, DIMENSION_LABELS, type Dimension } from '@/lib/dimensions'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Job = { id: string; company: string; title: string | null; start_date: string | null; end_date: string | null; location: string | null; employment_type: string | null }
@@ -16,6 +16,26 @@ type SkillCategory = 'technical' | 'domain' | 'leadership' | null
 type Skill = { id: string; job_id: string; name: string; category: SkillCategory; source: 'user' | 'parsed' }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+function DimensionChips({ dimensions }: { dimensions?: string[] | null }) {
+  const dims = (dimensions ?? []).filter(isDimension)
+  if (dims.length === 0) return null
+  return (
+    <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+      {dims.map(d => (
+        <span
+          key={d}
+          style={{
+            fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.03em', textTransform: 'uppercase',
+            padding: '1px 6px', borderRadius: 4, border: '1px solid var(--border2)', color: 'var(--text3)',
+          }}
+        >
+          {DIMENSION_LABELS[d]}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function moduleColor(m: Module) {
   if (m.weight === 'anchor') return '#1d9e75'
   if (m.weight === 'strong') return '#6366f1'
@@ -133,6 +153,7 @@ export default function LibraryPage() {
   const [editModuleWeight, setEditModuleWeight] = useState('supporting')
   const [editModulePinned, setEditModulePinned] = useState(false)
   const [editModuleThemes, setEditModuleThemes] = useState('')
+  const [editModuleDimensions, setEditModuleDimensions] = useState<Dimension[]>([])
   const [editModuleLoading, setEditModuleLoading] = useState(false)
   const [savingModule, setSavingModule] = useState(false)
 
@@ -221,6 +242,7 @@ export default function LibraryPage() {
       setEditModuleWeight(data.module.weight ?? 'supporting')
       setEditModulePinned(data.module.pinned ?? false)
       setEditModuleThemes((data.module.themes ?? []).join(', '))
+      setEditModuleDimensions(((data.module.dimensions ?? []) as string[]).filter(isDimension))
     }
     setEditModuleLoading(false)
   }
@@ -229,6 +251,15 @@ export default function LibraryPage() {
     setEditingModuleId(null)
     setEditModuleTitle(''); setEditModuleContent('')
     setEditModuleWeight('supporting'); setEditModulePinned(false); setEditModuleThemes('')
+    setEditModuleDimensions([])
+  }
+
+  function toggleEditModuleDimension(dim: Dimension) {
+    setEditModuleDimensions(prev => {
+      if (prev.includes(dim)) return prev.filter(d => d !== dim)
+      if (prev.length >= 3) return prev
+      return [...prev, dim]
+    })
   }
 
   async function saveModuleEdit() {
@@ -238,11 +269,11 @@ export default function LibraryPage() {
     const res = await fetch(`/api/modules/${editingModuleId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: editModuleTitle, content: editModuleContent, weight: editModuleWeight, pinned: editModulePinned, themes }),
+      body: JSON.stringify({ title: editModuleTitle, content: editModuleContent, weight: editModuleWeight, pinned: editModulePinned, themes, dimensions: editModuleDimensions }),
     })
     if (res.ok) {
       setModules(prev => prev.map(m =>
-        m.id === editingModuleId ? { ...m, title: editModuleTitle, weight: editModuleWeight, pinned: editModulePinned, themes } : m
+        m.id === editingModuleId ? { ...m, title: editModuleTitle, weight: editModuleWeight, pinned: editModulePinned, themes, dimensions: editModuleDimensions } : m
       ))
       closeEditModal()
     } else {
@@ -897,7 +928,7 @@ export default function LibraryPage() {
                             <div style={{ width: 3, height: 32, borderRadius: 2, background: color, flexShrink: 0 }} />
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 3 }}>{m.title}</div>
-                              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center', marginBottom: 3 }}>
                                 <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'var(--teal-dim)', color: 'var(--teal)', border: '1px solid var(--teal-glow)' }}>
                                   {displayCompany(selectedJob.company)}
                                 </span>
@@ -907,6 +938,7 @@ export default function LibraryPage() {
                                   </span>
                                 ))}
                               </div>
+                              <DimensionChips dimensions={m.dimensions} />
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1184,9 +1216,10 @@ export default function LibraryPage() {
                       <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>
                         {moduleDomain(m)}
                       </div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', lineHeight: 1.3, marginBottom: 6 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', lineHeight: 1.3, marginBottom: 4 }}>
                         {m.title}
                       </div>
+                      <div style={{ marginBottom: 6 }}><DimensionChips dimensions={m.dimensions} /></div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ fontSize: 10, color: 'var(--text3)' }}>
                           {jobsOn.length > 0
@@ -1307,6 +1340,36 @@ export default function LibraryPage() {
                       style={{ width: '100%', fontSize: 13, padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border2)', background: 'var(--bg2)', color: 'var(--text)', fontFamily: 'var(--font)', outline: 'none', boxSizing: 'border-box' }}
                       placeholder="leadership, data, community…"
                     />
+                  </div>
+                </div>
+
+                {/* Dimensions */}
+                <div>
+                  <label style={{ fontSize: 11, fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text3)', display: 'block', marginBottom: 6 }}>
+                    Dimensions <span style={{ opacity: 0.5, textTransform: 'none', fontFamily: 'var(--font)', letterSpacing: 0 }}>(up to 3 — which aspects this proves)</span>
+                  </label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {DIMENSIONS.map(dim => {
+                      const selected = editModuleDimensions.includes(dim)
+                      const disabled = !selected && editModuleDimensions.length >= 3
+                      return (
+                        <button
+                          key={dim}
+                          type="button"
+                          onClick={() => toggleEditModuleDimension(dim)}
+                          disabled={disabled}
+                          style={{
+                            fontSize: 11.5, padding: '4px 11px', borderRadius: 20, cursor: disabled ? 'not-allowed' : 'pointer',
+                            fontFamily: 'var(--font)', opacity: disabled ? 0.4 : 1,
+                            background: selected ? 'var(--teal-dim)' : 'none',
+                            color: selected ? 'var(--teal)' : 'var(--text3)',
+                            border: `1px solid ${selected ? 'var(--teal-glow)' : 'var(--border2)'}`,
+                          }}
+                        >
+                          {DIMENSION_LABELS[dim]}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
 

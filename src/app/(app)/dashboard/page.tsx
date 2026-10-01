@@ -6,6 +6,7 @@ import { getActiveProfileId } from '@/lib/profile';
 import { DIMENSIONS, DIMENSION_LABELS, type Dimension } from '@/lib/dimensions';
 import MatchReport, { type MatchReportData } from '@/components/MatchReport';
 import DashboardProfileSwitch from './DashboardProfileSwitch';
+import DashboardBreakdownRow from './DashboardBreakdownRow';
 
 // ─── ICONS ───
 function IconBlocks() {
@@ -85,16 +86,6 @@ function IconCheck() {
       <circle cx="6.5" cy="6.5" r="6" stroke="var(--teal)" strokeWidth="1.2"/>
       <path d="M4 6.5 5.8 8.3 9 5" stroke="var(--teal)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
-  );
-}
-
-function strengthDots(filled: number) {
-  return (
-    <span style={{ fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: 1 }}>
-      {[1, 2, 3, 4, 5].map(n => (
-        <span key={n} style={{ color: n <= filled ? 'var(--text)' : 'var(--border2)' }}>●</span>
-      ))}
-    </span>
   );
 }
 
@@ -279,7 +270,12 @@ export default async function Dashboard() {
   const breakdown = DIMENSIONS.map((dim: Dimension) => {
     const inDim = typedModules.filter(m => (m.dimensions ?? []).includes(dim));
     const weighted = inDim.reduce((sum, m) => sum + (m.weight === 'anchor' || m.weight === 'strong' ? 1.5 : 1), 0);
-    return { dim, count: inDim.length, strength: strengthFromCount(Math.round(weighted)) };
+    return {
+      dim,
+      count: inDim.length,
+      strength: strengthFromCount(Math.round(weighted)),
+      modules: inDim.slice(0, 5).map(m => ({ id: m.id, title: m.title })),
+    };
   });
 
   const preferences = (onboardingProfile?.preferences ?? {}) as { target_roles?: string[]; career_level?: string };
@@ -416,18 +412,14 @@ export default async function Dashboard() {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {breakdown.map(row => (
-                      <Link
+                      <DashboardBreakdownRow
                         key={row.dim}
-                        href={`/library?dimension=${row.dim}`}
-                        title={row.strength <= 2 ? 'Few modules show this — add one from a past role.' : undefined}
-                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 4px', borderRadius: 6, textDecoration: 'none' }}
-                      >
-                        <span style={{ fontSize: 12.5, color: 'var(--text2)' }}>{DIMENSION_LABELS[row.dim]}</span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 11.5, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{row.count} module{row.count === 1 ? '' : 's'}</span>
-                          {strengthDots(row.strength)}
-                        </span>
-                      </Link>
+                        dim={row.dim}
+                        label={DIMENSION_LABELS[row.dim]}
+                        count={row.count}
+                        strength={row.strength}
+                        modules={row.modules}
+                      />
                     ))}
                   </div>
                 )}

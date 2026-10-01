@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, KeyboardEvent, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import ScoreGauge from '@/components/ScoreGauge'
-import { DIMENSION_LABELS, type JdCriterion } from '@/lib/dimensions'
+import { isDimension, DIMENSION_LABELS, type JdCriterion } from '@/lib/dimensions'
 import MatchReport, { type MatchReportData } from '@/components/MatchReport'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -45,6 +45,7 @@ type RankedModule = {
   role_types: string[]
   date_start: string | null
   date_end: string | null
+  dimensions?: string[]
 }
 
 type LibModule = {
@@ -56,6 +57,26 @@ type LibModule = {
   type: string
   content: string
   themes: string[]
+}
+
+function DimensionChips({ dimensions }: { dimensions?: string[] | null }) {
+  const dims = (dimensions ?? []).filter(isDimension)
+  if (dims.length === 0) return null
+  return (
+    <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 4 }}>
+      {dims.map(d => (
+        <span
+          key={d}
+          style={{
+            fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.03em', textTransform: 'uppercase',
+            padding: '1px 6px', borderRadius: 4, border: '1px solid var(--border2)', color: 'var(--text3)',
+          }}
+        >
+          {DIMENSION_LABELS[d]}
+        </span>
+      ))}
+    </div>
+  )
 }
 
 type EducationEntry = { school: string; degree: string; field: string; year: string }
@@ -2727,6 +2748,7 @@ export default function GeneratePage() {
                       <span style={{ cursor: 'grab', color: 'var(--text3)', fontSize: 14, userSelect: 'none', marginTop: 1 }} title="Drag to reorder">⠿</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 3 }}>{m.title}</div>
+                        <DimensionChips dimensions={m.dimensions} />
                         {isEditing ? (
                           <>
                             <textarea value={editingContent} onChange={e => setEditingContent(e.target.value)} rows={4} autoFocus style={{ width: '100%', fontSize: 12, lineHeight: 1.5, color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--teal-glow)', borderRadius: 6, padding: '7px 9px', resize: 'vertical', fontFamily: 'var(--font)', boxSizing: 'border-box', outline: 'none' }} />

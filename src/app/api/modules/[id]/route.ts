@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getActiveProfileId } from '@/lib/profile'
+import { isDimension } from '@/lib/dimensions'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
-const ALLOWED_FIELDS = ['title', 'content', 'weight', 'type', 'source_company', 'source_role_title', 'date_start', 'date_end', 'employment_type', 'themes', 'role_types', 'company_stage', 'pinned']
+const ALLOWED_FIELDS = ['title', 'content', 'weight', 'type', 'source_company', 'source_role_title', 'date_start', 'date_end', 'employment_type', 'themes', 'role_types', 'company_stage', 'pinned', 'dimensions']
 
 export async function GET(_req: Request, { params }: RouteContext) {
   try {
@@ -16,7 +17,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
     const profileId = await getActiveProfileId(supabase, user.id)
     const { data, error } = await supabase
       .from('modules')
-      .select('id, title, content, weight, themes, type, source_company, source_role_title, date_start, date_end, pinned')
+      .select('id, title, content, weight, themes, type, source_company, source_role_title, date_start, date_end, pinned, dimensions')
       .eq('id', id)
       .eq('user_id', user.id)
       .eq('profile_id', profileId)
@@ -43,6 +44,13 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     const updates: Record<string, unknown> = {}
     for (const key of ALLOWED_FIELDS) {
       if (key in body) updates[key] = body[key]
+    }
+
+    if ('dimensions' in updates) {
+      if (!Array.isArray(updates.dimensions)) {
+        return NextResponse.json({ error: 'dimensions must be an array' }, { status: 400 })
+      }
+      updates.dimensions = updates.dimensions.filter(isDimension).slice(0, 3)
     }
 
     if ('pinned' in updates) {

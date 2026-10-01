@@ -141,11 +141,24 @@ Two columns via `.dash-two-col-b` (defined in `globals.css`, ~38%/62% split abov
 to one column at/below it — the same breakpoint `.dash-two-col` uses). Left: resume/profile card
 (`DashboardProfileSwitch.tsx` for the profile picker), "What you're targeting" (from
 `users.preferences.target_roles[0]`/`career_level` and `users.location`), and the per-dimension
-module breakdown (count + 5-dot strength, `anchor`/`strong` modules weighted 1.5×) — each row
-links to `/library?dimension=<name>`, which the library page reads into `dimensionFilter` state
-alongside its existing weight/assignment filter chips. Right: the existing `nextMove` card
-(restyled), a compact `MatchReport` for the most recent JD with `extracted_criteria`, and recent
-resumes. Job descriptions and a module-library link render full-width below both columns.
+module breakdown (count + 5-dot strength, `anchor`/`strong` modules weighted 1.5×) — each row is a
+`DashboardBreakdownRow.tsx` client component (dashboard itself stays a server component, passing
+each dimension's first 5 module `{id, title}` as props) that expands on click to list those titles
+(linking to `/library/[id]`), a "See all N in library →" link to `/library?dimension=<name>` when
+there are more, and a weak-dimension hint (`strength <= 2`). The library page reads `?dimension=`
+into `dimensionFilter` state alongside its existing weight/assignment filter chips. Right: the
+existing `nextMove` card (restyled), a compact `MatchReport` for the most recent JD with
+`extracted_criteria`, and recent resumes. Job descriptions and a module-library link render
+full-width below both columns.
+
+## Dimension chips on modules
+Modules carry 1-3 dimensions (tagged at parse time or via the admin backfill — see "Six-dimension
+tagging" migration). Shown as small outlined chips under the title on module cards in `/library`
+(job-assigned column + repository grid), `/module-review`, and the module-building list in
+`/generate`. Editable in the library's module edit modal as toggle chips (max 3) — saved through
+`PATCH /api/modules/[id]`, which validates with `isDimension` and allows `dimensions` as an
+updatable field alongside the existing ones. `match-modules`'s module `select()` includes
+`dimensions` so the ranked list downstream has it to render.
 
 ## JD analysis (two-pass, streamed)
 `POST /api/analyze-jd` returns NDJSON (`application/x-ndjson`), not a single JSON object — company/

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { isDimension, DIMENSION_LABELS } from '@/lib/dimensions'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -19,6 +20,27 @@ type Module = {
   role_types: string[]
   themes: string[]
   company_stage: string[]
+  dimensions?: string[]
+}
+
+function DimensionChips({ dimensions }: { dimensions?: string[] | null }) {
+  const dims = (dimensions ?? []).filter(isDimension)
+  if (dims.length === 0) return null
+  return (
+    <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 2 }}>
+      {dims.map(d => (
+        <span
+          key={d}
+          style={{
+            fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.03em', textTransform: 'uppercase',
+            padding: '1px 6px', borderRadius: 4, border: '1px solid var(--border2)', color: 'var(--text3)',
+          }}
+        >
+          {DIMENSION_LABELS[d]}
+        </span>
+      ))}
+    </div>
+  )
 }
 
 type ReviewModule = Module & {
@@ -190,6 +212,7 @@ function ModCard({
       style={mod._discarded ? { opacity: 0.4, textDecoration: 'line-through' } : undefined}
     >
       <div className="mod-domain">{mod.title}</div>
+      <DimensionChips dimensions={mod.dimensions} />
       <div className="mod-content">{mod.content.slice(0, 120)}{mod.content.length > 120 ? '…' : ''}</div>
       <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
         <span className={`plan-chip plan-${mod.weight}`} style={{ fontSize: 9 }}>{mod.weight}</span>
