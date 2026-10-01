@@ -288,6 +288,84 @@ export type Database = {
         }
         Relationships: []
       }
+      draft_generations: {
+        Row: {
+          user_id: string
+          step: string | null
+          jd_id: string | null
+          jd_text: string | null
+          selected_module_ids: string[]
+          confirmed_themes: string[]
+          confirmed_phrases: string[]
+          alignment_states: Json
+          resume_format: string | null
+          job_level: string | null
+          pos_variant: string | null
+          include_summary: boolean
+          summary_override: string | null
+          include_cover_letter: boolean
+          cover_letter_tone: string | null
+          cover_letter_notes: string | null
+          include_skills: boolean
+          skills: string[]
+          include_education: boolean
+          education: Json
+          include_awards: boolean
+          awards_text: string | null
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          step?: string | null
+          jd_id?: string | null
+          jd_text?: string | null
+          selected_module_ids?: string[]
+          confirmed_themes?: string[]
+          confirmed_phrases?: string[]
+          alignment_states?: Json
+          resume_format?: string | null
+          job_level?: string | null
+          pos_variant?: string | null
+          include_summary?: boolean
+          summary_override?: string | null
+          include_cover_letter?: boolean
+          cover_letter_tone?: string | null
+          cover_letter_notes?: string | null
+          include_skills?: boolean
+          skills?: string[]
+          include_education?: boolean
+          education?: Json
+          include_awards?: boolean
+          awards_text?: string | null
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          step?: string | null
+          jd_id?: string | null
+          jd_text?: string | null
+          selected_module_ids?: string[]
+          confirmed_themes?: string[]
+          confirmed_phrases?: string[]
+          alignment_states?: Json
+          resume_format?: string | null
+          job_level?: string | null
+          pos_variant?: string | null
+          include_summary?: boolean
+          summary_override?: string | null
+          include_cover_letter?: boolean
+          cover_letter_tone?: string | null
+          cover_letter_notes?: string | null
+          include_skills?: boolean
+          skills?: string[]
+          include_education?: boolean
+          education?: Json
+          include_awards?: boolean
+          awards_text?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       education: {
         Row: {
           created_at: string
