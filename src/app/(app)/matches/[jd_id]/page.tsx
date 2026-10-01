@@ -20,7 +20,7 @@ export default async function MatchReportPage({ params }: { params: Promise<{ jd
   if (error || !jd) redirect('/matches')
 
   const jdSummary = {
-    title: jd.extracted_job_title || jd.extracted_role_type || 'This role',
+    title: jd.extracted_job_title || 'Untitled role',
     company: jd.extracted_company ?? null,
     source_url: jd.source_url ?? null,
   }

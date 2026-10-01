@@ -24,7 +24,7 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
   if (error || !resume) notFound()
 
   const jd = Array.isArray(resume.job_descriptions) ? resume.job_descriptions[0] : resume.job_descriptions
-  const jdTitle = jd?.extracted_job_title || jd?.extracted_role_type || null
+  const jdTitle = jd?.extracted_job_title || null
   const hasReport = !!jd?.match_report
 
   const bucket = 'temp'

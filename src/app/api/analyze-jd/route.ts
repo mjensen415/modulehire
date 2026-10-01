@@ -10,6 +10,11 @@ export const maxDuration = 120
 
 const SYSTEM_PROMPT_BASICS = `Extract basic structured data from a job description.
 
+extracted_job_title: the literal job title as written in the JD, verbatim (e.g. "Head of
+Community"). If the posting does not clearly state a title, return an empty string. Never guess,
+infer, or construct a title from the responsibilities, and never write "Other" — an empty string
+is the only acceptable result when no title is stated.
+
 extracted_role_type: identify the role type from the overall nature of the work and
 responsibilities described — not by matching keywords in the title. A "Data Analyst" role doing
 SQL, dashboards, and reporting is "data-scientist" ONLY if the role genuinely requires ML/modeling.
@@ -36,7 +41,7 @@ const BASICS_SCHEMA = {
   type: 'object',
   properties: {
     extracted_company: { type: 'string', description: 'Company name, or empty string if not found' },
-    extracted_job_title: { type: 'string', description: "The literal job title as written in the JD (e.g. 'Head of People'). Empty string if none present." },
+    extracted_job_title: { type: 'string', description: "The literal job title as written in the JD, verbatim (e.g. 'Head of People'). Empty string if none present — never guess a title and never use 'Other'." },
     extracted_role_type: { type: 'string' },
     extracted_themes: { type: 'array', items: { type: 'string' } },
     extracted_seniority: { type: 'string', enum: ['ic', 'manager', 'senior-manager', 'director', 'vp', 'c-suite'] },

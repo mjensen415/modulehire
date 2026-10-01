@@ -54,6 +54,11 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     if (typeof body.extracted_job_title === 'string') {
       update.extracted_job_title = body.extracted_job_title.trim().slice(0, 200) || null
     }
+    if (typeof body.extracted_company === 'string') {
+      update.extracted_company = body.extracted_company.trim().slice(0, 200) || null
+    } else if (body.extracted_company === null) {
+      update.extracted_company = null
+    }
     if (Array.isArray(body.extracted_criteria)) update.extracted_criteria = sanitizeCriteria(body.extracted_criteria)
     if (Object.keys(update).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })

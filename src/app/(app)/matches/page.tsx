@@ -75,7 +75,7 @@ export default function Matches() {
                   variant="compact"
                   report={jd.match_report}
                   jd={{
-                    title: jd.extracted_job_title || jd.extracted_role_type || 'This role',
+                    title: jd.extracted_job_title || 'Untitled role',
                     company: jd.extracted_company ?? null,
                   }}
                 />

@@ -249,6 +249,8 @@ export default function GeneratePage() {
   const [confirmedThemes, setConfirmedThemes] = useState<string[]>([])
   const [confirmedCriteria, setConfirmedCriteria] = useState<JdCriterion[]>([])
   const [criteriaLoading, setCriteriaLoading] = useState(false)
+  const [missingTitleInput, setMissingTitleInput] = useState('')
+  const [missingCompanyInput, setMissingCompanyInput] = useState('')
   const criteriaReadyRef = useRef<Promise<JdCriterion[] | null> | null>(null)
   const [matchReportData, setMatchReportData] = useState<MatchReportData | null>(null)
   const [matchReportLoading, setMatchReportLoading] = useState(false)
@@ -907,6 +909,8 @@ export default function GeneratePage() {
       setConfirmedThemes(basics.extracted_themes ?? [])
       setConfirmedCriteria([])
       setCriteriaLoading(true)
+      setMissingTitleInput('')
+      setMissingCompanyInput('')
 
       // Let the user confirm/edit what we extracted before it drives matching — a bad
       // extraction should be caught here, not silently propagate into a bad match.
@@ -961,6 +965,7 @@ export default function GeneratePage() {
   // ── Step 1.5: confirm (possibly edited) keywords from the reviewThemes step, then match ──
 
   async function handleConfirm() {
+    if (!jdData?.extracted_job_title && missingTitleInput.trim().length < 2) return
     setConfirmLoading(true)
     setErrorMessage('')
     try {
@@ -974,11 +979,21 @@ export default function GeneratePage() {
         if (resolved) criteriaForSubmit = resolved
       }
 
+      const titleToSave = jdData?.extracted_job_title || missingTitleInput.trim()
+      const companyToSave = jdData?.extracted_company || missingCompanyInput.trim() || null
+
       await fetch(`/api/job-descriptions/${jdData!.jd_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ extracted_phrases: confirmedPhrases, extracted_themes: confirmedThemes, extracted_criteria: criteriaForSubmit }),
+        body: JSON.stringify({
+          extracted_phrases: confirmedPhrases,
+          extracted_themes: confirmedThemes,
+          extracted_criteria: criteriaForSubmit,
+          extracted_job_title: titleToSave,
+          extracted_company: companyToSave,
+        }),
       })
+      setJdData(d => d ? { ...d, extracted_job_title: titleToSave, extracted_company: companyToSave } : d)
 
       const matchRes = await fetch('/api/match-modules', {
         method: 'POST',
@@ -1693,6 +1708,30 @@ export default function GeneratePage() {
                 @keyframes mh-row-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
               `}</style>
 
+              {!jdData.extracted_job_title && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', background: 'var(--bg3)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>We couldn&apos;t find a job title in this posting</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--text3)', marginTop: 2 }}>What&apos;s the role called? This goes on your resume header and helps matching.</div>
+                  </div>
+                  <input
+                    className="form-input"
+                    placeholder="Head of Community"
+                    value={missingTitleInput}
+                    onChange={e => setMissingTitleInput(e.target.value)}
+                    autoFocus
+                    style={{ fontSize: 13 }}
+                  />
+                  <input
+                    className="form-input"
+                    placeholder="Company (optional)"
+                    value={missingCompanyInput}
+                    onChange={e => setMissingCompanyInput(e.target.value)}
+                    style={{ fontSize: 13 }}
+                  />
+                </div>
+              )}
+
               {criteriaLoading && confirmedCriteria.length === 0 && (
                 <div>
                   <div className="form-label" style={{ marginBottom: 8 }}>Weighing what matters most…</div>
@@ -1831,13 +1870,23 @@ export default function GeneratePage() {
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <button type="button" className="btn-primary" onClick={handleConfirm} disabled={confirmLoading}>
-                  {confirmLoading ? (criteriaLoading ? 'Finishing…' : 'Finding matches…') : 'Confirm & Find Matches →'}
-                </button>
-                <button type="button" className="btn-ghost" style={{ fontSize: 12 }} onClick={reset} disabled={confirmLoading}>
-                  ← Use a different job description
-                </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handleConfirm}
+                    disabled={confirmLoading || (!jdData.extracted_job_title && missingTitleInput.trim().length < 2)}
+                  >
+                    {confirmLoading ? (criteriaLoading ? 'Finishing…' : 'Finding matches…') : 'Confirm & Find Matches →'}
+                  </button>
+                  <button type="button" className="btn-ghost" style={{ fontSize: 12 }} onClick={reset} disabled={confirmLoading}>
+                    ← Use a different job description
+                  </button>
+                </div>
+                {!jdData.extracted_job_title && missingTitleInput.trim().length < 2 && (
+                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>Add a job title to continue</div>
+                )}
               </div>
             </div>
           )}
@@ -1853,7 +1902,7 @@ export default function GeneratePage() {
               <MatchReport
                 report={matchReportData}
                 jd={{
-                  title: jdData.extracted_job_title || jdData.extracted_role_type || 'This role',
+                  title: jdData.extracted_job_title || 'Untitled role',
                   company: jdData.extracted_company ?? null,
                   source_url: null,
                 }}
@@ -3444,7 +3493,7 @@ export default function GeneratePage() {
               </button>
               {previewOpen && (
                 <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text2)', lineHeight: 1.9 }}>
-                  <div><strong style={{ color: 'var(--text)' }}>Role:</strong> {jdData?.extracted_job_title || jdData?.extracted_role_type || '—'}</div>
+                  <div><strong style={{ color: 'var(--text)' }}>Role:</strong> {jdData?.extracted_job_title || 'Untitled role'}</div>
                   <div><strong style={{ color: 'var(--text)' }}>Modules:</strong> {selectedIds.length} across {new Set(assembledOrder.filter(m => m.source_company).map(m => `${m.source_company}||${m.source_role_title ?? ''}`)).size} job(s)</div>
                   <div><strong style={{ color: 'var(--text)' }}>Bullet style:</strong> {bulletStyle === '' ? 'None' : bulletStyle}</div>
                   <div><strong style={{ color: 'var(--text)' }}>Cover letter:</strong> {includeCoverLetter ? 'Yes' : 'No'}</div>

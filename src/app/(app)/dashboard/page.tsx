@@ -143,7 +143,7 @@ export default async function Dashboard() {
       .limit(3),
     supabase
       .from('job_descriptions')
-      .select('id, extracted_company, extracted_role_type, created_at', { count: 'exact' })
+      .select('id, extracted_company, extracted_job_title, extracted_role_type, created_at', { count: 'exact' })
       .eq('user_id', user!.id)
       .order('created_at', { ascending: false })
       .limit(4),
@@ -206,7 +206,7 @@ export default async function Dashboard() {
   type ModuleRecord = { id: string; title: string; weight?: string; themes?: string[]; type?: string; dimensions?: string[] };
   const typedModules: ModuleRecord[] = (modules ?? []) as ModuleRecord[];
   const typedResumes = resumes ?? [];
-  const typedJds = (jds ?? []) as Array<{ id: string; extracted_role_type?: string; extracted_company?: string; created_at: string }>;
+  const typedJds = (jds ?? []) as Array<{ id: string; extracted_job_title?: string | null; extracted_role_type?: string; extracted_company?: string; created_at: string }>;
   const hasContent = typedModules.length > 0 || typedResumes.length > 0;
 
   const latestJd = recentJdFull as {
@@ -237,7 +237,7 @@ export default async function Dashboard() {
     nextMove = {
       type: 'generate',
       company: latestJd?.extracted_company ?? null,
-      role: latestJd?.extracted_role_type ?? null,
+      role: latestJd?.extracted_job_title || latestJd?.extracted_role_type || null,
     };
   } else {
     const moduleThemes = new Set(typedModules.flatMap(m => m.themes ?? []));
@@ -495,7 +495,7 @@ export default async function Dashboard() {
                     variant="compact"
                     report={latestJd.match_report_profile_id === activeProfileId ? latestJd.match_report : null}
                     jd={{
-                      title: latestJd.extracted_job_title || latestJd.extracted_role_type || 'This role',
+                      title: latestJd.extracted_job_title || 'Untitled role',
                       company: latestJd.extracted_company ?? null,
                     }}
                   />
@@ -518,7 +518,7 @@ export default async function Dashboard() {
                     job_descriptions?: { extracted_company: string | null; extracted_role_type: string | null; extracted_job_title: string | null } | { extracted_company: string | null; extracted_role_type: string | null; extracted_job_title: string | null }[] | null
                   }>).map((r) => {
                     const jd = Array.isArray(r.job_descriptions) ? r.job_descriptions[0] : r.job_descriptions
-                    const jdLabel = jd ? [jd.extracted_company, jd.extracted_job_title || jd.extracted_role_type].filter(Boolean).join(' · ') : ''
+                    const jdLabel = jd ? [jd.extracted_company, jd.extracted_job_title].filter(Boolean).join(' · ') : ''
                     return (
                       <Link href={`/resumes/${r.id}`} className="app-row" key={r.id} style={{ textDecoration: 'none' }}>
                         <div className="app-row-title">{r.title || 'Untitled resume'}</div>
@@ -548,7 +548,7 @@ export default async function Dashboard() {
               <div className="job-item" key={jd.id}>
                 <div className="job-co-logo">{(jd.extracted_company ?? 'JD').slice(0, 3).toUpperCase()}</div>
                 <div className="job-info">
-                  <div className="job-title">{jd.extracted_role_type || 'Untitled role'}</div>
+                  <div className="job-title">{jd.extracted_job_title || 'Untitled role'}</div>
                   <div className="job-company">{jd.extracted_company || 'Unknown company'}</div>
                 </div>
                 <div className="job-right">

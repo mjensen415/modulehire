@@ -209,6 +209,31 @@ overall score, and caches the result on `job_descriptions.match_report`/`match_r
 score badge in `src/app/(app)/job-tracker/page.tsx`). `match-modules` does not yet read the
 report's per-criterion scores into its own ranking — a follow-up, not done in this pass.
 
+## Resume detail page (`/resumes/[id]`)
+Server component — joins `generated_resumes` with `job_descriptions (id, extracted_job_title,
+extracted_role_type, extracted_company, source_url, match_report)`, signs the stored docx/pdf paths
+(`storage.from('temp').createSignedUrl(path, 3600)`), and renders an inline PDF preview (`<iframe>`),
+download buttons, a "Modules used" chip list (from `module_ids_used`), and a link to the JD's match
+report when one exists. Dashboard's Recent Resumes rows and `/resumes` list rows link here.
+
+## Job title fallback — no `extracted_role_type` as a title stand-in
+`extracted_job_title` (the literal title as written in the JD, or empty string if none stated —
+the fast pass in `analyze-jd`/`admin/prompt-lab/jd-parse` is explicitly told never to guess one or
+write "Other") is the only field used to label a JD by title. Every site that shows a JD/resume by
+title falls back straight to `'Untitled role'` — `extracted_role_type` (the internal taxonomy value
+used for routing/matching logic, e.g. `community-manager`) is never shown as a title substitute.
+When `extracted_job_title` is empty, `/generate`'s `reviewThemes` step shows a required inline card
+above the criteria list ("We couldn't find a job title in this posting") with an autofocused title
+input (+ optional company input); the Confirm button stays disabled with "Add a job title to
+continue" until 2+ characters are entered, and both are saved via the existing
+`PATCH /api/job-descriptions/[id]` (now also accepts `extracted_company`) in the same call that
+saves the confirmed themes/phrases/criteria. Fixed sites: dashboard (latest-match title, next-move
+role, recent-JD list, recent-resumes label), `/matches`, `/matches/[jd_id]`, `/resumes/[id]`,
+`/generate`'s match-report and preview-summary labels. Left alone: secondary-descriptor uses of
+`extracted_role_type` next to an already-distinct title (e.g. `generate/page.tsx`'s "Analyzed
+{company} · {role_type}" banners, `applications`'s small subtitle line under the resume's own
+title) and admin-only tooling (`admin/pipeline`, `admin/prompt-lab`).
+
 ## Gotchas
 - `git add` with parentheses in paths trips up zsh — always use `git add -A`
 - Sandbox leaves `.git/index.lock` files; delete from local machine before committing
