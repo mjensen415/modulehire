@@ -210,6 +210,18 @@ overall score, and caches the result on `job_descriptions.match_report`/`match_r
 score badge in `src/app/(app)/job-tracker/page.tsx`). `match-modules` does not yet read the
 report's per-criterion scores into its own ranking — a follow-up, not done in this pass.
 
+**Match score vs ATS Estimator — not the same metric, won't always agree.** Match score (this
+feature) is an AI judgment of whether your actual module content demonstrates the JD's specific
+requirements. The ATS Estimator (`estimatedAtsScore` in `generate/page.tsx`, and the composite
+formula in `generate-resume/route.tsx`: 60% keyword/theme coverage + 20% contact completeness +
+10% module count + 10% has-a-summary) is pure document mechanics — it can score high on a resume
+that is a weak substantive fit, because real ATS software genuinely just keyword/field-matches and
+doesn't judge experience depth. Both scores now carry explanatory copy/tooltips saying so
+(`MatchReport.tsx`'s subtitle and compact-variant `title` attr; the ATS card's caption + disclaimer
+in `generate/page.tsx` and `resumes/[id]/page.tsx`), and both surfaces cross-link to the other score
+when a resume's ATS score is 20+ points above its JD's match score ("ATS-friendly, but your library
+shows gaps for this role — see Match Report ↗"), so the gap reads as useful signal, not a bug.
+
 ## Resume detail page (`/resumes/[id]`)
 Server component — joins `generated_resumes` with `job_descriptions (id, extracted_job_title,
 extracted_role_type, extracted_company, source_url, match_report)`, signs the stored docx/pdf paths

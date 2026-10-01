@@ -128,7 +128,10 @@ export default function MatchReport({
             <div style={{ fontSize: 12, color: 'var(--text3)' }}>{jd.company}{analyzedDate ? ` · analyzed ${analyzedDate}` : ''}</div>
           </div>
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: report ? scoreBarColor(report.overall) : 'var(--text3)' }}>
+            <div
+              style={{ fontSize: 22, fontWeight: 800, color: report ? scoreBarColor(report.overall) : 'var(--text3)' }}
+              title="How well your library's actual experience lines up with this job's requirements — not a keyword/ATS score"
+            >
               {loading ? '…' : report ? `${report.overall}%` : '—'}
             </div>
           </div>
@@ -171,6 +174,9 @@ export default function MatchReport({
         </div>
 
         <div style={{ marginTop: 12 }}><ScoreBar score={report?.overall ?? 0} /></div>
+        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text3)' }}>
+          Judged against this job&apos;s actual requirements, not a keyword count — your resume&apos;s ATS Estimator score measures something different (format/keyword match) and won&apos;t always agree with this.
+        </div>
       </div>
 
       {loading && (

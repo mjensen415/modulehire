@@ -26,6 +26,7 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
   const jd = Array.isArray(resume.job_descriptions) ? resume.job_descriptions[0] : resume.job_descriptions
   const jdTitle = jd?.extracted_job_title || null
   const hasReport = !!jd?.match_report
+  const matchScore = (jd?.match_report as { overall?: number } | null)?.overall ?? null
 
   const bucket = 'temp'
   const [pdfSigned, docxSigned] = await Promise.all([
@@ -62,10 +63,21 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
             {typeof resume.ats_score === 'number' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <ScoreGauge score={resume.ats_score} size="sm" showLabel={false} />
-                <span style={{ fontSize: 12.5, color: 'var(--text2)' }}>ATS estimate: {resume.ats_score}</span>
+                <span
+                  style={{ fontSize: 12.5, color: 'var(--text2)' }}
+                  title="Keyword & format match for automated screeners — not a fit score. Estimate only; every employer's ATS differs."
+                >
+                  ATS estimate: {resume.ats_score}
+                </span>
               </div>
             )}
           </div>
+          {typeof resume.ats_score === 'number' && hasReport && jd && matchScore != null && matchScore <= resume.ats_score - 20 && (
+            <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+              ATS-friendly, but your library shows gaps for this role ({matchScore}% match) —{' '}
+              <Link href={`/matches/${jd.id}`} style={{ color: 'var(--teal)', textDecoration: 'none' }}>see Match Report ↗</Link>
+            </div>
+          )}
 
           {filesMissing ? (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '32px 24px', textAlign: 'center' }}>

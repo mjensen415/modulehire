@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, KeyboardEvent, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import ScoreGauge from '@/components/ScoreGauge'
 import { isDimension, DIMENSION_LABELS, type JdCriterion } from '@/lib/dimensions'
 import MatchReport, { type MatchReportData } from '@/components/MatchReport'
@@ -3628,11 +3629,25 @@ export default function GeneratePage() {
                       <ScoreGauge score={displayScore} size="md" />
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600, marginBottom: 2 }}>ATS Estimator</div>
+                    <div style={{ fontSize: 10.5, color: 'var(--text3)', marginBottom: 4 }}>
+                      Keyword &amp; format match for automated screeners — not a fit score
+                    </div>
                     {totalKw > 0 && (
                       <div style={{ fontSize: 11, color: 'var(--text3)' }}>
                         {matchedKw.length}/{totalKw} keywords · {
                           [contact.name, contact.email, contact.phone, contact.linkedin, contact.location].filter(Boolean).length
                         }/5 contact fields
+                      </div>
+                    )}
+                    <div style={{ fontSize: 10, color: 'var(--text3)', opacity: 0.75, marginTop: 4 }}>
+                      Estimate only — every employer&apos;s ATS settings differ.
+                    </div>
+                    {jdData?.jd_id && matchReportData && matchReportData.overall <= displayScore - 20 && (
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border2)', fontSize: 11, color: 'var(--text2)', textAlign: 'left' }}>
+                        ATS-friendly, but your library shows gaps for this role ({matchReportData.overall}% match) —{' '}
+                        <Link href={`/matches/${jdData.jd_id}`} style={{ color: 'var(--teal)', textDecoration: 'none' }}>
+                          see Match Report ↗
+                        </Link>
                       </div>
                     )}
                   </div>
