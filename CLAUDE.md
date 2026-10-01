@@ -105,6 +105,7 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - `ALTER TABLE public.usage_events ADD COLUMN IF NOT EXISTS metadata jsonb;` — applied via MCP, tracked in `supabase/migrations/20260929_usage_events_metadata.sql`. AI call sites that pass `{ userId, action }` to `aiComplete`/`aiCompleteJson` fire-and-forget log `{ model, input_tokens, output_tokens }` here for cost-per-action visibility.
 - `ALTER TABLE public.job_descriptions ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();` — applied via MCP, tracked in `supabase/migrations/20260929_jd_updated_at.sql`. Bumped by `PATCH /api/job-descriptions/[id]` on every edit; used by `/api/match-report`'s cache-freshness check alongside `modules.updated_at`.
 - Widened `usage_events_action_check` to also allow `analyze_jd`, `parse_modules`, `match_job_pass2`, `match_report` (previously only `generate_resume`/`match_job`/`upload_resume`/`rl_*` — every new tiered AI call site's cost-logging insert was silently failing the CHECK constraint until this). Applied via MCP, tracked in `supabase/migrations/20260929_usage_events_action_check.sql`. If a new call site starts passing `{ userId, action }` to `aiComplete`/`aiCompleteJson`, its action string must be added here too or the insert will fail (check `usage_events` for `metadata is not null` to confirm logging is actually landing).
+- `job_descriptions.raw_text_hash text` + index on `(user_id, raw_text_hash)` — applied via MCP, tracked in `supabase/migrations/20261001_jd_raw_text_hash.sql`. sha256 of the trimmed pasted text; `/api/analyze-jd` streams back an existing row's result instead of re-calling the AI when a non-deleted row with the same hash and `extracted_criteria` already exists for that user.
 
 ## AI model tiering (`src/lib/ai.ts`)
 Every AI call site picks a tier explicitly — `ANTHROPIC_MODEL` is NOT flipped globally.
@@ -145,6 +146,21 @@ links to `/library?dimension=<name>`, which the library page reads into `dimensi
 alongside its existing weight/assignment filter chips. Right: the existing `nextMove` card
 (restyled), a compact `MatchReport` for the most recent JD with `extracted_criteria`, and recent
 resumes. Job descriptions and a module-library link render full-width below both columns.
+
+## JD analysis (two-pass, streamed)
+`POST /api/analyze-jd` returns NDJSON (`application/x-ndjson`), not a single JSON object — company/
+title/role-type/seniority/themes/phrases run on the `fast` tier and `extracted_criteria` runs on
+`quality`, started together, each written to the row and streamed as its own line
+(`{"type":"basics",...}` then `{"type":"criteria",...}`, finishing with `{"type":"done"}`; a stage
+that fails sends `{"type":"error","stage":"basics"|"criteria"}` and the other stage still completes
+independently). Deduped by `raw_text_hash` — an identical paste from the same user replays the
+cached row instead of re-calling the AI. `src/app/(app)/generate/page.tsx`'s `startAnalysis()`
+kicks this off in the background 1.2s after the user stops typing a paste over 300 characters
+(nothing shown yet), and `handleMatch`/`handleConfirm` reuse that same in-flight run keyed by the
+exact pasted text — `handleConfirm` awaits the criteria promise's resolved value directly rather
+than reading React state, since a state update from that promise's `.then` isn't visible on the
+stale closure of an in-flight async function. The admin Prompt Lab's JD Parser tab
+(`admin/prompt-lab/jd-parse/route.ts`) mirrors the same two parallel calls non-streaming.
 
 ## JD Match Report
 `POST /api/match-report` (`{ jd_id }`) scores each of a JD's `extracted_criteria` against the

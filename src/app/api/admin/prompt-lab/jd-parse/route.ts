@@ -5,7 +5,10 @@ import { DIMENSIONS, sanitizeCriteria } from '@/lib/dimensions'
 
 export const maxDuration = 120
 
-export const DEFAULT_JD_PARSE_PROMPT = `Extract structured data from a job description.
+// Mirrors the two-pass split in production (src/app/api/analyze-jd/route.ts): a fast pass for
+// basics and a deep pass for criteria, run in parallel. Kept non-streaming here — the lab shows
+// one finished result, not a live build.
+export const DEFAULT_BASICS_PROMPT = `Extract basic structured data from a job description.
 
 extracted_role_type: identify the role type from the overall nature of the work and
 responsibilities described — not by matching keywords in the title. A "Data Analyst" role doing
@@ -27,7 +30,9 @@ whether the role manages people or budget — not from words like "senior" or "m
 requirements. A job requiring 2-4 years with no direct reports is "ic".
 
 extracted_phrases: 5-10 exact verbatim phrases from the job description that a resume should echo
-to pass ATS.
+to pass ATS.`
+
+export const DEFAULT_CRITERIA_PROMPT = `Extract typed, weighted hiring criteria from a job description.
 
 extracted_criteria: 5-9 typed, weighted requirements (dimensions: ${DIMENSIONS.join(', ')}).
 Include exactly one "role" criterion and exactly one "seniority" criterion; spread the rest across
@@ -35,7 +40,7 @@ the other four dimensions based on what this specific JD actually emphasizes —
 criterion for a dimension the JD barely touches. weight 5 = clearly a must-have, stated repeatedly
 or up front; weight 1 = nice-to-have. Order the array by weight descending.`
 
-const ANALYZE_JD_SCHEMA = {
+const BASICS_SCHEMA = {
   type: 'object',
   properties: {
     extracted_company: { type: 'string', description: 'Company name, or empty string if not found' },
@@ -44,6 +49,13 @@ const ANALYZE_JD_SCHEMA = {
     extracted_themes: { type: 'array', items: { type: 'string' } },
     extracted_seniority: { type: 'string', enum: ['ic', 'manager', 'senior-manager', 'director', 'vp', 'c-suite'] },
     extracted_phrases: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['extracted_company', 'extracted_job_title', 'extracted_role_type', 'extracted_themes', 'extracted_seniority', 'extracted_phrases'],
+}
+
+const CRITERIA_SCHEMA = {
+  type: 'object',
+  properties: {
     extracted_criteria: {
       type: 'array',
       items: {
@@ -58,7 +70,7 @@ const ANALYZE_JD_SCHEMA = {
       },
     },
   },
-  required: ['extracted_company', 'extracted_job_title', 'extracted_role_type', 'extracted_themes', 'extracted_seniority', 'extracted_phrases', 'extracted_criteria'],
+  required: ['extracted_criteria'],
 }
 
 export async function POST(req: Request) {
@@ -74,23 +86,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Job description too long (max 50,000 chars)' }, { status: 400 })
     }
 
-    // A prompt override replaces the extraction instructions (system message); the job
-    // description always goes in as the user message so the schema-forced tool call still works.
-    const systemPrompt = typeof prompt_override === 'string' && prompt_override.trim()
-      ? prompt_override
-      : DEFAULT_JD_PARSE_PROMPT
-    const promptUsed = `${systemPrompt}\n\nJob Description:\n${raw_text}`
+    // A prompt override replaces BOTH passes' instructions (one editable box in the lab UI,
+    // same as production's split just collapsed for testing convenience).
+    const isOverride = typeof prompt_override === 'string' && prompt_override.trim().length > 0
+    const basicsSystem = isOverride ? prompt_override : DEFAULT_BASICS_PROMPT
+    const criteriaSystem = isOverride ? prompt_override : DEFAULT_CRITERIA_PROMPT
+    const promptUsed = `${basicsSystem}\n\n---\n\n${criteriaSystem}\n\nJob Description:\n${raw_text}`
 
-    const extracted = await aiCompleteJson<Record<string, unknown>>(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Job Description:\n${raw_text}` },
-      ],
-      ANALYZE_JD_SCHEMA,
-      2048,
-      { model: typeof model === 'string' ? model : undefined, tier: 'quality' }
-    )
-    extracted.extracted_criteria = sanitizeCriteria(extracted.extracted_criteria)
+    const [basicsResult, criteriaResult] = await Promise.all([
+      aiCompleteJson<Record<string, unknown>>(
+        [
+          { role: 'system', content: basicsSystem },
+          { role: 'user', content: `Job Description:\n${raw_text}` },
+        ],
+        BASICS_SCHEMA,
+        1024,
+        { model: typeof model === 'string' ? model : undefined, tier: 'fast' }
+      ),
+      aiCompleteJson<{ extracted_criteria: unknown }>(
+        [
+          { role: 'system', content: criteriaSystem },
+          { role: 'user', content: `Job Description:\n${raw_text}` },
+        ],
+        CRITERIA_SCHEMA,
+        1536,
+        { model: typeof model === 'string' ? model : undefined, tier: 'quality' }
+      ),
+    ])
+
+    const extracted = {
+      ...basicsResult,
+      extracted_criteria: sanitizeCriteria(criteriaResult.extracted_criteria),
+    }
 
     return NextResponse.json({
       extracted,

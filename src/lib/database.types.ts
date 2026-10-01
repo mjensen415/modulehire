@@ -518,6 +518,7 @@ export type Database = {
           match_report_profile_id: string | null
           id: string
           raw_text: string
+          raw_text_hash: string | null
           source_type: string
           source_url: string | null
           user_id: string
@@ -538,6 +539,7 @@ export type Database = {
           match_report_profile_id?: string | null
           id?: string
           raw_text: string
+          raw_text_hash?: string | null
           source_type: string
           source_url?: string | null
           user_id: string
@@ -558,6 +560,7 @@ export type Database = {
           match_report_profile_id?: string | null
           id?: string
           raw_text?: string
+          raw_text_hash?: string | null
           source_type?: string
           source_url?: string | null
           user_id?: string

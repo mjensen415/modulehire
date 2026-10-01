@@ -227,6 +227,8 @@ export default function GeneratePage() {
   const [confirmedPhrases, setConfirmedPhrases] = useState<string[]>([])
   const [confirmedThemes, setConfirmedThemes] = useState<string[]>([])
   const [confirmedCriteria, setConfirmedCriteria] = useState<JdCriterion[]>([])
+  const [criteriaLoading, setCriteriaLoading] = useState(false)
+  const criteriaReadyRef = useRef<Promise<JdCriterion[] | null> | null>(null)
   const [matchReportData, setMatchReportData] = useState<MatchReportData | null>(null)
   const [matchReportLoading, setMatchReportLoading] = useState(false)
   const [phraseInput, setPhraseInput] = useState('')
@@ -791,35 +793,124 @@ export default function GeneratePage() {
 
   // ── Step 1: analyze + match ─────────────────────────────────────────────────
 
+  type AnalysisBasics = {
+    jd_id: string
+    extracted_company: string
+    extracted_job_title: string
+    extracted_role_type: string
+    extracted_seniority: string
+    extracted_themes: string[]
+    extracted_phrases: string[]
+  }
+  type AnalysisRun = {
+    basicsPromise: Promise<AnalysisBasics | null>
+    criteriaPromise: Promise<JdCriterion[] | null>
+  }
+  const analysisRunsRef = useRef<Map<string, AnalysisRun>>(new Map())
+
+  // Starts (or reuses, if already in flight/finished for this exact text) the streamed
+  // two-pass JD analysis. Lets handleMatch and the background-start effect share one run.
+  function startAnalysis(rawText: string): AnalysisRun {
+    const key = rawText.trim()
+    const existing = analysisRunsRef.current.get(key)
+    if (existing) return existing
+
+    let resolveBasics!: (v: AnalysisBasics | null) => void
+    let resolveCriteria!: (v: JdCriterion[] | null) => void
+    const basicsPromise = new Promise<AnalysisBasics | null>((res) => { resolveBasics = res })
+    const criteriaPromise = new Promise<JdCriterion[] | null>((res) => { resolveCriteria = res })
+
+    ;(async () => {
+      try {
+        const res = await fetch('/api/analyze-jd', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ raw_text: rawText }),
+        })
+        if (!res.ok || !res.body) { resolveBasics(null); resolveCriteria(null); return }
+
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          let idx: number
+          while ((idx = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, idx)
+            buf = buf.slice(idx + 1)
+            if (!line.trim()) continue
+            const obj = JSON.parse(line)
+            if (obj.type === 'basics') resolveBasics(obj as AnalysisBasics)
+            else if (obj.type === 'criteria') resolveCriteria(obj.extracted_criteria ?? [])
+            else if (obj.type === 'error' && obj.stage === 'basics') resolveBasics(null)
+            else if (obj.type === 'error' && obj.stage === 'criteria') resolveCriteria(null)
+          }
+        }
+      } catch {
+        resolveBasics(null)
+      } finally {
+        // Safety net: a promise only resolves once, so these are no-ops if the stream
+        // already delivered real values — this just guarantees nothing hangs forever.
+        resolveBasics(null)
+        resolveCriteria(null)
+      }
+    })()
+
+    const run: AnalysisRun = { basicsPromise, criteriaPromise }
+    analysisRunsRef.current.set(key, run)
+    return run
+  }
+
   async function handleMatch() {
     if (jdText.trim().length < 50) return
     setStep('analyzing')
     setErrorMessage('')
     try {
-      // Step 1: Analyze JD
-      const analyzeRes = await fetch('/api/analyze-jd', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_text: jdText }),
-      })
-      const analyzeData = await analyzeRes.json()
-      if (!analyzeRes.ok) throw new Error(analyzeData.error ?? 'Analysis failed')
-      setJdData(analyzeData)
+      const run = startAnalysis(jdText)
+      const basics = await run.basicsPromise
+      if (!basics) throw new Error('Analysis failed')
 
-      const phrases = analyzeData.extracted_phrases ?? []
-      const themes = analyzeData.extracted_themes ?? []
-      setConfirmedPhrases(phrases)
-      setConfirmedThemes(themes)
-      setConfirmedCriteria(analyzeData.extracted_criteria ?? [])
+      setJdData({
+        jd_id: basics.jd_id,
+        extracted_company: basics.extracted_company,
+        extracted_job_title: basics.extracted_job_title,
+        extracted_role_type: basics.extracted_role_type,
+        extracted_seniority: basics.extracted_seniority,
+        extracted_themes: basics.extracted_themes,
+        extracted_phrases: basics.extracted_phrases,
+        extracted_criteria: [],
+      })
+      setConfirmedPhrases(basics.extracted_phrases ?? [])
+      setConfirmedThemes(basics.extracted_themes ?? [])
+      setConfirmedCriteria([])
+      setCriteriaLoading(true)
 
       // Let the user confirm/edit what we extracted before it drives matching — a bad
       // extraction should be caught here, not silently propagate into a bad match.
       setStep('reviewThemes')
+
+      criteriaReadyRef.current = run.criteriaPromise.then((criteria) => {
+        setCriteriaLoading(false)
+        if (criteria) setConfirmedCriteria(criteria)
+        return criteria
+      })
     } catch (e) {
       setErrorMessage((e as Error).message)
       setStep('input')
     }
   }
+
+  // Start analysis quietly in the background once the user pauses typing on a substantial
+  // paste — clicking "Find matches" then reuses the in-flight/finished run instead of
+  // starting cold. Nothing is shown until they click; it should just feel fast.
+  useEffect(() => {
+    if (step !== 'input' || inputTab !== 'paste' || jdText.trim().length <= 300) return
+    const timer = setTimeout(() => startAnalysis(jdText), 1200)
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jdText, step, inputTab])
 
   // ── Fast track: auto-pick modules and generate in one step ──────────────────
   async function handleFastTrack() {
@@ -852,10 +943,20 @@ export default function GeneratePage() {
     setConfirmLoading(true)
     setErrorMessage('')
     try {
+      // If criteria are still streaming in, wait for them silently (button shows
+      // "Finishing…") rather than confirming with an incomplete criteria list — read the
+      // resolved value directly since a state update this function awaited on won't be
+      // visible on this stale closure's `confirmedCriteria` binding.
+      let criteriaForSubmit = confirmedCriteria
+      if (criteriaReadyRef.current) {
+        const resolved = await criteriaReadyRef.current
+        if (resolved) criteriaForSubmit = resolved
+      }
+
       await fetch(`/api/job-descriptions/${jdData!.jd_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ extracted_phrases: confirmedPhrases, extracted_themes: confirmedThemes, extracted_criteria: confirmedCriteria }),
+        body: JSON.stringify({ extracted_phrases: confirmedPhrases, extracted_themes: confirmedThemes, extracted_criteria: criteriaForSubmit }),
       })
 
       const matchRes = await fetch('/api/match-modules', {
@@ -876,7 +977,7 @@ export default function GeneratePage() {
         setSkills(skillModules.map(m => m.title))
       }
 
-      if (confirmedCriteria.length > 0) {
+      if (criteriaForSubmit.length > 0) {
         setStep('matchReport')
         setMatchReportLoading(true)
         fetch('/api/match-report', {
@@ -1566,16 +1667,39 @@ export default function GeneratePage() {
                 Here&apos;s what we pulled from <strong style={{ color: 'var(--text)' }}>{jdData.extracted_company ?? 'this role'}</strong>{jdData.extracted_role_type ? ` · ${jdData.extracted_role_type}` : ''}. Remove anything off-target and add anything we missed — this drives your match.
               </div>
 
+              <style>{`
+                @keyframes mh-shimmer { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.7; } }
+                @keyframes mh-row-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+              `}</style>
+
+              {criteriaLoading && confirmedCriteria.length === 0 && (
+                <div>
+                  <div className="form-label" style={{ marginBottom: 8 }}>Weighing what matters most…</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          height: 36, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg3)',
+                          animation: 'mh-shimmer 1.4s ease-in-out infinite', animationDelay: `${i * 80}ms`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {confirmedCriteria.length > 0 && (
                 <div>
                   <div className="form-label" style={{ marginBottom: 8 }}>Criteria ({confirmedCriteria.length})</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {confirmedCriteria.map(c => (
+                    {confirmedCriteria.map((c, i) => (
                       <div
                         key={c.label}
                         style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
                           padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)',
+                          animation: 'mh-row-in 0.3s ease both', animationDelay: `${i * 60}ms`,
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -1688,7 +1812,7 @@ export default function GeneratePage() {
 
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <button type="button" className="btn-primary" onClick={handleConfirm} disabled={confirmLoading}>
-                  {confirmLoading ? 'Finding matches…' : 'Confirm & Find Matches →'}
+                  {confirmLoading ? (criteriaLoading ? 'Finishing…' : 'Finding matches…') : 'Confirm & Find Matches →'}
                 </button>
                 <button type="button" className="btn-ghost" style={{ fontSize: 12 }} onClick={reset} disabled={confirmLoading}>
                   ← Use a different job description
