@@ -228,7 +228,14 @@ export default function ModuleReview() {
   const [loaded, setLoaded] = useState(false)
   const nextTempId = useRef(0)
 
+  const hasLoadedOnceRef = useRef(false)
   useEffect(() => {
+    // Guard against React StrictMode's dev-only double-invoke: this effect reads and
+    // deletes a one-time sessionStorage token, so a second invocation (no raw left)
+    // would otherwise bounce straight back to /upload before the page ever renders.
+    if (hasLoadedOnceRef.current) return
+    hasLoadedOnceRef.current = true
+
     const raw = sessionStorage.getItem('pendingModules')
     if (!raw) { router.replace('/upload'); return }
     sessionStorage.removeItem('pendingModules')

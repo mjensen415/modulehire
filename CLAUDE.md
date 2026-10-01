@@ -162,6 +162,29 @@ than reading React state, since a state update from that promise's `.then` isn't
 stale closure of an in-flight async function. The admin Prompt Lab's JD Parser tab
 (`admin/prompt-lab/jd-parse/route.ts`) mirrors the same two parallel calls non-streaming.
 
+## Resume parsing (outline + parallel per-role, streamed)
+`parseModules()` in `src/lib/parse-modules.ts` runs a `fast`-tier outline pass first (one entry
+per job/role + a `has_extras` flag for standalone skills/projects/awards worth their own modules),
+then — if 2+ roles were found — fires one `quality`-tier extraction call per role **plus** one for
+"everything that isn't a role" in parallel (capped at 6 concurrent via `mapLimit`), instead of one
+giant whole-resume call. Each call shares the same cached prompt prefix (instructions + full resume
+text, `cache: true`) with only a short uncached suffix naming which role to focus on, so the cache
+pays for itself across the batch. 0–1 roles fall back to the original single whole-resume call.
+A role is retried once on a thrown error **or** an empty result (seen in practice: forced tool-use
+occasionally returns nothing for one role in a batch even with real content) before being reported
+failed. `POST /api/parse-resume` streams progress as NDJSON (`outline` → `role_done`/`role_failed`
+per role, extras uses the sentinel index `-1` → `contact` → `done` with the full modules/contact
+payload so `module-review`'s sessionStorage handoff and the first-upload profile-sync modal keep
+working unchanged); pass `?mode=json` for the old single-response shape (used internally by
+`reparse-my-modules`/`admin/reparse-user`, which call `parseModules()` directly and don't touch the
+route at all). `src/components/ResumeBuildProgress.tsx` (used by `/upload` and onboarding) renders
+the live build: header text driven by real events (never a timer), a progress bar, a per-role
+timeline with module-count chips, and a live per-dimension breakdown that fills in as roles finish.
+Forced tool-use is reliable but not airtight on thin/sparse resumes — `insertModulesBatch` drops any
+non-object array element defensively (a bare string spread into an insert becomes numeric-keyed
+columns Postgres rejects) and `extractModulesWithFocus` coerces a non-array `modules` response to
+`[]` rather than letting it crash downstream `.filter`/`.map` calls.
+
 ## JD Match Report
 `POST /api/match-report` (`{ jd_id }`) scores each of a JD's `extracted_criteria` against the
 active profile's modules in one `aiCompleteJson` call (only modules tagged with the criterion's
@@ -180,3 +203,4 @@ report's per-criterion scores into its own ranking — a follow-up, not done in 
 - `parse-modules.ts` uses admin client for job_experiences inserts (user client blocked by RLS)
 - `/api/job-experiences` orders by `start_date DESC` — no `sort_order` column exists
 - `CREATE TABLE IF NOT EXISTS` skips the entire statement if the table exists — add constraints separately, not inline
+- A `useEffect` that reads-then-deletes a one-time token (sessionStorage, etc.) isn't idempotent — React Strict Mode double-invokes effects in dev only, so the second invocation sees it already gone and can misfire (e.g. `module-review`'s redirect-if-missing check bounced back to `/upload` on every single-role/short resume until guarded with a `hasLoadedOnceRef`). Production isn't affected (effects run once there), which is why this kind of bug only shows up in local dev testing.

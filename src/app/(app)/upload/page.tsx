@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import MergeConfirmModal, { type MergeExperience } from '@/components/MergeConfirmModal'
+import ResumeBuildProgress, { type ResumeBuildResult } from '@/components/ResumeBuildProgress'
 
 type Stage = 'idle' | 'uploading' | 'extracting' | 'parsing' | 'done' | 'error' | 'duplicates'
 
@@ -311,6 +312,7 @@ export default function Upload() {
   const [dupPairs, setDupPairs] = useState<DupPair[]>([])
   const [dupResolved, setDupResolved] = useState<Record<string, 'merged' | 'kept'>>({})
   const [mergePair, setMergePair] = useState<DupPair | null>(null)
+  const [buildingResume, setBuildingResume] = useState<{ resumeId: string; rawText: string } | null>(null)
 
   // After a parse, check for duplicate experiences before landing on review.
   async function goToReview() {
@@ -331,7 +333,7 @@ export default function Upload() {
         }
       } catch { /* detection is best-effort — fall through to review */ }
     }
-    goToReview()
+    router.push('/module-review')
   }
   const [dontAskAgain, setDontAskAgain] = useState(false)
   const [profileUpdating, setProfileUpdating] = useState(false)
@@ -339,7 +341,6 @@ export default function Upload() {
   const router = useRouter()
 
   const isParsing = stage !== 'idle' && stage !== 'error'
-  const isProcessing = stage === 'uploading' || stage === 'extracting' || stage === 'parsing'
 
   // Always reset to idle on mount — handles browser Back button restoring cached
   // page state (Next.js App Router). Without this, stage can be 'done' on return,
@@ -357,6 +358,33 @@ export default function Upload() {
     if (!ok) return 'Only PDF and DOCX files are supported'
     if (file.size > 10 * 1024 * 1024) return 'File must be under 10MB'
     return null
+  }
+
+  function handleBuildDone(result: ResumeBuildResult) {
+    setModuleCount(result.module_count)
+    setParsedJobIds(result.job_experience_ids ?? [])
+    sessionStorage.setItem('pendingModules', JSON.stringify({
+      resume_id: result.resume_id,
+      modules: result.modules,
+    }))
+    setBuildingResume(null)
+    setStage('done')
+
+    const contact = result.contact as ContactInfo | null
+    const hasContactFields = contact && Object.values(contact).some(v => v !== null)
+    const skipModal = localStorage.getItem('mh-profile-sync-skip') === 'true'
+    if (!result.profile_updated && hasContactFields && !skipModal) {
+      setPendingContact(contact)
+      setShowProfileModal(true)
+    } else {
+      setTimeout(() => { goToReview() }, 1500)
+    }
+  }
+
+  function handleBuildError(message: string) {
+    setBuildingResume(null)
+    setErrorMessage(message)
+    setStage('error')
   }
 
   async function handleFile(file: File) {
@@ -377,38 +405,8 @@ export default function Upload() {
       const uploadData = await uploadRes.json()
       if (!uploadRes.ok) throw new Error(uploadData.error ?? 'Upload failed')
 
-      setStage('extracting')
-      await new Promise(r => setTimeout(r, 200))
-
       setStage('parsing')
-      const parseRes = await fetch('/api/parse-resume', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resume_id: uploadData.resume_id, raw_text: uploadData.raw_text }),
-      })
-      let parseData: { error?: string; module_count?: number; modules?: unknown[]; profileUpdated?: boolean; contact?: ContactInfo; job_experience_ids?: string[] } = {}
-      try { parseData = await parseRes.json() } catch { /* non-JSON 504 */ }
-      if (!parseRes.ok) {
-        if (parseRes.status === 504) throw new Error('AI parse timed out — model took too long. Try again or paste a shorter resume.')
-        throw new Error(parseData.error ?? `Server error ${parseRes.status}`)
-      }
-
-      setModuleCount(parseData.module_count ?? 0)
-      setParsedJobIds(parseData.job_experience_ids ?? [])
-      sessionStorage.setItem('pendingModules', JSON.stringify({
-        resume_id: uploadData.resume_id,
-        modules: parseData.modules,
-      }))
-      setStage('done')
-
-      const hasContactFields = parseData.contact && Object.values(parseData.contact).some(v => v !== null)
-      const skipModal = localStorage.getItem('mh-profile-sync-skip') === 'true'
-      if (!parseData.profileUpdated && hasContactFields && !skipModal) {
-        setPendingContact(parseData.contact!)
-        setShowProfileModal(true)
-      } else {
-        setTimeout(() => { goToReview() }, 1500)
-      }
+      setBuildingResume({ resumeId: uploadData.resume_id, rawText: uploadData.raw_text })
     } catch (e) {
       setErrorMessage((e as Error).message)
       setStage('error')
@@ -430,38 +428,8 @@ export default function Upload() {
       const uploadData = await uploadRes.json()
       if (!uploadRes.ok) throw new Error(uploadData.error ?? 'Upload failed')
 
-      setStage('extracting')
-      await new Promise(r => setTimeout(r, 200))
-
       setStage('parsing')
-      const parseRes = await fetch('/api/parse-resume', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resume_id: uploadData.resume_id, raw_text: uploadData.raw_text }),
-      })
-      let parseData: { error?: string; module_count?: number; modules?: unknown[]; profileUpdated?: boolean; contact?: ContactInfo; job_experience_ids?: string[] } = {}
-      try { parseData = await parseRes.json() } catch { /* non-JSON 504 */ }
-      if (!parseRes.ok) {
-        if (parseRes.status === 504) throw new Error('AI parse timed out — model took too long. Try again or paste a shorter resume.')
-        throw new Error(parseData.error ?? `Server error ${parseRes.status}`)
-      }
-
-      setModuleCount(parseData.module_count ?? 0)
-      setParsedJobIds(parseData.job_experience_ids ?? [])
-      sessionStorage.setItem('pendingModules', JSON.stringify({
-        resume_id: uploadData.resume_id,
-        modules: parseData.modules,
-      }))
-      setStage('done')
-
-      const hasContactFields = parseData.contact && Object.values(parseData.contact).some(v => v !== null)
-      const skipModal = localStorage.getItem('mh-profile-sync-skip') === 'true'
-      if (!parseData.profileUpdated && hasContactFields && !skipModal) {
-        setPendingContact(parseData.contact!)
-        setShowProfileModal(true)
-      } else {
-        setTimeout(() => { goToReview() }, 1500)
-      }
+      setBuildingResume({ resumeId: uploadData.resume_id, rawText: uploadData.raw_text })
     } catch (e) {
       setErrorMessage((e as Error).message)
       setStage('error')
@@ -584,14 +552,12 @@ export default function Upload() {
             </>
           )}
 
-          {/* Processing state with animation */}
-          {isProcessing && (
+          {/* Uploading state (before we have a resume_id to stream against) */}
+          {stage === 'uploading' && (
             <div className="parsing-state visible">
               <div className="parsing-card">
-                <div className="parsing-title">Processing your resume…</div>
-
+                <div className="parsing-title">Uploading your resume…</div>
                 <ResumeParseAnimation />
-
                 <div style={{ marginTop: 16 }}>
                   {STEPS.map((label, i) => {
                     const s = stepState(stage, i)
@@ -605,12 +571,21 @@ export default function Upload() {
                     )
                   })}
                 </div>
-
                 <div className="progress-bar-wrap">
                   <div className="progress-bar" />
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Parsing state — live, event-driven build view */}
+          {stage === 'parsing' && buildingResume && (
+            <ResumeBuildProgress
+              resumeId={buildingResume.resumeId}
+              rawText={buildingResume.rawText}
+              onDone={handleBuildDone}
+              onError={handleBuildError}
+            />
           )}
 
           {/* Done state */}

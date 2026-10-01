@@ -170,9 +170,9 @@ const EMPTY_CONTACT: ContactInfo = {
 }
 
 // Extract contact info + summary + education from the resume (small, fast call). Only depends
-// on rawText, so the caller starts this concurrently with the (much larger) module-parse call
-// instead of waiting for it to finish first. Best-effort — never throws; falls back to
-// EMPTY_CONTACT so a failure here can't break the surrounding parse.
+// on rawText, so the caller starts this concurrently with the module-parse calls instead of
+// waiting for them to finish first. Best-effort — never throws; falls back to EMPTY_CONTACT so
+// a failure here can't break the surrounding parse.
 async function extractContactInfo(rawText: string): Promise<ContactInfo> {
   try {
     const contactPrompt = `Extract contact information, the candidate's summary section, and the education section from this resume.
@@ -241,6 +241,71 @@ JSON:`
     return EMPTY_CONTACT
   }
 }
+
+// ─── Outline pass ───────────────────────────────────────────────────────────
+
+export type OutlineRole = { index: number; company: string; title: string | null; date_start: string | null; date_end: string | null }
+
+const OUTLINE_SYSTEM_PROMPT = `Identify every distinct job or role in this resume, in the order they appear (most recent first, matching the resume's own order). For each, give its 0-based index, company, title, and dates.
+
+Do NOT include the resume's top-level Summary, Profile, Objective, or About section as a role.
+
+has_extras: true if the resume has non-role content worth extracting as its own modules — standalone skills, side projects, open-source contributions, awards, certifications. False if everything of substance belongs to a specific role.`
+
+const OUTLINE_SCHEMA = {
+  type: 'object',
+  properties: {
+    roles: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          index: { type: 'number' },
+          company: { type: 'string' },
+          title: { type: 'string' },
+          date_start: { type: 'string', description: 'YYYY-MM, or empty string if not stated' },
+          date_end: { type: 'string', description: 'YYYY-MM, "present", or empty string if not stated' },
+        },
+        required: ['index', 'company', 'title', 'date_start', 'date_end'],
+      },
+    },
+    has_extras: { type: 'boolean' },
+  },
+  required: ['roles', 'has_extras'],
+}
+
+async function extractOutline(rawText: string, userId: string): Promise<{ roles: OutlineRole[]; hasExtras: boolean }> {
+  try {
+    const result = await aiCompleteJson<{ roles: Array<Record<string, unknown>>; has_extras: boolean }>(
+      [
+        { role: 'system', content: OUTLINE_SYSTEM_PROMPT },
+        { role: 'user', content: `Resume:\n${rawText}` },
+      ],
+      OUTLINE_SCHEMA,
+      1024,
+      { tier: 'fast', userId, action: 'parse_modules' }
+    )
+    const roles = (result.roles ?? [])
+      .map((r, i): OutlineRole | null => {
+        const company = String(r.company ?? '').trim()
+        if (!company) return null
+        return {
+          index: typeof r.index === 'number' ? r.index : i,
+          company,
+          title: String(r.title ?? '').trim() || null,
+          date_start: normalizeDate(r.date_start),
+          date_end: normalizeDate(r.date_end),
+        }
+      })
+      .filter((r): r is OutlineRole => r !== null)
+    return { roles, hasExtras: !!result.has_extras }
+  } catch (err) {
+    console.error('[parseModules] outline pass failed, falling back to single-call parse:', err)
+    return { roles: [], hasExtras: false }
+  }
+}
+
+// ─── Module extraction (shared by the per-role, extras, and single-call fallback paths) ──
 
 const MODULE_ITEM_SCHEMA = {
   type: 'object',
@@ -315,39 +380,54 @@ vp-community, head-of-community, director-community, senior-manager-community, c
 
 themes: values from the THEMES list above. role_types: values from the ROLE TYPES list above.`
 
-export async function parseModules(
-  supabase: SupabaseClient,
-  userId: string,
-  resumeId: string,
-  rawText: string,
-  profileId: string
-) {
-  // Contact/summary/education extraction only needs rawText, same as the module-parse call
-  // above — start it now so it runs concurrently with module parsing and the DB work that
-  // follows, instead of waiting until both are done sequentially.
-  const contactPromise = extractContactInfo(rawText)
+const EXTRAS_FOCUS_INSTRUCTION = 'Extract modules only from content that is NOT part of a specific role — standalone skills, side projects, open-source contributions, awards, certifications. Do NOT create a module for the Summary/Profile/Objective/About section.'
 
-  // 8192 tokens headroom — a dense 3-page resume can produce a long module list
-  const { modules: rawModulesData } = await aiCompleteJson<{ modules: Record<string, unknown>[] }>(
+function roleFocusInstruction(role: OutlineRole): string {
+  const dates = role.date_start ? ` (${role.date_start} to ${role.date_end ?? 'present'})` : ''
+  return `Extract modules only for this role: #${role.index} — ${role.title ?? 'this role'} at ${role.company}${dates}. Only emit modules whose source_company and source_role_title match this role.`
+}
+
+// Shared extraction call. `focusInstruction` narrows the call to one role (or the "extras"
+// bucket) via an uncached trailing block; the instructions + full resume text stay in a
+// cached leading block so parallel per-role calls reuse the same prompt-cache entry instead
+// of re-billing the whole resume on every call. `focusInstruction: null` is the fallback
+// single-call path — same shape as the original whole-resume extraction.
+async function extractModulesWithFocus(rawText: string, focusInstruction: string | null, userId: string): Promise<Record<string, unknown>[]> {
+  const content: Array<{ text: string; cache?: boolean }> = [
+    { text: `${PARSE_MODULES_SYSTEM_PROMPT}\n\nResume:\n${rawText}`, cache: true },
+  ]
+  if (focusInstruction) content.push({ text: focusInstruction })
+
+  const { modules } = await aiCompleteJson<{ modules: Record<string, unknown>[] }>(
     [
-      { role: 'system', content: PARSE_MODULES_SYSTEM_PROMPT },
-      { role: 'user', content: `Resume:\n${rawText}` },
+      { role: 'system', content: 'You are a resume parsing expert.' },
+      { role: 'user', content },
     ],
     PARSE_MODULES_SCHEMA,
-    8192,
+    focusInstruction ? 2048 : 8192,
     { tier: 'quality', userId, action: 'parse_modules' }
   )
+  // Forced tool-use is reliable but not airtight — on thin/sparse content the model has
+  // returned `modules` as something other than an array (null, a single object). Never
+  // let a malformed response propagate into array methods downstream.
+  return Array.isArray(modules) ? modules : []
+}
 
-  // Safety net: even with a strict prompt, the model occasionally merges multiple
-  // jobs into one module ("CompanyA, CompanyB" / "Role1, Role2"). Expand each into
-  // single-job clones so every row has exactly one source_company AND one
-  // source_role_title, and downstream job_experience upserts produce clean rows.
-  const modulesData: Record<string, unknown>[] = []
-  for (const m of rawModulesData) {
-    modulesData.push(...expandToSingleJobModules(m))
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let next = 0
+  async function worker() {
+    while (next < items.length) {
+      const i = next++
+      results[i] = await fn(items[i], i)
+    }
   }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
+}
 
-  const modulesToInsert = modulesData.map(m => ({
+function sanitizeModule(m: Record<string, unknown>, userId: string, profileId: string, resumeId: string) {
+  return {
     ...m,
     user_id: userId,
     profile_id: profileId,
@@ -364,25 +444,145 @@ export async function parseModules(
     // Normalize to YYYY-MM; "present" / unparseable → null so downstream null-checks work
     date_start: normalizeDate(m.date_start),
     date_end:   normalizeDate(m.date_end),
-  }))
+  }
+}
 
-  const { data: insertedModules, error: dbError } = await supabase
-    .from('modules')
-    .insert(modulesToInsert)
-    .select()
+async function insertModulesBatch(
+  supabase: SupabaseClient,
+  userId: string,
+  profileId: string,
+  resumeId: string,
+  rawModules: Record<string, unknown>[]
+): Promise<Record<string, unknown>[]> {
+  // Defensive: forced tool-use is reliable but not airtight — on a thin resume the model has
+  // occasionally returned a bare string in the modules array instead of an object. Spreading
+  // a string (`{ ...m }`) silently fans it out into numeric-keyed properties ('0', '1', ...),
+  // which Postgres then rejects as unknown columns. Drop anything that isn't a plain object.
+  const validModules = (Array.isArray(rawModules) ? rawModules : [])
+    .filter((m): m is Record<string, unknown> => !!m && typeof m === 'object' && !Array.isArray(m))
 
-  if (dbError) throw dbError
+  const expanded: Record<string, unknown>[] = []
+  for (const m of validModules) expanded.push(...expandToSingleJobModules(m))
+  if (expanded.length === 0) return []
 
-  // Additive: upsert job_experiences and module_job_assignments using admin client (bypasses RLS).
+  const toInsert = expanded.map(m => sanitizeModule(m, userId, profileId, resumeId))
+  const { data, error } = await supabase.from('modules').insert(toInsert).select()
+  if (error) throw error
+  return data ?? []
+}
+
+export type ParseProgressEvent =
+  | { type: 'outline'; roles: OutlineRole[]; extras: boolean }
+  | { type: 'role_done'; index: number; company: string; title: string | null; modules: Array<{ id: string; title: string; type: string; dimensions: string[] }> }
+  | { type: 'role_failed'; index: number; company: string; title: string | null }
+  | { type: 'contact'; name: string | null }
+
+export async function parseModules(
+  supabase: SupabaseClient,
+  userId: string,
+  resumeId: string,
+  rawText: string,
+  profileId: string,
+  onEvent?: (event: ParseProgressEvent) => void
+) {
+  // Contact/summary/education extraction only needs rawText — start it now so it runs
+  // concurrently with module parsing and the DB work that follows.
+  const contactPromise = extractContactInfo(rawText).then(contact => {
+    onEvent?.({ type: 'contact', name: contact.full_name })
+    return contact
+  })
+
+  const { roles: outlineRoles, hasExtras } = await extractOutline(rawText, userId)
+  onEvent?.({ type: 'outline', roles: outlineRoles, extras: hasExtras })
+
+  let allInsertedModules: Record<string, unknown>[] = []
+
+  if (outlineRoles.length <= 1) {
+    // 0 or 1 roles found — not worth splitting into parallel calls; parse the whole
+    // resume in one call like before.
+    const rawModulesData = await extractModulesWithFocus(rawText, null, userId)
+    const inserted = await insertModulesBatch(supabase, userId, profileId, resumeId, rawModulesData)
+    allInsertedModules = inserted
+    if (outlineRoles.length === 1) {
+      const role = outlineRoles[0]
+      onEvent?.({
+        type: 'role_done',
+        index: role.index,
+        company: role.company,
+        title: role.title,
+        modules: inserted.map(m => ({ id: String(m.id), title: String(m.title), type: String(m.type), dimensions: (m.dimensions as string[]) ?? [] })),
+      })
+    }
+  } else {
+    type Task = { kind: 'role'; role: OutlineRole } | { kind: 'extras' }
+    const tasks: Task[] = [...outlineRoles.map((role): Task => ({ kind: 'role', role }))]
+    if (hasExtras) tasks.push({ kind: 'extras' })
+
+    const CONCURRENCY = 6
+    const perTask = await mapLimit(tasks, CONCURRENCY, async (task): Promise<Record<string, unknown>[]> => {
+      const focusInstruction = task.kind === 'role' ? roleFocusInstruction(task.role) : EXTRAS_FOCUS_INSTRUCTION
+      const taskLabel = task.kind === 'role' ? task.role.index : 'extras'
+      let rawModulesData: Record<string, unknown>[] | null = null
+      // Retry on a thrown error OR an empty result — a role with real resume content
+      // coming back with zero modules is a quality failure just as much as an exception
+      // (seen in practice: forced tool-use occasionally returns an empty/malformed array
+      // for one role in a multi-role batch even though its content is clearly there).
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const result = await extractModulesWithFocus(rawText, focusInstruction, userId)
+          if (result.length > 0) { rawModulesData = result; break }
+          console.error(`[parseModules] task ${taskLabel} attempt ${attempt} returned no modules, retrying`)
+        } catch (err) {
+          console.error(`[parseModules] task ${taskLabel} attempt ${attempt} failed:`, err)
+        }
+      }
+      // Extras has no outline entry to attach to, so it's streamed with a sentinel index
+      // (-1) — the client folds its modules into the running total/breakdown without
+      // rendering a timeline card for it.
+      if (rawModulesData === null) {
+        onEvent?.(task.kind === 'role'
+          ? { type: 'role_failed', index: task.role.index, company: task.role.company, title: task.role.title }
+          : { type: 'role_failed', index: -1, company: '', title: null })
+        return []
+      }
+      try {
+        const inserted = await insertModulesBatch(supabase, userId, profileId, resumeId, rawModulesData)
+        onEvent?.(task.kind === 'role'
+          ? {
+              type: 'role_done',
+              index: task.role.index,
+              company: task.role.company,
+              title: task.role.title,
+              modules: inserted.map(m => ({ id: String(m.id), title: String(m.title), type: String(m.type), dimensions: (m.dimensions as string[]) ?? [] })),
+            }
+          : {
+              type: 'role_done',
+              index: -1,
+              company: '',
+              title: null,
+              modules: inserted.map(m => ({ id: String(m.id), title: String(m.title), type: String(m.type), dimensions: (m.dimensions as string[]) ?? [] })),
+            })
+        return inserted
+      } catch (err) {
+        console.error(`[parseModules] insert failed for task ${taskLabel}:`, err)
+        onEvent?.(task.kind === 'role'
+          ? { type: 'role_failed', index: task.role.index, company: task.role.company, title: task.role.title }
+          : { type: 'role_failed', index: -1, company: '', title: null })
+        return []
+      }
+    })
+
+    allInsertedModules = perTask.flat()
+  }
+
+  // Additive: upsert job_experiences and module_job_assignments using admin client (bypasses
+  // RLS). Operates on the already-inserted module rows regardless of which path produced them.
   let jobSyncError: string | undefined
-  // job_experience ids touched by this parse (for post-parse duplicate detection).
   let jobExperienceIds: string[] = []
-  // job_id → joined module content, used by the skill-extraction step below.
   const jobContentMap = new Map<string, string[]>()
   try {
     const admin = getAdminClient()
 
-    // 1. Collect unique (source_company, source_role_title, date_start, date_end) combinations
     const seen = new Set<string>()
     const uniqueExperiences: {
       company: string
@@ -392,10 +592,9 @@ export async function parseModules(
       employment_type: string
     }[] = []
 
-    for (const m of modulesData) {
-      const company    = String(m.source_company    ?? '').trim()
+    for (const m of allInsertedModules) {
+      const company   = String(m.source_company    ?? '').trim()
       const roleTitle  = String(m.source_role_title ?? '').trim()
-      // date_start is now normalized to YYYY-MM or null by normalizeDate()
       const dateStart  = typeof m.date_start === 'string' ? m.date_start : null
       const dateEnd    = typeof m.date_end   === 'string' ? m.date_end   : null
       if (!company) continue
@@ -413,7 +612,6 @@ export async function parseModules(
     }
 
     if (uniqueExperiences.length > 0) {
-      // 2. Insert — skip on conflict so existing rows aren't overwritten
       const { error: jeError } = await admin
         .from('job_experiences')
         .upsert(
@@ -422,7 +620,6 @@ export async function parseModules(
         )
       if (jeError) throw jeError
 
-      // 3. Fetch back rows to get their IDs
       const companies = [...new Set(uniqueExperiences.map(e => e.company))]
       const { data: jobExperiences, error: fetchError } = await admin
         .from('job_experiences')
@@ -431,23 +628,20 @@ export async function parseModules(
         .in('company', companies)
       if (fetchError) throw fetchError
 
-      // 4. Build lookup: "company||title||start_date" → job id
       const jobLookup = new Map<string, string>()
       for (const je of (jobExperiences ?? [])) {
         const k = `${je.company}||${je.title ?? ''}||${je.start_date ?? ''}`
         jobLookup.set(k, je.id)
       }
 
-      // Ids of the experiences this parse produced (new or matched-existing).
       jobExperienceIds = [...new Set(
         uniqueExperiences
           .map(e => jobLookup.get(`${e.company}||${e.title ?? ''}||${e.start_date ?? ''}`))
           .filter((id): id is string => Boolean(id)),
       )]
 
-      // 5. Map each inserted module to its job and collect assignments
       const assignments: { module_id: string; job_id: string }[] = []
-      for (const mod of (insertedModules ?? []) as Record<string, unknown>[]) {
+      for (const mod of allInsertedModules) {
         const company   = String(mod.source_company    ?? '').trim()
         const roleTitle = String(mod.source_role_title ?? '').trim()
         const dateStart = mod.date_start ? `${String(mod.date_start).trim()}-01` : ''
@@ -511,9 +705,9 @@ export async function parseModules(
   }
 
   // Contact/summary/education call was started concurrently at the top of this function —
-  // by now it's almost certainly already resolved, since it's a smaller call that ran
-  // alongside the module-parse call and all the DB work above, not after them.
+  // by now it's almost certainly already resolved, since it ran alongside the module-parse
+  // calls and all the DB work above, not after them.
   const contact = await contactPromise
 
-  return { modules: insertedModules, contact, jobSyncError, jobExperienceIds }
+  return { modules: allInsertedModules, contact, jobSyncError, jobExperienceIds }
 }

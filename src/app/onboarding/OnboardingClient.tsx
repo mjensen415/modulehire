@@ -2,16 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import ResumeBuildProgress, { type ResumeBuildResult } from '@/components/ResumeBuildProgress'
 
 type Step = 1 | 2 | 3 | 4
 type JobPreview = { id: string; company: string; title: string | null; module_count: number }
 
-const PARSE_COPY = [
-  'Reading your resume…',
-  'Finding your work history…',
-  'Building your modules…',
-  'Almost there…',
-]
 const GEN_COPY = [
   'Matching your experience to the role…',
   'Selecting your strongest modules…',
@@ -63,6 +58,7 @@ export default function OnboardingClient({
   const [moduleCount, setModuleCount] = useState(initialModuleCount)
   const [jobs, setJobs] = useState<JobPreview[]>([])
   const [jobsStatus, setJobsStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
+  const [buildingResume, setBuildingResume] = useState<{ resumeId: string; rawText: string } | null>(null)
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
   const [downloadFilename, setDownloadFilename] = useState<string>('Resume.pdf')
   const [atsScore, setAtsScore] = useState<number | null>(null)
@@ -127,23 +123,25 @@ export default function OnboardingClient({
       const uploadData = await uploadRes.json()
       if (!uploadRes.ok) throw new Error(uploadData.error ?? 'Upload failed')
 
-      const parseRes = await fetch('/api/parse-resume', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resume_id: uploadData.resume_id, raw_text: uploadData.raw_text }),
-      })
-      const parseData = await parseRes.json().catch(() => ({}))
-      if (!parseRes.ok || !parseData.module_count) {
-        throw new Error(parseData.error ?? "We couldn't read your resume clearly.")
-      }
-      setModuleCount(parseData.module_count)
-      setParsing(false)
-      setPendingFile(null)
-      setStep(2)
+      setBuildingResume({ resumeId: uploadData.resume_id, rawText: uploadData.raw_text })
     } catch (e) {
       setParsing(false)
       setError((e as Error).message)
     }
+  }
+
+  function handleBuildDone(result: ResumeBuildResult) {
+    setModuleCount(result.module_count)
+    setParsing(false)
+    setBuildingResume(null)
+    setPendingFile(null)
+    setStep(2)
+  }
+
+  function handleBuildError(message: string) {
+    setParsing(false)
+    setBuildingResume(null)
+    setError(message)
   }
 
   async function runGeneration() {
@@ -229,7 +227,24 @@ export default function OnboardingClient({
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   if (parsing) {
-    return <AnimatedCopy lines={PARSE_COPY} />
+    return buildingResume ? (
+      <ResumeBuildProgress
+        resumeId={buildingResume.resumeId}
+        rawText={buildingResume.rawText}
+        onDone={handleBuildDone}
+        onError={handleBuildError}
+      />
+    ) : (
+      <div style={{ textAlign: 'center', padding: '60px 0' }}>
+        <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Uploading your resume…</div>
+        <div style={{
+          margin: '0 auto', width: 40, height: 40, borderRadius: '50%',
+          border: '3px solid var(--border)', borderTopColor: 'var(--teal)',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
   }
   if (generating) {
     return <AnimatedCopy lines={GEN_COPY} />
