@@ -159,9 +159,12 @@ export default function ResumesPage() {
 
                   {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <Link
+                      href={`/resumes/${r.id}`}
+                      style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', textDecoration: 'none' }}
+                    >
                       {r.title}
-                    </div>
+                    </Link>
                     <div style={{ fontSize: 12, color: 'var(--text3)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                       <span>{formatDate(r.created_at)}</span>
                       {r.positioning_variant && <span>Variant {r.positioning_variant}</span>}

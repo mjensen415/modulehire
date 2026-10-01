@@ -136,8 +136,9 @@ export default async function Dashboard() {
       .is('deleted_at', null),
     supabase
       .from('generated_resumes')
-      .select('id, title, created_at, positioning_variant, ats_score', { count: 'exact' })
+      .select('id, title, created_at, positioning_variant, ats_score, job_descriptions (extracted_company, extracted_role_type, extracted_job_title)', { count: 'exact' })
       .eq('user_id', user!.id)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(3),
     supabase
@@ -512,16 +513,24 @@ export default async function Dashboard() {
                     <div className="section-head-title"><IconFiles /> Recent Resumes</div>
                     <Link href="/resumes" className="section-head-action">View all →</Link>
                   </div>
-                  {(typedResumes as Array<{ id: string; title?: string; positioning_variant?: string; created_at: string; ats_score?: number | null }>).map((r) => (
-                    <div className="app-row" key={r.id}>
-                      <div className="app-row-title">{r.title || 'Untitled resume'}</div>
-                      <div className="app-row-co">{r.positioning_variant ?? ''}</div>
-                      <div className="app-row-date">{new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                      {typeof r.ats_score === 'number' && (
-                        <div className="app-badge sent">{r.ats_score}</div>
-                      )}
-                    </div>
-                  ))}
+                  {(typedResumes as Array<{
+                    id: string; title?: string; created_at: string; ats_score?: number | null
+                    job_descriptions?: { extracted_company: string | null; extracted_role_type: string | null; extracted_job_title: string | null } | { extracted_company: string | null; extracted_role_type: string | null; extracted_job_title: string | null }[] | null
+                  }>).map((r) => {
+                    const jd = Array.isArray(r.job_descriptions) ? r.job_descriptions[0] : r.job_descriptions
+                    const jdLabel = jd ? [jd.extracted_company, jd.extracted_job_title || jd.extracted_role_type].filter(Boolean).join(' · ') : ''
+                    return (
+                      <Link href={`/resumes/${r.id}`} className="app-row" key={r.id} style={{ textDecoration: 'none' }}>
+                        <div className="app-row-title">{r.title || 'Untitled resume'}</div>
+                        <div className="app-row-co">{jdLabel}</div>
+                        <div className="app-row-date">{new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                        {typeof r.ats_score === 'number' && (
+                          <div className="app-badge sent">{r.ats_score}</div>
+                        )}
+                        <span style={{ color: 'var(--text3)', fontSize: 12 }}>›</span>
+                      </Link>
+                    )
+                  })}
                 </div>
               )}
             </div>
