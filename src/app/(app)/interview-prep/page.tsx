@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { isProTier } from '@/lib/plan'
+import { analyzeJd, fetchJdFromUrl, looksLikeUrl } from '@/lib/analyze-jd-client'
 
 type JobDescriptionSummary = {
   id: string
@@ -173,13 +174,8 @@ export default function InterviewPrepPage() {
     setSaving(true)
     setError('')
     try {
-      const res = await fetch('/api/analyze-jd', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_text: pasteText.trim() }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Could not save job description')
+      const input = pasteText.trim()
+      const data = await analyzeJd(looksLikeUrl(input) ? await fetchJdFromUrl(input) : input)
 
       const newJd: JobDescriptionSummary = {
         id: data.jd_id,

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ResumeBuildProgress, { type ResumeBuildResult } from '@/components/ResumeBuildProgress'
+import { analyzeJd, fetchJdFromUrl, looksLikeUrl } from '@/lib/analyze-jd-client'
 
 type Step = 1 | 2 | 3 | 4
 type JobPreview = { id: string; company: string; title: string | null; module_count: number }
@@ -148,13 +149,9 @@ export default function OnboardingClient({
     setError(null)
     setGenerating(true)
     try {
-      const analyzeRes = await fetch('/api/analyze-jd', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_text: jdText }),
-      })
-      const analyzeData = await analyzeRes.json()
-      if (!analyzeRes.ok || !analyzeData.jd_id) throw new Error(analyzeData.error ?? 'Could not read job description')
+      // A pasted job-board link gets fetched and turned into text first.
+      const rawJd = looksLikeUrl(jdText) ? await fetchJdFromUrl(jdText) : jdText
+      const analyzeData = await analyzeJd(rawJd)
 
       const matchRes = await fetch('/api/match-modules', {
         method: 'POST',
@@ -366,7 +363,7 @@ export default function OnboardingClient({
         <textarea
           value={jdText}
           onChange={e => setJdText(e.target.value)}
-          placeholder="Paste the full job description here — including the responsibilities and requirements sections for best results."
+          placeholder="Paste the full job description, or a link to the posting. The full text works best — some job sites block links."
           style={{
             width: '100%', minHeight: 240, padding: 14, borderRadius: 8,
             border: '1px solid var(--border)', background: 'var(--surface)',
@@ -381,7 +378,7 @@ export default function OnboardingClient({
           <button
             className="btn-primary"
             onClick={runGeneration}
-            disabled={jdText.trim().length < 50}
+            disabled={!looksLikeUrl(jdText) && jdText.trim().length < 50}
           >
             Generate Resume →
           </button>
