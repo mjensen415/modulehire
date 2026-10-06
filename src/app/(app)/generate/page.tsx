@@ -336,9 +336,9 @@ export default function GeneratePage() {
       .then(r => r!.json())
       .then(data => {
         if (data.error) throw new Error(data.error)
-        setRankedModules(data.ranked ?? [])
-        setUnmatchedModules(data.unmatched ?? [])
-        setSelectedIds((data.ranked ?? []).filter((m: RankedModule) => m.match_score >= 60).map((m: RankedModule) => m.module_id))
+        setRankedModules(data.ranked_modules ?? [])
+        setUnmatchedModules(data.unmatched_modules ?? [])
+        setSelectedIds((data.ranked_modules ?? []).filter((m: RankedModule) => m.match_score >= 60).map((m: RankedModule) => m.module_id))
         setStep('matching')
       })
       .catch(e => {
@@ -356,23 +356,64 @@ export default function GeneratePage() {
       .then(r => r.json())
       .then(({ draft }) => {
         if (!draft) return
-        // Map old step names from before the 3-step redesign, then guard terminal states
-        const stepMap: Record<string, Step> = {
-          confirming: 'matching', selecting: 'matching', aligning: 'matching', building: 'matching', configuring: 'confirm',
-        }
-        const rawStep = draft.step as string
-        const mappedStep: Step = stepMap[rawStep] ?? rawStep as Step
-        const safeStep: Step = mappedStep === 'done' || mappedStep === 'generating' ? 'confirm' : mappedStep
-        // Only show the banner on 'input' step; for deeper steps, restore silently
-        if (safeStep === 'input' || safeStep === 'analyzing') {
-          setHasDraft(true)
-          return // Show banner, don't auto-restore
-        }
-        restoreDraft(draft, safeStep)
+        // Never jump into a saved draft on page load — always land on a fresh JD input
+        // and offer the draft in a banner. (Silently restoring left users stuck on the
+        // Match step with no way to paste a new job description.)
+        setHasDraft(true)
       })
       .catch(() => {}) // silently ignore
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Map a saved draft's step to one we can safely restore into.
+  function draftTargetStep(draft: Record<string, unknown>): Step {
+    const legacy: Record<string, Step> = {
+      confirming: 'matching', selecting: 'matching', aligning: 'matching', building: 'matching', configuring: 'confirm',
+    }
+    const raw = draft.step as string
+    const mapped: Step = legacy[raw] ?? (raw as Step)
+    if (mapped === 'done' || mapped === 'generating') return 'confirm'
+    // These steps need in-memory analysis state that isn't in the draft.
+    if (mapped === 'analyzing' || mapped === 'reviewThemes' || mapped === 'matchReport') {
+      return draft.jd_id ? 'matching' : 'input'
+    }
+    return mapped
+  }
+
+  // One step back in the flow.
+  function goBack() {
+    setErrorMessage('')
+    switch (step) {
+      case 'reviewThemes':
+        // Back to the JD text so it can be edited or replaced.
+        setJdData(null)
+        setStep('input')
+        break
+      case 'matchReport':
+        setStep('reviewThemes')
+        break
+      case 'matching':
+        if (matchReportData) setStep('matchReport')
+        else if (jdData) setStep('reviewThemes')
+        else setStep('input')
+        break
+      case 'assembling':
+        setStep('matching')
+        break
+      case 'confirm':
+        setStep('assembling')
+        break
+      case 'done':
+        setStep('confirm')
+        break
+    }
+  }
+
+  function startNewJd() {
+    const deep = step === 'matching' || step === 'assembling' || step === 'confirm'
+    if (deep && !window.confirm('Start over with a new job description? Your current module picks for this job will be cleared.')) return
+    reset()
+  }
 
   function restoreDraft(draft: Record<string, unknown>, safeStep?: Step) {
     const targetStep: Step = (safeStep ?? (draft.step as Step))
@@ -411,8 +452,8 @@ export default function GeneratePage() {
         .then(r => r.json())
         .then(data => {
           if (!data.error) {
-            setRankedModules(data.ranked ?? [])
-            setUnmatchedModules(data.unmatched ?? [])
+            setRankedModules(data.ranked_modules ?? [])
+            setUnmatchedModules(data.unmatched_modules ?? [])
           }
         })
         .catch(() => {})
@@ -1496,7 +1537,12 @@ export default function GeneratePage() {
           <StepIndicator current={step} />
         </div>
         <div className="top-bar-right">
-          {/* Step nav for matching / assembling / confirm lives in each step's footer bar. */}
+          {(step === 'reviewThemes' || step === 'matchReport' || step === 'matching' || step === 'assembling' || step === 'confirm') && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={goBack}>← Back</button>
+              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={startNewJd}>New job description</button>
+            </div>
+          )}
           {step === 'done' && generatedUrls && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button
@@ -1586,13 +1632,8 @@ export default function GeneratePage() {
                   onClick={() => {
                     fetch('/api/draft-generation').then(r => r.json()).then(({ draft }) => {
                       if (draft) {
-                        const stepMap: Record<string, Step> = {
-                          confirming: 'matching', selecting: 'matching', aligning: 'matching', building: 'matching', configuring: 'confirm',
-                        }
-                        const rawStep = draft.step as string
-                        const mapped: Step = stepMap[rawStep] ?? rawStep as Step
-                        const safeStep: Step = mapped === 'done' || mapped === 'generating' ? 'confirm' : mapped
-                        restoreDraft(draft, safeStep)
+                        setHasDraft(false)
+                        restoreDraft(draft, draftTargetStep(draft))
                       }
                     })
                   }}
@@ -2747,7 +2788,7 @@ export default function GeneratePage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border2)', padding: '12px 22px', flexShrink: 0 }}>
             <span style={{ fontSize: 12, color: 'var(--text3)' }}>{selectedIds.length} module{selectedIds.length === 1 ? '' : 's'} selected</span>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep('input')}>← Back</button>
+              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={goBack}>← Back</button>
               <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('assembling')} disabled={selectedIds.length === 0}>Next: Review →</button>
             </div>
           </div>
