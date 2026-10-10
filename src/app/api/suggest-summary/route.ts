@@ -65,7 +65,7 @@ Required shape:
     const raw = await aiComplete([
       { role: 'user', content: prompt },
       { role: 'assistant', content: '{' },
-    ], 600, { tier: 'quality' })
+    ], 600, { tier: 'quality', action: 'ai_summary', userId: user.id })
 
     // The model continues from after the '{', so reconstruct the full object.
     const full = '{' + raw

@@ -23,14 +23,28 @@ function flattenContent(content: string | ContentBlock[]): string {
   return typeof content === 'string' ? content : content.map(b => b.text).join('')
 }
 
+const HAIKU = 'claude-haiku-4-5-20251001'
+
 /**
- * Resolves an env-configured model id for a tier. 'default' preserves the historical
- * ANTHROPIC_MODEL behavior (Haiku) for callers that don't pass a tier at all.
+ * Haiku first. Every call runs on Haiku unless its `action` is listed in the
+ * SONNET_FEATURES env var (comma-separated, e.g. "generate_resume,match_report",
+ * or "all"). Unset/empty = everything on Haiku. The Sonnet model id comes from
+ * ANTHROPIC_MODEL_QUALITY. `tier: 'quality'` marks calls that are *eligible* for
+ * Sonnet; it no longer gets Sonnet by itself.
  */
-export function resolveModel(tier: ModelTier | 'default' = 'default'): string {
-  if (tier === 'quality') return process.env.ANTHROPIC_MODEL_QUALITY || 'claude-sonnet-5'
-  if (tier === 'fast') return process.env.ANTHROPIC_MODEL_FAST || process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001'
-  return process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001'
+function sonnetFeatures(): Set<string> {
+  return new Set((process.env.SONNET_FEATURES ?? '').split(',').map(s => s.trim()).filter(Boolean))
+}
+
+export function resolveModel(tier: ModelTier | 'default' = 'default', action?: string): string {
+  const haiku = process.env.ANTHROPIC_MODEL_FAST || process.env.ANTHROPIC_MODEL || HAIKU
+  if (tier === 'quality') {
+    const on = sonnetFeatures()
+    if (on.has('all') || (action && on.has(action))) {
+      return process.env.ANTHROPIC_MODEL_QUALITY || 'claude-sonnet-5'
+    }
+  }
+  return haiku
 }
 
 function getAdminClient() {
@@ -94,7 +108,7 @@ export async function aiComplete(messages: Message[], maxTokens = 4096, opts?: A
 
   // Default: Claude API
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const model = opts?.model || resolveModel(opts?.tier ?? 'default')
+  const model = opts?.model || resolveModel(opts?.tier ?? 'default', opts?.action)
   const systemMessage = messages.find(m => m.role === 'system')
   const startedAt = Date.now()
   const res = await client.messages.create({
@@ -143,7 +157,7 @@ export async function aiCompleteJson<T>(
   }
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const model = opts?.model || resolveModel(opts?.tier ?? 'default')
+  const model = opts?.model || resolveModel(opts?.tier ?? 'default', opts?.action)
   const systemMessage = messages.find(m => m.role === 'system')
   const toolName = 'emit_result'
 

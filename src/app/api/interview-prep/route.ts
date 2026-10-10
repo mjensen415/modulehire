@@ -135,7 +135,7 @@ Return ONLY a valid JSON object — no explanation, no markdown, no code fences:
     const raw = await aiComplete(
       [{ role: 'user', content: [{ text: libraryBlock, cache: true }, { text: taskBlock }] }],
       2048,
-      { tier: 'quality' }
+      { tier: 'quality', action: 'ai_interview_prep', userId: user.id }
     )
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
     const jsonStr = cleaned.startsWith('{') ? cleaned : cleaned.slice(cleaned.indexOf('{'))

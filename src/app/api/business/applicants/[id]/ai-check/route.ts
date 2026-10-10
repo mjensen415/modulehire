@@ -53,7 +53,7 @@ ${applicant.raw_text.slice(0, 4000)}
 
 Return only valid JSON, no markdown.`
 
-    const raw = await aiComplete([{ role: 'user', content: prompt }], 1000, { tier: 'quality' })
+    const raw = await aiComplete([{ role: 'user', content: prompt }], 1000, { tier: 'quality', action: 'ai_biz_ai_check', userId: user.id })
 
     let parsed: AiCheckResult
     try {

@@ -77,7 +77,7 @@ ${rawText.slice(0, 8000)}`
     ],
     SCORE_SCHEMA,
     1200,
-    { tier: 'quality' }
+    { tier: 'quality', action: 'ai_biz_score' }
   )
 
   const nameUpdate = !applicantName && parsed.candidate_name?.trim()

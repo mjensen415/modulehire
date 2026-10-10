@@ -50,7 +50,7 @@ ${rawJd}`
       const raw = await aiComplete(
         [{ role: 'user', content: prompt }],
         1500,
-        { tier: 'quality' }
+        { tier: 'quality', action: 'ai_biz_job_posting', userId: user.id }
       )
       // Strip markdown fences if the model added them despite instructions
       const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()

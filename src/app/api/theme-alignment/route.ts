@@ -94,7 +94,7 @@ Output ONLY valid JSON in this exact shape, no markdown:
       const raw = await aiComplete(
         [{ role: 'user', content: [{ text: modulesBlock, cache: true }, { text: taskBlock }] }],
         4096,
-        { tier: 'quality' }
+        { tier: 'quality', action: 'ai_theme_alignment', userId: user.id }
       )
       const stripped = raw.replace(/```json/g, '').replace(/```/g, '')
       const start = stripped.indexOf('{')
