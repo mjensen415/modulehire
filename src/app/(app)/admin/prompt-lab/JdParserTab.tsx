@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { PromptOverridePanel, RawOutputDrawer, RatedCard, RunButton, Spinner, ResultsHeader, SaveFeedbackBar, EmptyState, ModelSelect } from './shared';
 import { DIMENSION_LABELS, type Dimension, type JdCriterion } from '@/lib/dimensions';
+import type { DegreeRequirement } from '@/lib/jd-signal';
 
 const DEFAULT_PROMPT_LABEL = '(loaded from route on first expand)';
 
@@ -14,6 +15,8 @@ type Extracted = {
   extracted_themes?: string[];
   extracted_phrases?: string[];
   extracted_criteria?: JdCriterion[];
+  extracted_fluff?: string[];
+  degree_requirement?: DegreeRequirement | null;
 };
 
 type FieldRating = 'good' | 'bad' | null;
@@ -331,6 +334,12 @@ export default function JdParserTab() {
                         >
                           {c.label}
                         </span>
+                        <span
+                          style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--text3)', flexShrink: 0 }}
+                          title={(c.also_called ?? []).join(' · ') || undefined}
+                        >
+                          {c.mentions ?? 1}×
+                        </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                         <WeightDots weight={c.weight} />
@@ -346,6 +355,26 @@ export default function JdParserTab() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+                Degree
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--text2)', marginBottom: 14 }}>
+                {result.extracted.degree_requirement?.mentioned
+                  ? <>{result.extracted.degree_requirement.level} · {result.extracted.degree_requirement.waivable}{result.extracted.degree_requirement.quote && <> — <em>&ldquo;{result.extracted.degree_requirement.quote}&rdquo;</em></>}</>
+                  : <em>not mentioned</em>}
+              </div>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+                Filler ({(result.extracted.extracted_fluff ?? []).length})
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {(result.extracted.extracted_fluff ?? []).length === 0 && <em style={{ fontSize: 12.5, color: 'var(--text3)' }}>none</em>}
+                {(result.extracted.extracted_fluff ?? []).map((f) => (
+                  <span key={f} className="theme-chip" style={{ textDecoration: 'line-through', color: 'var(--text3)' }}>{f}</span>
+                ))}
               </div>
             </div>
 

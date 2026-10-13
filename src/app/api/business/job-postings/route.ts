@@ -4,6 +4,7 @@ import { requiredString, isUuid } from '@/lib/validate'
 import { aiComplete } from '@/lib/ai'
 import { jsonrepair } from 'jsonrepair'
 import { getOrgRole } from '@/lib/business/org-access'
+import { DEGREE_PROMPT, sanitizeDegree } from '@/lib/jd-signal'
 
 export const maxDuration = 60
 
@@ -38,8 +39,11 @@ export async function POST(req: Request) {
   "extracted_role_type": "one of: vp-community, head-of-community, director-community, senior-manager-community, community-manager, developer-relations, developer-advocacy, developer-community-manager, community-marketing, community-ops, community-enablement, content-strategy, ic-community, software-engineer, product-manager, designer, data-scientist, marketing-manager, sales, operations, finance, hr, other",
   "extracted_themes": ["6 to 12 short skill or competency phrases this role genuinely requires — e.g. 'cross-functional collaboration', 'SQL and data analysis', 'team leadership', 'product strategy'. Extract every distinct competency the JD calls for; do not invent themes not implied by the text."],
   "extracted_seniority": "one of: ic, manager, senior-manager, director, vp, c-suite",
-  "extracted_phrases": ["5 to 10 exact verbatim phrases from the job description that a strong resume should echo to pass ATS screening"]
+  "extracted_phrases": ["5 to 10 exact verbatim phrases from the job description that a strong resume should echo to pass ATS screening"],
+  "degree_requirement": { "mentioned": true | false, "level": "bachelor" | "master" | "phd" | "other" | null, "waivable": "equivalent_experience" | "preferred_only" | "no" | null, "quote": "verbatim degree line" | null }
 }
+
+${DEGREE_PROMPT}
 
 Job Description:
 ${rawJd}`
@@ -66,6 +70,7 @@ ${rawJd}`
           extracted_themes: Array.isArray(extracted.extracted_themes) ? extracted.extracted_themes : [],
           extracted_seniority: extracted.extracted_seniority ?? null,
           extracted_phrases: Array.isArray(extracted.extracted_phrases) ? extracted.extracted_phrases : [],
+          degree_requirement: sanitizeDegree(extracted.degree_requirement),
           updated_at: new Date().toISOString(),
         })
         .eq('id', job.id)
@@ -90,6 +95,7 @@ ${rawJd}`
         extracted_seniority: job_extracted.extracted_seniority,
         extracted_role_type: job_extracted.extracted_role_type,
         extracted_company: job_extracted.extracted_company,
+        degree_requirement: job_extracted.degree_requirement ?? null,
         created_at: job_extracted.created_at,
         extraction_failed: extractionFailed,
       },

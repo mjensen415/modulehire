@@ -28,7 +28,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     const { data: job, error: jobError } = await supabase
       .from('job_postings')
-      .select('title, extracted_company, extracted_themes, extracted_phrases')
+      .select('title, extracted_company, extracted_themes, extracted_phrases, degree_requirement')
       .eq('id', applicant.job_id)
       .single()
     if (jobError || !job) return NextResponse.json({ error: 'Job not found' }, { status: 404 })
@@ -48,6 +48,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       jobCompany: job.extracted_company ?? null,
       themes: job.extracted_themes ?? [],
       phrases: job.extracted_phrases ?? [],
+      degreeRequirement: job.degree_requirement ?? null,
       criteria: criteria ?? [],
       supabase,
     })

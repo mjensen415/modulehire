@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { aiCompleteJson } from '@/lib/ai'
+import { isDegreeWaivable } from '@/lib/jd-signal'
 
 type Criterion = { id: string; label: string; weight: string; description: string | null; criterion_type?: string; min_years?: number | null }
 
@@ -35,6 +36,12 @@ const SCORE_SCHEMA = {
   required: ['candidate_name', 'parsed_headline', 'overall_score', 'has_dealbreaker', 'criteria_scores'],
 }
 
+const EDUCATION_RE = /\b(degree|bachelor'?s?|master'?s|ph\.?d|mba|diploma|education)\b/i
+
+function isEducationCriterion(c: Criterion): boolean {
+  return EDUCATION_RE.test(`${c.label} ${c.description ?? ''}`)
+}
+
 export async function scoreApplicant(params: {
   applicantId: string
   applicantName: string | null
@@ -43,17 +50,22 @@ export async function scoreApplicant(params: {
   jobCompany: string | null
   themes: string[]
   phrases: string[]
+  /** job_postings.degree_requirement — when waivable, education never counts as a dealbreaker. */
+  degreeRequirement?: unknown
   criteria: Criterion[]
   supabase: SupabaseClient
 }): Promise<void> {
-  const { applicantId, applicantName, rawText, jobTitle, jobCompany, themes, phrases, criteria, supabase } = params
+  const { applicantId, applicantName, rawText, jobTitle, jobCompany, themes, phrases, degreeRequirement, criteria, supabase } = params
+  const degreeWaivable = isDegreeWaivable(degreeRequirement)
+  const educationCriterionIds = new Set(criteria.filter(isEducationCriterion).map(c => c.id))
 
   const systemPrompt = `You are evaluating a job applicant's resume against specific hiring criteria.
 
 SCORING RULES:
 - For EXPERIENCE criteria: estimate how many years the candidate has in this area. score = min(actual_years / min_years, 1) * 100 (capped at 100). met: true if actual_years >= min_years (or no minimum set). met: false if clearly below threshold.
 - For SKILL criteria: score = confidence the skill is present or demonstrated (0-100). met: true if clearly present, false if absent.
-- Reasons are shown to the user, so evidence should quote exact resume text supporting the score.`
+- Reasons are shown to the user, so evidence should quote exact resume text supporting the score.${degreeWaivable ? `
+- DEGREE IS WAIVABLE: this posting accepts equivalent experience in place of a degree (or lists the degree as preferred only). For any education/degree criterion, score it as experience-substitutable: a candidate without the degree but with comparable relevant experience should score well and be met: true. Never treat an education/degree criterion as a dealbreaker, and never cap the overall score because of one.` : ''}`
 
   const userPrompt = `JOB: ${jobTitle}${jobCompany ? ` at ${jobCompany}` : ''}
 KEY THEMES: ${themes.join(', ')}
@@ -79,6 +91,18 @@ ${rawText.slice(0, 8000)}`
     1200,
     { tier: 'quality', action: 'ai_biz_score' }
   )
+
+  // Enforce the waivable-degree rule server-side too: a failed education criterion alone can't
+  // trip the dealbreaker flag.
+  if (degreeWaivable && parsed.has_dealbreaker) {
+    const failedDealbreakers = criteria.filter(c =>
+      c.weight === 'dealbreaker' &&
+      (parsed.criteria_scores ?? []).some(cs => cs.criterion_id === c.id && cs.met === false)
+    )
+    if (failedDealbreakers.length > 0 && failedDealbreakers.every(c => educationCriterionIds.has(c.id))) {
+      parsed.has_dealbreaker = false
+    }
+  }
 
   const nameUpdate = !applicantName && parsed.candidate_name?.trim()
     ? { name: parsed.candidate_name.trim().slice(0, 200) }

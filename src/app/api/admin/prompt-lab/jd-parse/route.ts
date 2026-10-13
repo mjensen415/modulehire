@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { aiCompleteJson, resolveModel } from '@/lib/ai'
 import { requireAdmin } from '@/lib/admin-guard'
 import { DIMENSIONS, sanitizeCriteria } from '@/lib/dimensions'
+import { FLUFF_PROMPT, DEGREE_PROMPT, FLUFF_SCHEMA_PROP, DEGREE_SCHEMA_PROP, CRITERIA_REPETITION_PROMPT, CRITERIA_REPETITION_SCHEMA_PROPS, sanitizeFluff, sanitizeDegree } from '@/lib/jd-signal'
 
 export const maxDuration = 120
 
@@ -35,7 +36,11 @@ whether the role manages people or budget — not from words like "senior" or "m
 requirements. A job requiring 2-4 years with no direct reports is "ic".
 
 extracted_phrases: 5-10 exact verbatim phrases from the job description that a resume should echo
-to pass ATS.`
+to pass ATS.
+
+${FLUFF_PROMPT}
+
+${DEGREE_PROMPT}`
 
 export const DEFAULT_CRITERIA_PROMPT = `Extract typed, weighted hiring criteria from a job description.
 
@@ -43,7 +48,9 @@ extracted_criteria: 5-9 typed, weighted requirements (dimensions: ${DIMENSIONS.j
 Include exactly one "role" criterion and exactly one "seniority" criterion; spread the rest across
 the other four dimensions based on what this specific JD actually emphasizes — do not force a
 criterion for a dimension the JD barely touches. weight 5 = clearly a must-have, stated repeatedly
-or up front; weight 1 = nice-to-have. Order the array by weight descending.`
+or up front; weight 1 = nice-to-have. Order the array by weight descending.
+
+${CRITERIA_REPETITION_PROMPT}`
 
 const BASICS_SCHEMA = {
   type: 'object',
@@ -54,8 +61,10 @@ const BASICS_SCHEMA = {
     extracted_themes: { type: 'array', items: { type: 'string' } },
     extracted_seniority: { type: 'string', enum: ['ic', 'manager', 'senior-manager', 'director', 'vp', 'c-suite'] },
     extracted_phrases: { type: 'array', items: { type: 'string' } },
+    extracted_fluff: FLUFF_SCHEMA_PROP,
+    degree_requirement: DEGREE_SCHEMA_PROP,
   },
-  required: ['extracted_company', 'extracted_job_title', 'extracted_role_type', 'extracted_themes', 'extracted_seniority', 'extracted_phrases'],
+  required: ['extracted_company', 'extracted_job_title', 'extracted_role_type', 'extracted_themes', 'extracted_seniority', 'extracted_phrases', 'extracted_fluff', 'degree_requirement'],
 }
 
 const CRITERIA_SCHEMA = {
@@ -70,8 +79,9 @@ const CRITERIA_SCHEMA = {
           dimension: { type: 'string', enum: DIMENSIONS as unknown as string[] },
           weight: { type: 'number', description: '1-5' },
           description: { type: 'string', description: 'One sentence: what the JD actually asks for, in plain English' },
+          ...CRITERIA_REPETITION_SCHEMA_PROPS,
         },
-        required: ['label', 'dimension', 'weight', 'description'],
+        required: ['label', 'dimension', 'weight', 'description', 'mentions', 'also_called'],
       },
     },
   },
@@ -105,7 +115,7 @@ export async function POST(req: Request) {
           { role: 'user', content: `Job Description:\n${raw_text}` },
         ],
         BASICS_SCHEMA,
-        1024,
+        1800,
         { model: typeof model === 'string' ? model : undefined, tier: 'fast' }
       ),
       aiCompleteJson<{ extracted_criteria: unknown }>(
@@ -114,13 +124,15 @@ export async function POST(req: Request) {
           { role: 'user', content: `Job Description:\n${raw_text}` },
         ],
         CRITERIA_SCHEMA,
-        1536,
+        2400,
         { model: typeof model === 'string' ? model : undefined, tier: 'quality' }
       ),
     ])
 
     const extracted = {
       ...basicsResult,
+      extracted_fluff: sanitizeFluff(basicsResult.extracted_fluff),
+      degree_requirement: sanitizeDegree(basicsResult.degree_requirement),
       extracted_criteria: sanitizeCriteria(criteriaResult.extracted_criteria),
     }
 
