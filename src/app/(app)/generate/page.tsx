@@ -5,6 +5,10 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import ScoreGauge from '@/components/ScoreGauge'
 import { isDimension, DIMENSION_LABELS, type JdCriterion } from '@/lib/dimensions'
+import type { DegreeRequirement } from '@/lib/jd-signal'
+import ApplicationSignalChips from '@/components/ApplicationSignalChips'
+import OutreachSheet from '@/components/OutreachSheet'
+import { parsePostingAge, type ApplicationSource, type PostingAge } from '@/lib/tracker'
 import MatchReport, { type MatchReportData } from '@/components/MatchReport'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -28,6 +32,8 @@ type JDData = {
   extracted_phrases: string[]
   extracted_seniority: string | null
   extracted_criteria?: JdCriterion[]
+  extracted_fluff?: string[]
+  degree_requirement?: DegreeRequirement | null
 }
 
 type RankedModule = {
@@ -250,6 +256,16 @@ export default function GeneratePage() {
   const [confirmedThemes, setConfirmedThemes] = useState<string[]>([])
   const [confirmedCriteria, setConfirmedCriteria] = useState<JdCriterion[]>([])
   const [criteriaLoading, setCriteriaLoading] = useState(false)
+  const [expandedCriterion, setExpandedCriterion] = useState<string | null>(null)
+  // "Add to tracker" card on the done step
+  const [trackerSource, setTrackerSource] = useState<ApplicationSource | null>(null)
+  const [trackerAge, setTrackerAge] = useState<PostingAge | null>(null)
+  const [trackerAgeDetected, setTrackerAgeDetected] = useState(false)
+  const [trackerSaving, setTrackerSaving] = useState(false)
+  const [trackerAddedJdId, setTrackerAddedJdId] = useState<string | null>(null)
+  const [trackerError, setTrackerError] = useState('')
+  const [outreachOpen, setOutreachOpen] = useState(false)
+  const [showFluff, setShowFluff] = useState(false)
   const [missingTitleInput, setMissingTitleInput] = useState('')
   const [missingCompanyInput, setMissingCompanyInput] = useState('')
   const criteriaReadyRef = useRef<Promise<JdCriterion[] | null> | null>(null)
@@ -866,6 +882,8 @@ export default function GeneratePage() {
     extracted_seniority: string
     extracted_themes: string[]
     extracted_phrases: string[]
+    extracted_fluff?: string[]
+    degree_requirement?: DegreeRequirement | null
   }
   type AnalysisRun = {
     basicsPromise: Promise<AnalysisBasics | null>
@@ -946,7 +964,11 @@ export default function GeneratePage() {
         extracted_themes: basics.extracted_themes,
         extracted_phrases: basics.extracted_phrases,
         extracted_criteria: [],
+        extracted_fluff: basics.extracted_fluff ?? [],
+        degree_requirement: basics.degree_requirement ?? null,
       })
+      setShowFluff(false)
+      setExpandedCriterion(null)
       setConfirmedPhrases(basics.extracted_phrases ?? [])
       setConfirmedThemes(basics.extracted_themes ?? [])
       setConfirmedCriteria([])
@@ -1466,6 +1488,12 @@ export default function GeneratePage() {
         throw new Error(data.error ?? 'Generation failed')
       }
       setGeneratedUrls({ docx_url: data.docx_url, pdf_url: data.pdf_url, docx_filename: data.docx_filename ?? 'Resume.docx' })
+      if (trackerAddedJdId !== jdData?.jd_id) {
+        const detectedAge = parsePostingAge(jdText)
+        setTrackerAge(detectedAge)
+        setTrackerAgeDetected(!!detectedAge)
+        setTrackerError('')
+      }
       setResumeHtml(data.resume_html ?? null)
       setCoverLetterText(data.cover_letter_text ?? null)
       setCoverLetterUrl(data.cover_letter_url ?? null)
@@ -1478,6 +1506,37 @@ export default function GeneratePage() {
     } catch (e) {
       setErrorMessage((e as Error).message)
       setStep('confirm')
+    }
+  }
+
+  async function addToTracker(status: 'applied' | 'saved') {
+    if (!jdData?.jd_id || trackerSaving) return
+    setTrackerSaving(true)
+    setTrackerError('')
+    try {
+      const now = new Date()
+      const res = await fetch('/api/job-tracker', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: jdData.extracted_company || 'Unknown company',
+          title: jdData.extracted_job_title || 'Untitled role',
+          job_description_id: jdData.jd_id,
+          status,
+          applied_at: status === 'applied'
+            ? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+            : null,
+          source: trackerSource,
+          posting_age: trackerAge,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not add to tracker')
+      setTrackerAddedJdId(jdData.jd_id)
+    } catch (e) {
+      setTrackerError((e as Error).message)
+    } finally {
+      setTrackerSaving(false)
     }
   }
 
@@ -1799,11 +1858,11 @@ export default function GeneratePage() {
                       <div
                         key={c.label}
                         style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
                           padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)',
                           animation: 'mh-row-in 0.3s ease both', animationDelay: `${i * 60}ms`,
                         }}
                       >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                           <span
                             style={{
@@ -1819,6 +1878,20 @@ export default function GeneratePage() {
                           >
                             {c.label}
                           </span>
+                          {(c.mentions ?? 1) >= 2 && (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedCriterion(prev => prev === c.label ? null : c.label)}
+                              title={(c.also_called ?? []).length ? `Also called: ${(c.also_called ?? []).join(' · ')}` : undefined}
+                              aria-expanded={expandedCriterion === c.label}
+                              style={{
+                                background: 'none', border: 'none', padding: 0, cursor: (c.also_called ?? []).length ? 'pointer' : 'default',
+                                fontSize: 11.5, color: 'var(--text3)', flexShrink: 0, whiteSpace: 'nowrap',
+                              }}
+                            >
+                              mentioned {c.mentions}×
+                            </button>
+                          )}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                           <span style={{ fontFamily: 'var(--mono)', fontSize: 13, letterSpacing: 1 }}>
@@ -1843,10 +1916,65 @@ export default function GeneratePage() {
                           >×</button>
                         </div>
                       </div>
+                      {expandedCriterion === c.label && (c.also_called ?? []).length > 0 && (
+                        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>
+                          Also called: {(c.also_called ?? []).map(p => `“${p}”`).join(' · ')}
+                        </div>
+                      )}
+                      </div>
                     ))}
                   </div>
                 </div>
               )}
+
+              {(jdData.extracted_fluff ?? []).length > 0 && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowFluff(v => !v)}
+                    aria-expanded={showFluff}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: 'var(--text3)' }}
+                  >
+                    We set aside {(jdData.extracted_fluff ?? []).length} {(jdData.extracted_fluff ?? []).length === 1 ? 'line' : 'lines'} of filler {showFluff ? '↓' : '→'}
+                  </button>
+                  {showFluff && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>
+                        These can&apos;t really be screened for, so we don&apos;t match against them.
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {(jdData.extracted_fluff ?? []).map(f => (
+                          <span key={f} className="theme-chip" style={{ textDecoration: 'line-through', color: 'var(--text3)', opacity: 0.8 }}>{f}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {jdData.degree_requirement?.mentioned && (() => {
+                const d = jdData.degree_requirement
+                const waived = d.waivable === 'equivalent_experience' || d.waivable === 'preferred_only'
+                const levelLabel = d.level === 'bachelor' ? "bachelor's" : d.level === 'master' ? "master's" : d.level === 'phd' ? 'PhD' : ''
+                const text = d.waivable === 'equivalent_experience'
+                  ? 'Degree listed, but they accept equivalent experience.'
+                  : d.waivable === 'preferred_only'
+                    ? 'Degree is preferred, not required.'
+                    : `This posting asks for a ${levelLabel ? `${levelLabel} ` : ''}degree.`
+                return (
+                  <div
+                    style={{
+                      border: `1px solid ${waived ? 'var(--teal-glow, var(--teal))' : 'var(--border)'}`,
+                      background: waived ? 'var(--teal-dim)' : 'var(--bg3)',
+                      borderRadius: 10, padding: '10px 14px', fontSize: 13,
+                      color: waived ? 'var(--teal)' : 'var(--text2)',
+                    }}
+                    title={d.quote ?? undefined}
+                  >
+                    {text}
+                  </div>
+                )
+              })()}
 
               <div>
                 <div className="form-label" style={{ marginBottom: 8 }}>Themes ({confirmedThemes.length})</div>
@@ -1950,6 +2078,13 @@ export default function GeneratePage() {
                 }}
                 variant="full"
                 loading={matchReportLoading}
+                onDraftOutreach={() => setOutreachOpen(true)}
+              />
+              <OutreachSheet
+                open={outreachOpen}
+                onClose={() => setOutreachOpen(false)}
+                jdId={jdData.jd_id}
+                roleLabel={[jdData.extracted_job_title || 'Untitled role', jdData.extracted_company].filter(Boolean).join(' · ')}
               />
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <button type="button" className="btn-primary" onClick={() => setStep('input')}>
@@ -3635,6 +3770,37 @@ export default function GeneratePage() {
                 <div style={{ fontSize: 13, padding: '10px 14px', borderRadius: 8, border: '1px solid var(--teal-glow)', background: 'var(--teal-dim)', color: 'var(--teal)', marginBottom: 12 }}>
                   ✓ Resume saved to your library. <a href="/resumes" style={{ color: 'var(--teal)' }}>View in My Resumes →</a>
                 </div>
+
+                {/* Add to tracker */}
+                {jdData?.jd_id && (
+                  <div style={{ padding: '14px 16px', borderRadius: 10, border: '1px solid var(--border2)', background: 'var(--surface)', marginBottom: 12 }}>
+                    {trackerAddedJdId === jdData.jd_id ? (
+                      <div style={{ fontSize: 13, color: 'var(--teal)' }}>
+                        ✓ Added to your tracker. <Link href="/job-tracker" style={{ color: 'var(--teal)' }}>Open tracker →</Link>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)', marginBottom: 10 }}>Add to tracker</div>
+                        <ApplicationSignalChips
+                          source={trackerSource}
+                          postingAge={trackerAge}
+                          postingAgeDetected={trackerAgeDetected}
+                          onSourceChange={setTrackerSource}
+                          onPostingAgeChange={(v) => { setTrackerAge(v); setTrackerAgeDetected(false) }}
+                        />
+                        {trackerError && <div style={{ fontSize: 12, color: 'var(--rose)', marginTop: 8 }}>{trackerError}</div>}
+                        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                          <button className="btn-primary" style={{ fontSize: 12.5 }} disabled={trackerSaving} onClick={() => addToTracker('applied')}>
+                            {trackerSaving ? 'Adding…' : 'I applied'}
+                          </button>
+                          <button className="btn-ghost" style={{ fontSize: 12.5 }} disabled={trackerSaving} onClick={() => addToTracker('saved')}>
+                            Save for later
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* Interview prep CTA */}
                 {jdData?.jd_id && (

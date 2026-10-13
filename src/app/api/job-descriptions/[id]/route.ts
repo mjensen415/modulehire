@@ -14,7 +14,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
 
     const { data, error } = await supabase
       .from('job_descriptions')
-      .select('id, raw_text, extracted_company, extracted_role_type, extracted_job_title, extracted_themes, extracted_phrases, extracted_seniority, extracted_criteria')
+      .select('id, raw_text, extracted_company, extracted_role_type, extracted_job_title, extracted_themes, extracted_phrases, extracted_seniority, extracted_criteria, extracted_fluff, degree_requirement')
       .eq('id', id)
       .eq('user_id', user.id)
       .single()
@@ -31,6 +31,8 @@ export async function GET(_req: Request, { params }: RouteContext) {
         extracted_phrases: data.extracted_phrases ?? [],
         extracted_seniority: data.extracted_seniority,
         extracted_criteria: data.extracted_criteria ?? [],
+        extracted_fluff: data.extracted_fluff ?? [],
+        degree_requirement: data.degree_requirement ?? null,
       },
       jd_text: data.raw_text ?? '',
     })

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import MatchReport, { type MatchReportData } from '@/components/MatchReport'
+import OutreachSheet from '@/components/OutreachSheet'
 
 export default function MatchReportClient({
   jdId,
@@ -17,6 +18,7 @@ export default function MatchReportClient({
   const [report, setReport] = useState<MatchReportData | null>(initialReport)
   const [loading, setLoading] = useState(!initialReport)
   const [error, setError] = useState('')
+  const [outreachOpen, setOutreachOpen] = useState(false)
 
   useEffect(() => {
     if (initialReport) return
@@ -45,12 +47,21 @@ export default function MatchReportClient({
   }
 
   return (
-    <MatchReport
-      report={report}
-      jd={jd}
-      variant="full"
-      loading={loading}
-      onBuildResume={() => router.push(`/generate?jd_id=${jdId}`)}
-    />
+    <>
+      <MatchReport
+        report={report}
+        jd={jd}
+        variant="full"
+        loading={loading}
+        onBuildResume={() => router.push(`/generate?jd_id=${jdId}`)}
+        onDraftOutreach={() => setOutreachOpen(true)}
+      />
+      <OutreachSheet
+        open={outreachOpen}
+        onClose={() => setOutreachOpen(false)}
+        jdId={jdId}
+        roleLabel={`${jd.title}${jd.company ? ` · ${jd.company}` : ''}`}
+      />
+    </>
   )
 }

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import ScoreGauge from '@/components/ScoreGauge'
+import { OutreachButton } from '@/components/OutreachSheet'
 
 export default async function ResumeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -104,6 +105,12 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
             {docxUrl && <a className="btn-ghost" href={docxUrl} download>Download Word</a>}
             {hasReport && jd && <Link className="btn-ghost" href={`/matches/${jd.id}`}>Open match report</Link>}
             {resume.job_description_id && <Link className="btn-ghost" href={`/generate?jd_id=${resume.job_description_id}`}>Make another version</Link>}
+            {resume.job_description_id && (
+              <OutreachButton
+                jdId={resume.job_description_id}
+                roleLabel={[jdTitle, jd?.extracted_company].filter(Boolean).join(' · ') || undefined}
+              />
+            )}
           </div>
 
           {!pdfUrl && !docxUrl && resume.job_description_id && !filesMissing && (

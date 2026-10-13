@@ -4,8 +4,14 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { isProTier } from '@/lib/plan'
+import ApplicationSignalChips from '@/components/ApplicationSignalChips'
+import OutreachSheet from '@/components/OutreachSheet'
+import {
+  applicationNudge, computePatterns, parsePostingAge, responseTypeForStatus, RESPONSE_STATUSES,
+  type ApplicationSource, type PostingAge, type PatternRow,
+} from '@/lib/tracker'
 
-type Status = 'saved' | 'applied' | 'screening' | 'interviewing' | 'offered' | 'rejected' | 'withdrawn'
+type Status = 'saved' | 'applied' | 'screening' | 'interviewing' | 'offered' | 'rejected' | 'withdrawn' | 'no_response'
 
 type JobApplication = {
   id: string
@@ -20,6 +26,10 @@ type JobApplication = {
   created_at: string
   updated_at: string
   match_score: number | null
+  source: ApplicationSource | null
+  posting_age: PostingAge | null
+  first_response_at: string | null
+  response_type: string | null
 }
 
 function ScoreBadge({ score }: { score: number | null }) {
@@ -43,12 +53,13 @@ const STATUS_CONFIG: Record<Status, { label: string; color: string; bg: string }
   offered:       { label: 'Offered',       color: 'var(--green)',  bg: 'var(--green-dim)' },
   rejected:      { label: 'Rejected',      color: 'var(--rose)',   bg: 'oklch(0.4 0.18 10 / 0.12)' },
   withdrawn:     { label: 'Withdrawn',     color: 'var(--text3)',  bg: 'var(--bg3)' },
+  no_response:   { label: 'No response',   color: 'var(--text3)',  bg: 'var(--bg3)' },
 }
 
 const STATUSES = Object.keys(STATUS_CONFIG) as Status[]
 
 const BOARD_STATUSES: Status[] = ['saved', 'applied', 'screening', 'interviewing', 'offered']
-const ARCHIVED_STATUSES: Status[] = ['rejected', 'withdrawn']
+const ARCHIVED_STATUSES: Status[] = ['rejected', 'withdrawn', 'no_response']
 const NEXT_STATUS: Partial<Record<Status, Status>> = {
   saved: 'applied',
   applied: 'screening',
@@ -70,9 +81,71 @@ type FormState = {
   status: Status
   appliedAt: string
   notes: string
+  source: ApplicationSource | null
+  postingAge: PostingAge | null
+  /** postingAge came from "Posted N days ago" in the JD text — keep re-detecting until the user picks. */
+  postingAgeDetected: boolean
+  firstResponseAt: string
+  rejectKind: 'auto_reject' | 'human_reject'
 }
 
-const EMPTY_FORM: FormState = { company: '', title: '', url: '', jdText: '', status: 'saved', appliedAt: '', notes: '' }
+const todayStr = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const EMPTY_FORM: FormState = {
+  company: '', title: '', url: '', jdText: '', status: 'saved', appliedAt: '', notes: '',
+  source: null, postingAge: null, postingAgeDetected: false, firstResponseAt: '', rejectKind: 'auto_reject',
+}
+
+// The "When did you first hear back?" question is asked once: when an application that was
+// waiting (applied, no response yet) moves to a status that means they heard back.
+function needsResponseDate(from: Pick<JobApplication, 'status' | 'first_response_at'> | null, to: Status) {
+  return !!from && from.status === 'applied' && !from.first_response_at && (RESPONSE_STATUSES as readonly string[]).includes(to)
+}
+
+type ResponsePrompt = { app: JobApplication; status: Status; date: string; rejectKind: 'auto_reject' | 'human_reject' }
+
+function RejectKindChips({ value, onChange }: { value: 'auto_reject' | 'human_reject'; onChange: (v: 'auto_reject' | 'human_reject') => void }) {
+  return (
+    <div style={{ display: 'flex', gap: 6 }}>
+      {([['auto_reject', 'Automated email'], ['human_reject', 'From a person']] as const).map(([v, label]) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => onChange(v)}
+          aria-pressed={value === v}
+          style={{
+            fontSize: 11.5, padding: '4px 10px', borderRadius: 999, cursor: 'pointer', fontFamily: 'var(--font)',
+            border: `1px solid ${value === v ? 'var(--teal)' : 'var(--border2)'}`,
+            background: value === v ? 'var(--teal-dim)' : 'transparent',
+            color: value === v ? 'var(--teal)' : 'var(--text2)',
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function PatternTable({ title, rows }: { title: string; rows: PatternRow[] }) {
+  if (rows.length === 0) return null
+  return (
+    <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>{title}</div>
+      {rows.map(r => (
+        <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12.5, padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
+          <span style={{ color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
+          <span style={{ color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 11.5, flexShrink: 0 }}>
+            {Math.round((r.replies / r.total) * 100)}% <span style={{ color: 'var(--text3)' }}>({r.replies} of {r.total})</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function IconPencil() {
   return (
@@ -132,6 +205,8 @@ export default function JobTrackerPage() {
   const [formError, setFormError] = useState('')
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [responsePrompt, setResponsePrompt] = useState<ResponsePrompt | null>(null)
+  const [outreach, setOutreach] = useState<{ app: JobApplication; purpose: 'informational' | 'follow_up' } | null>(null)
   const [proGateOpen, setProGateOpen] = useState(false)
 
   const [view, setView] = useState<'board' | 'list'>('board')
@@ -175,6 +250,11 @@ export default function JobTrackerPage() {
       status: app.status,
       appliedAt: app.applied_at ? app.applied_at.slice(0, 10) : '',
       notes: app.notes ?? '',
+      source: app.source ?? null,
+      postingAge: app.posting_age ?? null,
+      postingAgeDetected: false,
+      firstResponseAt: todayStr(),
+      rejectKind: 'auto_reject',
     })
     setJdOpen(!!app.jd_text)
     setFormError('')
@@ -197,6 +277,15 @@ export default function JobTrackerPage() {
         status: form.status,
         applied_at: form.appliedAt || null,
         notes: form.notes.trim() || null,
+        source: form.source,
+        posting_age: form.postingAge,
+      }
+      const editingApp = editingId ? applications.find(a => a.id === editingId) ?? null : null
+      if (needsResponseDate(editingApp, form.status)) {
+        Object.assign(payload, {
+          first_response_at: form.firstResponseAt || todayStr(),
+          response_type: responseTypeForStatus(form.status, form.rejectKind),
+        })
       }
       const res = editingId
         ? await fetch(`/api/job-tracker/${editingId}`, {
@@ -232,10 +321,18 @@ export default function JobTrackerPage() {
     }
   }
 
-  async function moveStatus(app: JobApplication, status: Status) {
+  function requestMove(app: JobApplication, status: Status) {
+    if (needsResponseDate(app, status)) {
+      setResponsePrompt({ app, status, date: todayStr(), rejectKind: 'auto_reject' })
+      return
+    }
+    moveStatus(app, status)
+  }
+
+  async function moveStatus(app: JobApplication, status: Status, extra: Record<string, unknown> = {}) {
     setApplications((apps) => apps.map((a) => (a.id === app.id ? { ...a, status } : a)))
     try {
-      const payload: Record<string, unknown> = { status }
+      const payload: Record<string, unknown> = { status, ...extra }
       if (status === 'applied' && !app.applied_at) {
         payload.applied_at = new Date().toISOString().slice(0, 10)
       }
@@ -339,6 +436,25 @@ export default function JobTrackerPage() {
               ))}
             </div>
 
+            {(() => {
+              const patterns = computePatterns(applications)
+              if (!patterns) return null
+              return (
+                <div className="section-card" style={{ padding: '16px 20px', marginBottom: 20 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>What&apos;s working for you</div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>
+                    Reply rate across {patterns.eligible} applications sent 10+ days ago. A reply is any response that wasn&apos;t an automated rejection.
+                  </div>
+                  <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                    <PatternTable title="By where you applied" rows={patterns.bySource} />
+                    <PatternTable title="By posting age" rows={patterns.byPostingAge} />
+                    <PatternTable title="By weekday applied" rows={patterns.byWeekday} />
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 12 }}>Small numbers — treat as a hint.</div>
+                </div>
+              )
+            })()}
+
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${BOARD_STATUSES.length}, 1fr)`, gap: 16, alignItems: 'start', overflowX: 'auto' }}>
               {BOARD_STATUSES.map((status) => {
                 const cfg = STATUS_CONFIG[status]
@@ -383,9 +499,36 @@ export default function JobTrackerPage() {
                             Added {formatDate(app.created_at)}
                             {app.applied_at ? ` · Applied ${formatDate(app.applied_at)}` : ''}
                           </div>
+                          {applicationNudge(app) === 'follow_up' && app.job_description_id && (
+                            <div style={{ marginBottom: 10 }} onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => setOutreach({ app, purpose: 'follow_up' })}
+                                style={{ background: 'var(--amber-dim)', border: 'none', borderRadius: 5, fontSize: 11, fontWeight: 600, color: 'var(--amber)', cursor: 'pointer', padding: '3px 8px', fontFamily: 'var(--font)' }}
+                              >
+                                Follow up?
+                              </button>
+                            </div>
+                          )}
+                          {applicationNudge(app) === 'stale' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }} onClick={(e) => e.stopPropagation()}>
+                              <span
+                                title="Most replies come in the first week or two. Your time is better spent on fresh postings."
+                                style={{ fontSize: 10.5, color: 'var(--text3)', background: 'var(--bg3)', borderRadius: 5, padding: '2px 7px', cursor: 'help' }}
+                              >
+                                No reply in 10 days
+                              </span>
+                              <button
+                                onClick={() => moveStatus(app, 'no_response', { response_type: null })}
+                                title="Most replies come in the first week or two. Your time is better spent on fresh postings."
+                                style={{ background: 'none', border: 'none', fontSize: 11, color: 'var(--text2)', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                              >
+                                Mark as no response
+                              </button>
+                            </div>
+                          )}
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
                             {nextStatus && (
-                              <button onClick={() => moveStatus(app, nextStatus)} className="btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }}>
+                              <button onClick={() => requestMove(app, nextStatus)} className="btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }}>
                                 {NEXT_LABEL[app.status]}
                               </button>
                             )}
@@ -397,8 +540,16 @@ export default function JobTrackerPage() {
                                 Prep →
                               </button>
                             )}
+                            {app.job_description_id && (
+                              <button
+                                onClick={() => setOutreach({ app, purpose: 'informational' })}
+                                style={{ background: 'none', border: 'none', fontSize: 11, color: 'var(--text2)', cursor: 'pointer', padding: '4px 6px', fontFamily: 'var(--font)' }}
+                              >
+                                Outreach
+                              </button>
+                            )}
                             <button
-                              onClick={() => moveStatus(app, 'rejected')}
+                              onClick={() => requestMove(app, 'rejected')}
                               style={{ background: 'none', border: 'none', fontSize: 11, color: 'var(--text3)', cursor: 'pointer', padding: '4px 6px' }}
                             >
                               Archive
@@ -576,6 +727,16 @@ export default function JobTrackerPage() {
             <label className="form-label">Job posting URL (optional)</label>
             <input className="form-input" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://…" style={{ marginBottom: 14 }} />
 
+            <div style={{ marginBottom: 14 }}>
+              <ApplicationSignalChips
+                source={form.source}
+                postingAge={form.postingAge}
+                postingAgeDetected={form.postingAgeDetected}
+                onSourceChange={(v) => setForm({ ...form, source: v })}
+                onPostingAgeChange={(v) => setForm({ ...form, postingAge: v, postingAgeDetected: false })}
+              />
+            </div>
+
             <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
               <div style={{ flex: 1 }}>
                 <label className="form-label">Status</label>
@@ -596,6 +757,16 @@ export default function JobTrackerPage() {
               </div>
             </div>
 
+            {needsResponseDate(editingId ? applications.find(a => a.id === editingId) ?? null : null, form.status) && (
+              <div style={{ border: '1px solid var(--border2)', borderRadius: 10, padding: '12px 14px', marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label className="form-label" style={{ margin: 0 }}>When did you first hear back?</label>
+                <input type="date" className="form-input" value={form.firstResponseAt} max={todayStr()} onChange={(e) => setForm({ ...form, firstResponseAt: e.target.value })} />
+                {form.status === 'rejected' && (
+                  <RejectKindChips value={form.rejectKind} onChange={(v) => setForm({ ...form, rejectKind: v })} />
+                )}
+              </div>
+            )}
+
             <label className="form-label">Notes (optional)</label>
             <textarea className="form-input" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} maxLength={5000} style={{ marginBottom: 14, resize: 'vertical' }} />
 
@@ -613,7 +784,13 @@ export default function JobTrackerPage() {
                 <textarea
                   className="form-input"
                   value={form.jdText}
-                  onChange={(e) => setForm({ ...form, jdText: e.target.value })}
+                  onChange={(e) => {
+                    const jdText = e.target.value
+                    // Auto-fill posting age from "Posted N days ago" unless the user already picked one.
+                    if (form.postingAge && !form.postingAgeDetected) { setForm({ ...form, jdText }); return }
+                    const detected = parsePostingAge(jdText)
+                    setForm({ ...form, jdText, postingAge: detected, postingAgeDetected: !!detected })
+                  }}
                   rows={6}
                   maxLength={50_000}
                   placeholder="Paste the job description..."
@@ -626,6 +803,64 @@ export default function JobTrackerPage() {
               <button onClick={() => setModalOpen(false)} className="btn-ghost" disabled={saving}>Cancel</button>
               <button onClick={handleSave} className="btn-primary" disabled={saving}>
                 {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {outreach?.app.job_description_id && (
+        <OutreachSheet
+          open
+          onClose={() => setOutreach(null)}
+          jdId={outreach.app.job_description_id}
+          jobApplicationId={outreach.app.id}
+          initialPurpose={outreach.purpose}
+          roleLabel={`${outreach.app.title} · ${outreach.app.company}`}
+        />
+      )}
+
+      {/* First-response prompt (asked once, when a waiting application hears back) */}
+      {responsePrompt && (
+        <div
+          onClick={() => setResponsePrompt(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 14, padding: 24, width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 12 }}
+          >
+            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>When did you first hear back?</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>{responsePrompt.app.title} · {responsePrompt.app.company}</div>
+            <input
+              type="date"
+              className="form-input"
+              value={responsePrompt.date}
+              max={todayStr()}
+              onChange={(e) => setResponsePrompt({ ...responsePrompt, date: e.target.value })}
+            />
+            {responsePrompt.status === 'rejected' && (
+              <RejectKindChips value={responsePrompt.rejectKind} onChange={(v) => setResponsePrompt({ ...responsePrompt, rejectKind: v })} />
+            )}
+            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+              <button
+                className="btn-ghost"
+                onClick={() => { const p = responsePrompt; setResponsePrompt(null); moveStatus(p.app, p.status) }}
+              >
+                Skip
+              </button>
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  const p = responsePrompt
+                  setResponsePrompt(null)
+                  moveStatus(p.app, p.status, {
+                    first_response_at: p.date || todayStr(),
+                    response_type: responseTypeForStatus(p.status, p.rejectKind),
+                  })
+                }}
+              >
+                Save
               </button>
             </div>
           </div>

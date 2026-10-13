@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { aiComplete } from '@/lib/ai'
+import { sanitizeCriteria } from '@/lib/dimensions'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
@@ -1608,6 +1609,21 @@ export async function POST(req: Request) {
 - Goal: ATS score above 90. Do not omit any phrase from the list.`
       : (themesToUse.length > 0 ? `- Mirror these JD themes naturally: ${themesToUse.join(', ')}` : '')
 
+    // Repetition signal: the competencies a posting asks for in several places are the ones a
+    // screener (human or ATS) is actually looking for. Pass criteria most-mentioned first and
+    // require the top 3's own phrasings to appear once each where truthful.
+    const criteriaByMentions = sanitizeCriteria(jd.extracted_criteria)
+      .sort((a, b) => (b.mentions ?? 1) - (a.mentions ?? 1) || b.weight - a.weight)
+    const topRepeated = criteriaByMentions.slice(0, 3).filter(c => (c.also_called ?? []).length > 0)
+    const repetitionInstruction = criteriaByMentions.length > 0
+      ? `JOB REQUIREMENTS (most-repeated in the posting first):
+${criteriaByMentions.map(c => `- ${c.label} (asked for ${c.mentions ?? 1}×, weight ${c.weight}/5): ${c.description}`).join('\n')}
+${topRepeated.length > 0 ? `
+The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${c.label} → ${(c.also_called ?? []).map(p => `"${p}"`).join(' / ')}`).join('; ')}.
+- Use one of each of these phrasings verbatim${include_summary ? ' in the summary and' : ''} in the bullets of the first (most recent) experience entry — but ONLY where the candidate's module content truthfully supports it.
+- One natural use each. Do not stuff, repeat, or force a phrase into a bullet it doesn't fit.` : ''}`
+      : ''
+
     const compactInstruction = ''
 
     // Prefer the literal job title (e.g. "Head of People") over the role-type
@@ -1630,6 +1646,7 @@ export async function POST(req: Request) {
 Rules:
 - Write punchy, metric-driven bullet points (start each with a strong verb)
 ${atsInstruction}
+${repetitionInstruction}
 ${levelInstruction ? `- ${levelInstruction}` : ''}
 - Summary: ${summaryInstruction}
 
@@ -1730,6 +1747,7 @@ CRITICAL BULLET RULES — follow exactly:
 - Extract specific metrics and outcomes from the module content — do NOT copy the paragraph verbatim
 - Do NOT put paragraph text as a single bullet — always decompose into multiple short bullets
 ${atsInstruction}
+${repetitionInstruction}
 ${levelInstruction ? `- ${levelInstruction}` : ''}
 
 Summary: ${summaryInstruction}

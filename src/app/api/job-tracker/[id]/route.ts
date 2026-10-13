@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { optionalString } from '@/lib/validate'
 import { ensureJobDescription } from '@/lib/job-descriptions'
+import { parseSignalFields } from '@/lib/tracker'
 
-const STATUSES = new Set(['saved', 'applied', 'screening', 'interviewing', 'offered', 'rejected', 'withdrawn'])
+const STATUSES = new Set(['saved', 'applied', 'screening', 'interviewing', 'offered', 'rejected', 'withdrawn', 'no_response'])
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -35,7 +36,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await req.json()
-    const update: Record<string, unknown> = {}
+    const update: Record<string, unknown> = { ...parseSignalFields(body) }
 
     if (body.company !== undefined) {
       if (typeof body.company !== 'string' || !body.company.trim()) {

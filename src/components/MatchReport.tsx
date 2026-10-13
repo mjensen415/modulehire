@@ -84,6 +84,46 @@ function ChipRow({ label, labels, dashed }: { label: string; labels: string[]; d
   )
 }
 
+// A criterion counts as "met" at a score of 60+ (the bottom of "clear evidence" in the scoring guide).
+const MET_SCORE = 60
+
+export type ApplyVerdict = { tone: 'apply' | 'gap' | 'stretch' | 'neutral'; text: string }
+
+// Plain-spoken "should I apply?" line. Never promises an interview — only describes coverage.
+export function computeVerdict(report: MatchReportData): ApplyVerdict | null {
+  const total = report.criteria.length
+  if (total === 0) return null
+  const met = report.criteria.filter(c => c.score >= MET_SCORE).length
+  const ratio = met / total
+  const missingMustHave = report.criteria
+    .filter(c => c.weight >= 5 && c.score < MET_SCORE)
+    .sort((a, b) => a.score - b.score)
+  const of = `${met} of ${total}`
+  if (ratio < 0.5) {
+    return { tone: 'stretch', text: `You meet ${of}. Consider whether this role is a stretch.` }
+  }
+  if (missingMustHave.length > 0) {
+    return { tone: 'gap', text: `You meet ${of}. The gap is ${missingMustHave[0].label} — address it in your summary or a module before applying.` }
+  }
+  if (ratio >= 0.7) {
+    return { tone: 'apply', text: `You meet ${of} real requirements. Apply.` }
+  }
+  return { tone: 'neutral', text: `You meet ${of} real requirements, including every must-have.` }
+}
+
+function VerdictLine({ verdict, compact }: { verdict: ApplyVerdict; compact?: boolean }) {
+  const color = verdict.tone === 'apply' ? 'var(--teal)' : verdict.tone === 'gap' ? 'var(--amber)' : 'var(--text2)'
+  const bg = verdict.tone === 'apply' ? 'var(--teal-dim)' : verdict.tone === 'gap' ? 'var(--amber-dim)' : 'var(--bg3)'
+  return (
+    <div style={{
+      fontSize: compact ? 12 : 13, fontWeight: 600, color, background: bg,
+      borderRadius: 8, padding: compact ? '6px 10px' : '8px 12px',
+    }}>
+      {verdict.text}
+    </div>
+  )
+}
+
 function StatusPill({ loading }: { loading?: boolean }) {
   return (
     <span style={{
@@ -106,15 +146,19 @@ export default function MatchReport({
   variant = 'full',
   loading = false,
   onBuildResume,
+  onDraftOutreach,
 }: {
   report: MatchReportData | null
   jd: JdSummary
   variant?: 'full' | 'compact'
   loading?: boolean
   onBuildResume?: () => void
+  onDraftOutreach?: () => void
 }) {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [hideDetails, setHideDetails] = useState(false)
+
+  const verdict = report && !loading ? computeVerdict(report) : null
 
   const analyzedDate = report ? new Date(report.generated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null
 
@@ -138,6 +182,7 @@ export default function MatchReport({
         </div>
         {report && (
           <>
+            {verdict && <div style={{ marginTop: 10 }}><VerdictLine verdict={verdict} compact /></div>}
             <div style={{ marginTop: 10 }}><ScoreBar score={report.overall} height={6} /></div>
             <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <ChipRow label="Strong" labels={report.strong} />
@@ -158,6 +203,8 @@ export default function MatchReport({
           <StatusPill loading={loading} />
           <span style={{ fontSize: 11, color: 'var(--text3)' }}>Scored by criteria</span>
         </div>
+
+        {verdict && <div style={{ marginTop: 12 }}><VerdictLine verdict={verdict} /></div>}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 12 }}>
           <CompanyAvatar company={jd.company ?? null} />
@@ -251,6 +298,9 @@ export default function MatchReport({
           <div style={{ marginTop: 18, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
             {onBuildResume && (
               <button type="button" className="btn-primary" onClick={onBuildResume}>Build resume from this →</button>
+            )}
+            {onDraftOutreach && (
+              <button type="button" className="btn-ghost" onClick={onDraftOutreach}>Draft outreach</button>
             )}
             {jd.source_url && (
               <a href={jd.source_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, color: 'var(--text2)', textDecoration: 'none' }}>

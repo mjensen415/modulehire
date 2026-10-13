@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
 import { DIMENSIONS, sanitizeCriteria } from '@/lib/dimensions'
+import { FLUFF_PROMPT, DEGREE_PROMPT, FLUFF_SCHEMA_PROP, DEGREE_SCHEMA_PROP, CRITERIA_REPETITION_PROMPT, CRITERIA_REPETITION_SCHEMA_PROPS, sanitizeFluff, sanitizeDegree, applyMentionWeightRule } from '@/lib/jd-signal'
 import { createHash } from 'crypto'
 
 export const maxDuration = 120
@@ -35,7 +36,11 @@ whether the role manages people or budget — not from words like "senior" or "m
 requirements. A job requiring 2-4 years with no direct reports is "ic".
 
 extracted_phrases: 5-10 exact verbatim phrases from the job description that a resume should echo
-to pass ATS.`
+to pass ATS.
+
+${FLUFF_PROMPT}
+
+${DEGREE_PROMPT}`
 
 const BASICS_SCHEMA = {
   type: 'object',
@@ -46,8 +51,10 @@ const BASICS_SCHEMA = {
     extracted_themes: { type: 'array', items: { type: 'string' } },
     extracted_seniority: { type: 'string', enum: ['ic', 'manager', 'senior-manager', 'director', 'vp', 'c-suite'] },
     extracted_phrases: { type: 'array', items: { type: 'string' } },
+    extracted_fluff: FLUFF_SCHEMA_PROP,
+    degree_requirement: DEGREE_SCHEMA_PROP,
   },
-  required: ['extracted_company', 'extracted_job_title', 'extracted_role_type', 'extracted_themes', 'extracted_seniority', 'extracted_phrases'],
+  required: ['extracted_company', 'extracted_job_title', 'extracted_role_type', 'extracted_themes', 'extracted_seniority', 'extracted_phrases', 'extracted_fluff', 'degree_requirement'],
 }
 
 const SYSTEM_PROMPT_CRITERIA = `Extract typed, weighted hiring criteria from a job description.
@@ -56,7 +63,9 @@ extracted_criteria: 5-9 typed, weighted requirements. Include exactly one "role"
 exactly one "seniority" criterion; spread the rest across the other four dimensions (responsibility,
 skill, domain, collaboration) based on what this specific JD actually emphasizes — do not force a
 criterion for a dimension the JD barely touches. weight 5 = clearly a must-have, stated repeatedly
-or up front; weight 1 = nice-to-have. Order the array by weight descending.`
+or up front; weight 1 = nice-to-have. Order the array by weight descending.
+
+${CRITERIA_REPETITION_PROMPT}`
 
 const CRITERIA_SCHEMA = {
   type: 'object',
@@ -70,8 +79,9 @@ const CRITERIA_SCHEMA = {
           dimension: { type: 'string', enum: DIMENSIONS as unknown as string[] },
           weight: { type: 'number', description: '1-5' },
           description: { type: 'string', description: 'One sentence: what the JD actually asks for, in plain English' },
+          ...CRITERIA_REPETITION_SCHEMA_PROPS,
         },
-        required: ['label', 'dimension', 'weight', 'description'],
+        required: ['label', 'dimension', 'weight', 'description', 'mentions', 'also_called'],
       },
     },
   },
@@ -85,6 +95,8 @@ type Basics = {
   extracted_themes: string[]
   extracted_seniority: string
   extracted_phrases: string[]
+  extracted_fluff?: unknown
+  degree_requirement?: unknown
 }
 
 function ndjsonLine(obj: unknown): Uint8Array {
@@ -156,6 +168,8 @@ export async function POST(req: Request) {
           extracted_seniority: existing.extracted_seniority,
           extracted_themes: existing.extracted_themes,
           extracted_phrases: existing.extracted_phrases,
+          extracted_fluff: existing.extracted_fluff ?? [],
+          degree_requirement: existing.degree_requirement ?? null,
         }))
         controller.enqueue(ndjsonLine({ type: 'criteria', extracted_criteria: existing.extracted_criteria }))
         controller.enqueue(ndjsonLine({ type: 'done' }))
@@ -183,11 +197,13 @@ export async function POST(req: Request) {
           { role: 'user', content: `Job Description:\n${raw_text}` },
         ],
         BASICS_SCHEMA,
-        1024,
+        1800,
         { tier: 'fast', userId: user!.id, action: 'analyze_jd' }
       )
         .then(async (basics) => {
           const jobTitle = typeof basics.extracted_job_title === 'string' ? basics.extracted_job_title.trim().slice(0, 200) : ''
+          const fluff = sanitizeFluff(basics.extracted_fluff)
+          const degree = sanitizeDegree(basics.degree_requirement)
           await supabase
             .from('job_descriptions')
             .update({
@@ -197,6 +213,8 @@ export async function POST(req: Request) {
               extracted_themes: basics.extracted_themes,
               extracted_seniority: basics.extracted_seniority,
               extracted_phrases: basics.extracted_phrases,
+              extracted_fluff: fluff,
+              degree_requirement: degree,
             })
             .eq('id', jdRow.id)
           controller.enqueue(ndjsonLine({
@@ -208,6 +226,8 @@ export async function POST(req: Request) {
             extracted_seniority: basics.extracted_seniority,
             extracted_themes: basics.extracted_themes,
             extracted_phrases: basics.extracted_phrases,
+            extracted_fluff: fluff,
+            degree_requirement: degree,
           }))
         })
         .catch((err) => {
@@ -221,11 +241,11 @@ export async function POST(req: Request) {
           { role: 'user', content: `Job Description:\n${raw_text}` },
         ],
         CRITERIA_SCHEMA,
-        1536,
+        2400,
         { tier: 'quality', userId: user!.id, action: 'analyze_jd' }
       )
         .then(async (raw) => {
-          const criteria = sanitizeCriteria(raw.extracted_criteria)
+          const criteria = applyMentionWeightRule(sanitizeCriteria(raw.extracted_criteria))
           await supabase.from('job_descriptions').update({ extracted_criteria: criteria }).eq('id', jdRow.id)
           controller.enqueue(ndjsonLine({ type: 'criteria', extracted_criteria: criteria }))
         })

@@ -77,6 +77,8 @@ create table public.job_descriptions (
   extracted_themes text[] not null default '{}',
   extracted_seniority text,
   extracted_phrases text[] not null default '{}', -- exact phrases to mirror
+  extracted_fluff text[] not null default '{}',   -- unscreenable requirement-style filler quotes
+  degree_requirement jsonb,                       -- { mentioned, level, waivable, quote }
 
   deleted_at timestamptz,
   created_at timestamptz not null default now()
