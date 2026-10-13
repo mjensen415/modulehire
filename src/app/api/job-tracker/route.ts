@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { requiredString, optionalString } from '@/lib/validate'
+import { requiredString, optionalString, isUuid } from '@/lib/validate'
 import { ensureJobDescription } from '@/lib/job-descriptions'
+import { parseSignalFields } from '@/lib/tracker'
 
-const STATUSES = new Set(['saved', 'applied', 'screening', 'interviewing', 'offered', 'rejected', 'withdrawn'])
+const STATUSES = new Set(['saved', 'applied', 'screening', 'interviewing', 'offered', 'rejected', 'withdrawn', 'no_response'])
 
 export async function GET() {
   try {
@@ -47,7 +48,21 @@ export async function POST(req: Request) {
     const status = typeof body.status === 'string' && STATUSES.has(body.status) ? body.status : 'saved'
     const appliedAt = typeof body.applied_at === 'string' && body.applied_at ? body.applied_at : null
 
-    const jobDescriptionId = jdText ? await ensureJobDescription(supabase, user.id, jdText) : null
+    const signal = parseSignalFields(body)
+
+    // An already-analyzed JD (e.g. "Add to tracker" after generating) links directly instead of
+    // creating a bare duplicate row.
+    let jobDescriptionId: string | null = null
+    if (isUuid(body.job_description_id)) {
+      const { data: owned } = await supabase
+        .from('job_descriptions')
+        .select('id')
+        .eq('id', body.job_description_id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      jobDescriptionId = owned?.id ?? null
+    }
+    if (!jobDescriptionId && jdText) jobDescriptionId = await ensureJobDescription(supabase, user.id, jdText)
 
     const { data, error } = await supabase
       .from('job_applications')
@@ -61,6 +76,7 @@ export async function POST(req: Request) {
         status,
         applied_at: appliedAt,
         job_description_id: jobDescriptionId,
+        ...signal,
       })
       .select()
       .single()

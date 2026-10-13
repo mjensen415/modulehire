@@ -6,6 +6,8 @@ import Link from 'next/link'
 import ScoreGauge from '@/components/ScoreGauge'
 import { isDimension, DIMENSION_LABELS, type JdCriterion } from '@/lib/dimensions'
 import type { DegreeRequirement } from '@/lib/jd-signal'
+import ApplicationSignalChips from '@/components/ApplicationSignalChips'
+import { parsePostingAge, type ApplicationSource, type PostingAge } from '@/lib/tracker'
 import MatchReport, { type MatchReportData } from '@/components/MatchReport'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -254,6 +256,13 @@ export default function GeneratePage() {
   const [confirmedCriteria, setConfirmedCriteria] = useState<JdCriterion[]>([])
   const [criteriaLoading, setCriteriaLoading] = useState(false)
   const [expandedCriterion, setExpandedCriterion] = useState<string | null>(null)
+  // "Add to tracker" card on the done step
+  const [trackerSource, setTrackerSource] = useState<ApplicationSource | null>(null)
+  const [trackerAge, setTrackerAge] = useState<PostingAge | null>(null)
+  const [trackerAgeDetected, setTrackerAgeDetected] = useState(false)
+  const [trackerSaving, setTrackerSaving] = useState(false)
+  const [trackerAddedJdId, setTrackerAddedJdId] = useState<string | null>(null)
+  const [trackerError, setTrackerError] = useState('')
   const [showFluff, setShowFluff] = useState(false)
   const [missingTitleInput, setMissingTitleInput] = useState('')
   const [missingCompanyInput, setMissingCompanyInput] = useState('')
@@ -1477,6 +1486,12 @@ export default function GeneratePage() {
         throw new Error(data.error ?? 'Generation failed')
       }
       setGeneratedUrls({ docx_url: data.docx_url, pdf_url: data.pdf_url, docx_filename: data.docx_filename ?? 'Resume.docx' })
+      if (trackerAddedJdId !== jdData?.jd_id) {
+        const detectedAge = parsePostingAge(jdText)
+        setTrackerAge(detectedAge)
+        setTrackerAgeDetected(!!detectedAge)
+        setTrackerError('')
+      }
       setResumeHtml(data.resume_html ?? null)
       setCoverLetterText(data.cover_letter_text ?? null)
       setCoverLetterUrl(data.cover_letter_url ?? null)
@@ -1489,6 +1504,37 @@ export default function GeneratePage() {
     } catch (e) {
       setErrorMessage((e as Error).message)
       setStep('confirm')
+    }
+  }
+
+  async function addToTracker(status: 'applied' | 'saved') {
+    if (!jdData?.jd_id || trackerSaving) return
+    setTrackerSaving(true)
+    setTrackerError('')
+    try {
+      const now = new Date()
+      const res = await fetch('/api/job-tracker', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: jdData.extracted_company || 'Unknown company',
+          title: jdData.extracted_job_title || 'Untitled role',
+          job_description_id: jdData.jd_id,
+          status,
+          applied_at: status === 'applied'
+            ? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+            : null,
+          source: trackerSource,
+          posting_age: trackerAge,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not add to tracker')
+      setTrackerAddedJdId(jdData.jd_id)
+    } catch (e) {
+      setTrackerError((e as Error).message)
+    } finally {
+      setTrackerSaving(false)
     }
   }
 
@@ -3715,6 +3761,37 @@ export default function GeneratePage() {
                 <div style={{ fontSize: 13, padding: '10px 14px', borderRadius: 8, border: '1px solid var(--teal-glow)', background: 'var(--teal-dim)', color: 'var(--teal)', marginBottom: 12 }}>
                   ✓ Resume saved to your library. <a href="/resumes" style={{ color: 'var(--teal)' }}>View in My Resumes →</a>
                 </div>
+
+                {/* Add to tracker */}
+                {jdData?.jd_id && (
+                  <div style={{ padding: '14px 16px', borderRadius: 10, border: '1px solid var(--border2)', background: 'var(--surface)', marginBottom: 12 }}>
+                    {trackerAddedJdId === jdData.jd_id ? (
+                      <div style={{ fontSize: 13, color: 'var(--teal)' }}>
+                        ✓ Added to your tracker. <Link href="/job-tracker" style={{ color: 'var(--teal)' }}>Open tracker →</Link>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)', marginBottom: 10 }}>Add to tracker</div>
+                        <ApplicationSignalChips
+                          source={trackerSource}
+                          postingAge={trackerAge}
+                          postingAgeDetected={trackerAgeDetected}
+                          onSourceChange={setTrackerSource}
+                          onPostingAgeChange={(v) => { setTrackerAge(v); setTrackerAgeDetected(false) }}
+                        />
+                        {trackerError && <div style={{ fontSize: 12, color: 'var(--rose)', marginTop: 8 }}>{trackerError}</div>}
+                        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                          <button className="btn-primary" style={{ fontSize: 12.5 }} disabled={trackerSaving} onClick={() => addToTracker('applied')}>
+                            {trackerSaving ? 'Adding…' : 'I applied'}
+                          </button>
+                          <button className="btn-ghost" style={{ fontSize: 12.5 }} disabled={trackerSaving} onClick={() => addToTracker('saved')}>
+                            Save for later
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* Interview prep CTA */}
                 {jdData?.jd_id && (
