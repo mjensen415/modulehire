@@ -7,6 +7,7 @@ import ScoreGauge from '@/components/ScoreGauge'
 import { isDimension, DIMENSION_LABELS, type JdCriterion } from '@/lib/dimensions'
 import type { DegreeRequirement } from '@/lib/jd-signal'
 import ApplicationSignalChips from '@/components/ApplicationSignalChips'
+import OutreachSheet from '@/components/OutreachSheet'
 import { parsePostingAge, type ApplicationSource, type PostingAge } from '@/lib/tracker'
 import MatchReport, { type MatchReportData } from '@/components/MatchReport'
 
@@ -263,6 +264,7 @@ export default function GeneratePage() {
   const [trackerSaving, setTrackerSaving] = useState(false)
   const [trackerAddedJdId, setTrackerAddedJdId] = useState<string | null>(null)
   const [trackerError, setTrackerError] = useState('')
+  const [outreachOpen, setOutreachOpen] = useState(false)
   const [showFluff, setShowFluff] = useState(false)
   const [missingTitleInput, setMissingTitleInput] = useState('')
   const [missingCompanyInput, setMissingCompanyInput] = useState('')
@@ -2076,6 +2078,13 @@ export default function GeneratePage() {
                 }}
                 variant="full"
                 loading={matchReportLoading}
+                onDraftOutreach={() => setOutreachOpen(true)}
+              />
+              <OutreachSheet
+                open={outreachOpen}
+                onClose={() => setOutreachOpen(false)}
+                jdId={jdData.jd_id}
+                roleLabel={[jdData.extracted_job_title || 'Untitled role', jdData.extracted_company].filter(Boolean).join(' · ')}
               />
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <button type="button" className="btn-primary" onClick={() => setStep('input')}>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { isProTier } from '@/lib/plan'
 import ApplicationSignalChips from '@/components/ApplicationSignalChips'
+import OutreachSheet from '@/components/OutreachSheet'
 import {
   applicationNudge, computePatterns, parsePostingAge, responseTypeForStatus, RESPONSE_STATUSES,
   type ApplicationSource, type PostingAge, type PatternRow,
@@ -205,6 +206,7 @@ export default function JobTrackerPage() {
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [responsePrompt, setResponsePrompt] = useState<ResponsePrompt | null>(null)
+  const [outreach, setOutreach] = useState<{ app: JobApplication; purpose: 'informational' | 'follow_up' } | null>(null)
   const [proGateOpen, setProGateOpen] = useState(false)
 
   const [view, setView] = useState<'board' | 'list'>('board')
@@ -497,6 +499,16 @@ export default function JobTrackerPage() {
                             Added {formatDate(app.created_at)}
                             {app.applied_at ? ` · Applied ${formatDate(app.applied_at)}` : ''}
                           </div>
+                          {applicationNudge(app) === 'follow_up' && app.job_description_id && (
+                            <div style={{ marginBottom: 10 }} onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => setOutreach({ app, purpose: 'follow_up' })}
+                                style={{ background: 'var(--amber-dim)', border: 'none', borderRadius: 5, fontSize: 11, fontWeight: 600, color: 'var(--amber)', cursor: 'pointer', padding: '3px 8px', fontFamily: 'var(--font)' }}
+                              >
+                                Follow up?
+                              </button>
+                            </div>
+                          )}
                           {applicationNudge(app) === 'stale' && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }} onClick={(e) => e.stopPropagation()}>
                               <span
@@ -526,6 +538,14 @@ export default function JobTrackerPage() {
                                 style={{ background: 'none', border: 'none', color: 'var(--teal)', cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'var(--font)', padding: '4px 2px' }}
                               >
                                 Prep →
+                              </button>
+                            )}
+                            {app.job_description_id && (
+                              <button
+                                onClick={() => setOutreach({ app, purpose: 'informational' })}
+                                style={{ background: 'none', border: 'none', fontSize: 11, color: 'var(--text2)', cursor: 'pointer', padding: '4px 6px', fontFamily: 'var(--font)' }}
+                              >
+                                Outreach
                               </button>
                             )}
                             <button
@@ -787,6 +807,17 @@ export default function JobTrackerPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {outreach?.app.job_description_id && (
+        <OutreachSheet
+          open
+          onClose={() => setOutreach(null)}
+          jdId={outreach.app.job_description_id}
+          jobApplicationId={outreach.app.id}
+          initialPurpose={outreach.purpose}
+          roleLabel={`${outreach.app.title} · ${outreach.app.company}`}
+        />
       )}
 
       {/* First-response prompt (asked once, when a waiting application hears back) */}
