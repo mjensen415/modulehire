@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
 import { DIMENSIONS, sanitizeCriteria } from '@/lib/dimensions'
-import { FLUFF_PROMPT, DEGREE_PROMPT, FLUFF_SCHEMA_PROP, DEGREE_SCHEMA_PROP, CRITERIA_REPETITION_PROMPT, CRITERIA_REPETITION_SCHEMA_PROPS, sanitizeFluff, sanitizeDegree } from '@/lib/jd-signal'
+import { FLUFF_PROMPT, DEGREE_PROMPT, FLUFF_SCHEMA_PROP, DEGREE_SCHEMA_PROP, CRITERIA_REPETITION_PROMPT, CRITERIA_REPETITION_SCHEMA_PROPS, sanitizeFluff, sanitizeDegree, applyMentionWeightRule } from '@/lib/jd-signal'
 import { createHash } from 'crypto'
 
 export const maxDuration = 120
@@ -245,7 +245,7 @@ export async function POST(req: Request) {
         { tier: 'quality', userId: user!.id, action: 'analyze_jd' }
       )
         .then(async (raw) => {
-          const criteria = sanitizeCriteria(raw.extracted_criteria)
+          const criteria = applyMentionWeightRule(sanitizeCriteria(raw.extracted_criteria))
           await supabase.from('job_descriptions').update({ extracted_criteria: criteria }).eq('id', jdRow.id)
           controller.enqueue(ndjsonLine({ type: 'criteria', extracted_criteria: criteria }))
         })

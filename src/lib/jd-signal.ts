@@ -23,12 +23,15 @@ only lines dressed up as requirements that aren't real requirements. Empty array
 
 export const DEGREE_PROMPT = `degree_requirement: whether the posting asks for a degree.
 - mentioned: true only if a degree/diploma is mentioned as a requirement or preference.
-- level: "bachelor", "master", "phd", or "other" (associate, certificate-as-degree, etc.); null if not mentioned.
+- level: the MINIMUM degree the posting asks for — "bachelor", "master", "phd", or "other"
+  (associate, certificate-as-degree, etc.); null if not mentioned.
 - waivable: "equivalent_experience" if ANYWHERE in the posting it says "or equivalent", "comparable
   experience", "in lieu of", or similar (check the whole posting, not just the degree line);
   otherwise "preferred_only" if the degree is "preferred", "a plus", or "nice to have"; otherwise
-  "no". null if not mentioned.
-- quote: the degree line verbatim (max ~25 words), or null if not mentioned.`
+  "no". null if not mentioned. Judge the MINIMUM degree only: "Bachelor's required; Master's
+  preferred" is level "bachelor", waivable "no" — a separately preferred higher degree does not make
+  the required one optional.
+- quote: the minimum-degree line verbatim (max ~25 words), or null if not mentioned.`
 
 export const FLUFF_SCHEMA_PROP = {
   type: 'array',
@@ -56,7 +59,7 @@ export function sanitizeFluff(raw: unknown): string[] {
     let s = item.trim().replace(/^["“”']+|["“”']+$/g, '').trim()
     if (!s) continue
     const words = s.split(/\s+/)
-    if (words.length > 8) s = words.slice(0, 8).join(' ')
+    if (words.length > 8) s = words.slice(0, 8).join(' ').replace(/[,;:]$/, '') + '…'
     s = s.slice(0, 80)
     const key = s.toLowerCase()
     if (seen.has(key)) continue
@@ -86,7 +89,8 @@ export function isDegreeWaivable(d: unknown): boolean {
 export const CRITERIA_REPETITION_PROMPT = `For each criterion also return:
 - mentions: how many separate places in the posting ask for this, counting paraphrases as the same
   ask (an integer, at least 1).
-- also_called: up to 3 verbatim phrasings from the posting that ask for this criterion.
+- also_called: up to 3 SHORT verbatim phrasings (2-8 words each) lifted from the posting that ask
+  for this criterion — the key phrase, not the whole sentence. Never the job title.
 
 Weight rule: a criterion mentioned 3+ times is weight 4 or 5. A criterion mentioned once and only in
 a "nice to have" / "bonus" / "preferred" section is weight 2 or lower.
@@ -98,5 +102,15 @@ mentions: 2, also_called: ["stakeholder management", "align cross-functional par
 
 export const CRITERIA_REPETITION_SCHEMA_PROPS = {
   mentions: { type: 'integer', description: 'How many separate places in the posting ask for this (paraphrases count), 1-9' },
-  also_called: { type: 'array', items: { type: 'string' }, description: 'Up to 3 verbatim phrasings from the posting' },
+  also_called: { type: 'array', items: { type: 'string' }, description: 'Up to 3 short (2-8 word) verbatim phrasings from the posting' },
+}
+
+/**
+ * Server-side half of the criteria pass's weight rule, applied to fresh AI output only (not to
+ * user-edited criteria): anything the posting asks for in 3+ places is weight 4 or more.
+ */
+export function applyMentionWeightRule<T extends { weight: number; mentions?: number }>(criteria: T[]): T[] {
+  return criteria
+    .map(c => ((c.mentions ?? 1) >= 3 && c.weight < 4 ? { ...c, weight: 4 } : c))
+    .sort((a, b) => b.weight - a.weight)
 }

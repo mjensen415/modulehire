@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { aiCompleteJson, resolveModel } from '@/lib/ai'
 import { requireAdmin } from '@/lib/admin-guard'
 import { DIMENSIONS, sanitizeCriteria } from '@/lib/dimensions'
-import { FLUFF_PROMPT, DEGREE_PROMPT, FLUFF_SCHEMA_PROP, DEGREE_SCHEMA_PROP, CRITERIA_REPETITION_PROMPT, CRITERIA_REPETITION_SCHEMA_PROPS, sanitizeFluff, sanitizeDegree } from '@/lib/jd-signal'
+import { FLUFF_PROMPT, DEGREE_PROMPT, FLUFF_SCHEMA_PROP, DEGREE_SCHEMA_PROP, CRITERIA_REPETITION_PROMPT, CRITERIA_REPETITION_SCHEMA_PROPS, sanitizeFluff, sanitizeDegree, applyMentionWeightRule } from '@/lib/jd-signal'
 
 export const maxDuration = 120
 
@@ -133,7 +133,7 @@ export async function POST(req: Request) {
       ...basicsResult,
       extracted_fluff: sanitizeFluff(basicsResult.extracted_fluff),
       degree_requirement: sanitizeDegree(basicsResult.degree_requirement),
-      extracted_criteria: sanitizeCriteria(criteriaResult.extracted_criteria),
+      extracted_criteria: applyMentionWeightRule(sanitizeCriteria(criteriaResult.extracted_criteria)),
     }
 
     return NextResponse.json({
