@@ -68,3 +68,32 @@ export async function PUT(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true, preferences })
 }
+
+const RESUME_FORMATS = new Set(['classic', 'tech', 'combination', 'executive', 'minimal', 'two-column'])
+const COVER_TONES = new Set(['professional', 'warm', 'direct'])
+
+// PATCH { resume_defaults } — merges the editor's Design menu choices into
+// preferences.resume_defaults (the same object generate-resume writes), leaving the rest of the
+// preferences untouched.
+export async function PATCH(req: Request) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const input = (await req.json().catch(() => ({})))?.resume_defaults ?? {}
+  const patch: NonNullable<UserPreferences['resume_defaults']> = {}
+  if (typeof input.format === 'string' && RESUME_FORMATS.has(input.format)) patch.format = input.format
+  if (typeof input.bullet_style === 'string' && input.bullet_style.length <= 4) patch.bullet_style = input.bullet_style
+  for (const key of ['include_summary', 'include_skills', 'include_education', 'include_awards', 'include_cover_letter'] as const) {
+    if (typeof input[key] === 'boolean') patch[key] = input[key]
+  }
+  if (typeof input.cover_letter_tone === 'string' && COVER_TONES.has(input.cover_letter_tone)) patch.cover_letter_tone = input.cover_letter_tone
+  if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Nothing to save' }, { status: 400 })
+
+  const { data } = await supabase.from('users').select('preferences').eq('id', user.id).single()
+  const current = (data?.preferences ?? {}) as UserPreferences
+  const preferences: UserPreferences = { ...current, resume_defaults: { ...(current.resume_defaults ?? {}), ...patch } }
+  const { error } = await supabase.from('users').update({ preferences }).eq('id', user.id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true, resume_defaults: preferences.resume_defaults })
+}

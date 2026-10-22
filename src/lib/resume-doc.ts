@@ -50,6 +50,9 @@ const ResumeDocSchema = z.object({
   awards: z.string().max(4000),
   format: z.enum(RESUME_FORMATS),
   bullet_style: z.string().max(4),
+  // Sections switched off in the Design menu: kept in the doc (switching back restores them),
+  // left out of the page, the files, and fit scoring.
+  hidden_sections: z.array(z.enum(['summary', 'skills', 'education', 'awards'])).max(4).optional(),
 })
 
 export type Block = z.infer<typeof BlockSchema>
@@ -65,6 +68,47 @@ export function parseResumeDoc(raw: unknown): { ok: true; doc: ResumeDoc } | { o
 
 export function makeBlock(text: string, moduleId: string | null = null): Block {
   return { id: nanoid(10), text, module_id: moduleId, original: text }
+}
+
+export type ToggleableSection = 'summary' | 'skills' | 'education' | 'awards'
+
+export function isHidden(doc: ResumeDoc, section: ToggleableSection): boolean {
+  return (doc.hidden_sections ?? []).includes(section)
+}
+
+/** The doc as it reads on the page: hidden sections emptied. */
+export function visibleDoc(doc: ResumeDoc): ResumeDoc {
+  if (!doc.hidden_sections?.length) return doc
+  return {
+    ...doc,
+    summary: isHidden(doc, 'summary') ? { ...doc.summary, text: '' } : doc.summary,
+    skills: isHidden(doc, 'skills') ? [] : doc.skills,
+    education: isHidden(doc, 'education') ? [] : doc.education,
+    awards: isHidden(doc, 'awards') ? '' : doc.awards,
+  }
+}
+
+/** The whole resume as plain text, for Export → Copy text. */
+export function docPlainText(source: ResumeDoc): string {
+  const doc = visibleDoc(source)
+  const out: string[] = [doc.header.name, doc.header.title, doc.header.contact].filter(Boolean)
+  const section = (title: string, lines: string[]) => {
+    const body = lines.map(l => l.trim()).filter(Boolean)
+    if (body.length) out.push('', title.toUpperCase(), ...body)
+  }
+  section('Summary', [doc.summary.text])
+  for (const s of doc.skill_sections) section(s.category || 'Skills', s.bullets.map(b => `• ${b.text}`))
+  if (doc.experience.length) {
+    out.push('', 'EXPERIENCE')
+    for (const e of doc.experience) {
+      out.push('', [e.title, e.company].filter(Boolean).join(', ') + (e.dates ? ` (${e.dates})` : ''))
+      out.push(...e.bullets.map(b => b.text.trim()).filter(Boolean).map(t => `• ${t}`))
+    }
+  }
+  section('Skills', [doc.skills.join(', ')])
+  section('Education', doc.education.map(b => b.text))
+  section('Awards & certifications', [doc.awards])
+  return out.join('\n')
 }
 
 export function contactLine(fields: ResumeDoc['header']['contact_fields']): string {
@@ -101,7 +145,8 @@ export function updateBlockText(doc: ResumeDoc, blockId: string, text: string): 
 }
 
 /** All the text a reader (or an ATS) sees, for live fit scoring. */
-export function docText(doc: ResumeDoc): string {
+export function docText(source: ResumeDoc): string {
+  const doc = visibleDoc(source)
   return [
     doc.header.title,
     doc.summary.text,
@@ -119,7 +164,8 @@ export function modulesOnResume(doc: ResumeDoc): Set<string> {
 }
 
 /** The resume's sections as scoring evidence (server fit uses the match report's scorer). */
-export function docEvidence(doc: ResumeDoc): { id: string; title: string; content: string }[] {
+export function docEvidence(source: ResumeDoc): { id: string; title: string; content: string }[] {
+  const doc = visibleDoc(source)
   const lines = (blocks: Block[]) => blocks.map(b => b.text.trim()).filter(Boolean).join('\n')
   return [
     ...(doc.summary.text.trim() ? [{ id: 'summary', title: 'Summary', content: doc.summary.text.trim() }] : []),

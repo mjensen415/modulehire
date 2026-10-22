@@ -5,7 +5,7 @@ import { DndContext, PointerSensor, KeyboardSensor, closestCenter, useSensor, us
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import BlockEditor from './BlockEditor'
-import FitPanel from './FitPanel'
+import FitPanel, { fitColor, useAnimatedNumber } from './FitPanel'
 import SuggestionsPanel from './SuggestionsPanel'
 import LibraryRail, { type LibraryGroup } from './LibraryRail'
 import UnsupportedPhrases from '@/components/UnsupportedPhrases'
@@ -13,8 +13,8 @@ import Link from 'next/link'
 import { useDocHistory } from './useDocHistory'
 import { useAutosave, type SaveState } from './useAutosave'
 import {
-  RESUME_FORMATS, allBlocks, contactLine, docText, makeBlock, mapBlocks, modulesOnResume, updateBlockText,
-  type Block, type BlockSuggestion, type ResumeDoc, type ResumeDocFormat,
+  RESUME_FORMATS, allBlocks, contactLine, docPlainText, docText, isHidden, makeBlock, mapBlocks, modulesOnResume, updateBlockText,
+  type Block, type BlockSuggestion, type ResumeDoc, type ResumeDocFormat, type ToggleableSection,
 } from '@/lib/resume-doc'
 import { groupExperienceByCompany, normalizeCompany } from '@/lib/resume-dates'
 import { splitSentences, unsupportedTerms, type UnsupportedTerm } from '@/lib/fact-check'
@@ -102,6 +102,11 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
   const [railTab, setRailTab] = useState<'fit' | 'changes' | 'library'>(jd && jd.criteria.length > 0 ? 'fit' : 'library')
   const [highlight, setHighlight] = useState<string | null>(null)
   const [flashId, setFlashId] = useState<string | null>(null)
+  // Header menus.
+  const [menu, setMenu] = useState<'design' | 'export' | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [coverLetterDefault, setCoverLetterDefault] = useState<boolean | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const onConflict = useCallback((latest: { doc: ResumeDoc; version: number }) => {
     setActiveId(null)
@@ -164,6 +169,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
   const shownScore = serverFit
     ? Math.max(0, Math.min(100, live.score + serverFit.overall - serverFit.clientAt))
     : live.score
+  const headerScore = useAnimatedNumber(shownScore)
 
   // Modules that belong to a job (by assignment, else by company) and aren't on the resume yet.
   const availableFor = useCallback((entryIndex: number): EditorModule[] => {
@@ -570,6 +576,60 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
     commit(d => withText(d, blockId, clean ?? block?.original ?? ''))
   }
 
+  // ── Design & Export ───────────────────────────────────────────────────────
+  // Design changes apply to this resume and become the defaults for new drafts.
+  const saveDefaults = (patch: Record<string, unknown>) => {
+    fetch('/api/preferences', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume_defaults: patch }),
+    }).catch(() => {})
+  }
+  const setTemplate = (format: ResumeDocFormat) => {
+    commit(d => ({ ...d, format }))
+    saveDefaults({ format })
+  }
+  const toggleSection = (section: ToggleableSection) => {
+    const hidden = isHidden(doc, section)
+    commit(d => ({
+      ...d,
+      hidden_sections: hidden ? (d.hidden_sections ?? []).filter(x => x !== section) : [...(d.hidden_sections ?? []), section],
+    }))
+    saveDefaults({ [`include_${section}`]: hidden })
+  }
+  const toggleCoverLetter = () => {
+    const next = !coverLetterDefault
+    setCoverLetterDefault(next)
+    saveDefaults({ include_cover_letter: next })
+  }
+  const openMenu = (which: 'design' | 'export') => {
+    setMenu(m => (m === which ? null : which))
+    if (which === 'design' && coverLetterDefault === null) {
+      fetch('/api/preferences').then(r => r.json())
+        .then(({ preferences }) => setCoverLetterDefault(!!preferences?.resume_defaults?.include_cover_letter))
+        .catch(() => setCoverLetterDefault(false))
+    }
+  }
+  useEffect(() => {
+    if (!menu) return
+    const close = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenu(null) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(null) }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc) }
+  }, [menu])
+
+  const copyText = async () => {
+    finish()
+    try {
+      await navigator.clipboard.writeText(docPlainText(docRef.current))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    } catch {
+      setNotice("Couldn't copy to the clipboard. Download a file instead.")
+    }
+  }
+
   const download = async (type: 'pdf' | 'docx') => {
     finish()
     if (warnings.size > 0) {
@@ -761,26 +821,64 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
     <div className="rd-root">
       <style>{EDITOR_CSS}</style>
 
-      <div className="rd-bar">
-        <div className="rd-bar-left">
-          <span className={`rd-save rd-save-${saveState}`} aria-live="polite">{saveLabel(saveState)}</span>
-          <button type="button" className="btn-ghost rd-small" onClick={undo} disabled={!canUndo || !!activeId} title="Undo (⌘Z)">↶</button>
-          <button type="button" className="btn-ghost rd-small" onClick={redo} disabled={!canRedo || !!activeId} title="Redo (⌘⇧Z)">↷</button>
-          <label className="rd-format">
-            Template
-            <select
-              value={doc.format}
-              onChange={e => commit(d => ({ ...d, format: e.target.value as ResumeDocFormat }))}
-            >
-              {RESUME_FORMATS.filter(f => f !== 'combination' || doc.format === 'combination').map(f => (
-                <option key={f} value={f}>{FORMAT_LABELS[f]}</option>
-              ))}
-            </select>
-          </label>
+      <div className="rd-head" ref={menuRef}>
+        <div className="rd-head-main">
+          <div className="rd-head-title">{jd?.title || doc.header.title || 'Your resume'}</div>
+          <div className="rd-head-sub">
+            {jd?.company && <span>{jd.company}</span>}
+            <span className={`rd-save rd-save-${saveState}`} aria-live="polite">{saveLabel(saveState)}</span>
+          </div>
         </div>
-        <div className="rd-bar-right">
-          <button type="button" className="btn-primary rd-small" onClick={() => download('pdf')}>Download PDF</button>
-          <button type="button" className="btn-ghost rd-small" onClick={() => download('docx')}>Word</button>
+        {criteria.length > 0 && (
+          <button type="button" className="rd-head-fit" onClick={() => openTab('fit')} title="Fit for this job">
+            <span style={{ color: fitColor(headerScore) }}>{headerScore}</span> fit
+          </button>
+        )}
+        <div className="rd-head-actions">
+          <button type="button" className="btn-ghost rd-small" onClick={undo} disabled={!canUndo || !!activeId} title="Undo (⌘Z)" aria-label="Undo">↶</button>
+          <button type="button" className="btn-ghost rd-small" onClick={redo} disabled={!canRedo || !!activeId} title="Redo (⌘⇧Z)" aria-label="Redo">↷</button>
+          <div className="rd-menu-wrap">
+            <button type="button" className="btn-ghost rd-small" aria-expanded={menu === 'design'} onClick={() => openMenu('design')}>Design ▾</button>
+            {menu === 'design' && (
+              <div className="rd-menu" role="dialog" aria-label="Design">
+                <div className="rd-menu-label">Template</div>
+                {RESUME_FORMATS.filter(f => f !== 'combination' || doc.format === 'combination').map(f => (
+                  <label key={f} className="rd-menu-row">
+                    <input type="radio" name="rd-template" checked={doc.format === f} onChange={() => setTemplate(f)} />
+                    {FORMAT_LABELS[f]}
+                  </label>
+                ))}
+                <div className="rd-menu-label">Sections</div>
+                {([
+                  ['summary', 'Summary', !!doc.summary.text.trim()],
+                  ['skills', 'Skills', doc.skills.length > 0],
+                  ['education', 'Education', doc.education.length > 0],
+                  ['awards', 'Awards & certifications', !!doc.awards.trim()],
+                ] as const).filter(([, , has]) => has).map(([key, label]) => (
+                  <label key={key} className="rd-menu-row">
+                    <input type="checkbox" checked={!isHidden(doc, key)} onChange={() => toggleSection(key)} />
+                    {label}
+                  </label>
+                ))}
+                <div className="rd-menu-label">Cover letter</div>
+                <label className="rd-menu-row">
+                  <input type="checkbox" checked={!!coverLetterDefault} disabled={coverLetterDefault === null} onChange={toggleCoverLetter} />
+                  Write one with new drafts
+                </label>
+                <div className="rd-menu-foot">Saved as your defaults for new drafts.</div>
+              </div>
+            )}
+          </div>
+          <div className="rd-menu-wrap">
+            <button type="button" className="btn-primary rd-small" aria-expanded={menu === 'export'} onClick={() => openMenu('export')}>Export ▾</button>
+            {menu === 'export' && (
+              <div className="rd-menu rd-menu-right" role="menu" aria-label="Export">
+                <button type="button" role="menuitem" className="rd-menu-item" onClick={() => { setMenu(null); void download('pdf') }}>PDF</button>
+                <button type="button" role="menuitem" className="rd-menu-item" onClick={() => { setMenu(null); void download('docx') }}>Word (.docx)</button>
+                <button type="button" role="menuitem" className="rd-menu-item" onClick={() => void copyText()}>{copied ? 'Copied ✓' : 'Copy text'}</button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -798,7 +896,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
           {line(CONTACT_ID, { placeholder: 'email · phone · city · LinkedIn', style: { fontSize: 11.5, textAlign: 'center', color: '#666' } })}
         </header>
 
-        {(doc.summary.text || activeId === doc.summary.id) && (
+        {(doc.summary.text || activeId === doc.summary.id) && !isHidden(doc, 'summary') && (
           <section>
             <h2 className="rd-h2">Summary</h2>
             {line(doc.summary.id, { removable: true, placeholder: 'A 2–3 sentence summary' })}
@@ -862,21 +960,21 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
           </section>
         )}
 
-        {(doc.skills.length > 0 || activeId === SKILLS_ID) && (
+        {(doc.skills.length > 0 || activeId === SKILLS_ID) && !isHidden(doc, 'skills') && (
           <section>
             <h2 className="rd-h2">Skills</h2>
             {line(SKILLS_ID, { placeholder: 'Comma-separated skills' })}
           </section>
         )}
 
-        {doc.education.length > 0 && (
+        {doc.education.length > 0 && !isHidden(doc, 'education') && (
           <section>
             <h2 className="rd-h2">Education</h2>
             {doc.education.map(b => <div key={b.id}>{line(b.id, { removable: true, ai: false })}</div>)}
           </section>
         )}
 
-        {(doc.awards || activeId === AWARDS_ID) && (
+        {(doc.awards || activeId === AWARDS_ID) && !isHidden(doc, 'awards') && (
           <section>
             <h2 className="rd-h2">Awards &amp; certifications</h2>
             {line(AWARDS_ID)}
@@ -885,7 +983,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
       </div>
 
       <p className="rd-help">
-        Click any line to edit it. Enter or Esc finishes. Drag ⋮⋮ to reorder within a job. Downloads use exactly what you see here.
+        Click any line to edit it. Enter or Esc finishes. Drag ⋮⋮ to reorder within a job. Exports use exactly what you see here.
       </p>
     </div>
     <aside className="rd-aside">
@@ -1021,8 +1119,23 @@ const EDITOR_CSS = `
 .rd-sug-actions { display: flex; gap: 6px; }
 @media (prefers-reduced-motion: reduce) { .rd-chip.pop, .rd-fit-delta { animation: none; } }
 @media (max-width: 900px) { .rd-aside { position: static; flex-basis: 100%; } }
-.rd-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
-.rd-bar-left, .rd-bar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rd-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.rd-head-main { flex: 1; min-width: 200px; }
+.rd-head-title { font-size: 17px; font-weight: 700; color: var(--text); line-height: 1.25; }
+.rd-head-sub { display: flex; gap: 10px; align-items: center; font-size: 12.5px; color: var(--text3); margin-top: 2px; flex-wrap: wrap; }
+.rd-head-fit { background: var(--surface); border: 1px solid var(--border2); border-radius: 999px; padding: 4px 12px; font: 600 12.5px var(--font); color: var(--text2); cursor: pointer; }
+.rd-head-fit span { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rd-head-actions { display: flex; align-items: center; gap: 6px; }
+.rd-menu-wrap { position: relative; }
+.rd-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; min-width: 230px; padding: 8px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border2); box-shadow: 0 8px 28px rgba(0,0,0,0.22); display: flex; flex-direction: column; gap: 2px; }
+.rd-menu-right { left: auto; right: 0; min-width: 170px; }
+.rd-menu-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text3); padding: 8px 6px 4px; }
+.rd-menu-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); padding: 5px 6px; border-radius: 6px; cursor: pointer; }
+.rd-menu-row:hover { background: var(--bg3); }
+.rd-menu-row input { accent-color: var(--teal); }
+.rd-menu-foot { font-size: 11.5px; color: var(--text3); padding: 8px 6px 2px; border-top: 1px solid var(--border2); margin-top: 6px; }
+.rd-menu-item { text-align: left; background: none; border: none; border-radius: 6px; padding: 8px 10px; font: 13px var(--font); color: var(--text); cursor: pointer; }
+.rd-menu-item:hover, .rd-menu-item:focus-visible { background: var(--bg3); outline: none; }
 .rd-small { font-size: 12.5px; }
 .rd-save { font-size: 12px; color: var(--text3); min-width: 70px; }
 .rd-save-error { color: var(--rose); }

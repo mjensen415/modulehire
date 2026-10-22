@@ -3,7 +3,7 @@
 import * as docx from 'docx'
 import { renderToBuffer, Document as PdfDoc, Page, Text, View } from '@react-pdf/renderer'
 import React from 'react'
-import type { ResumeDoc } from '@/lib/resume-doc'
+import { visibleDoc, type ResumeDoc } from '@/lib/resume-doc'
 import { groupExperienceByCompany } from '@/lib/resume-dates'
 export { groupExperienceByCompany }
 
@@ -1378,7 +1378,8 @@ export async function renderResume(input: RenderInput): Promise<{ html: string; 
 // The edited document (src/lib/resume-doc.ts) is the source of truth; every template renders
 // from it through this adapter, so a download always matches what the editor shows.
 
-export function docToRenderInput(doc: ResumeDoc): RenderInput {
+export function docToRenderInput(source: ResumeDoc): RenderInput {
+  const doc = visibleDoc(source)
   const f = doc.header.contact_fields
   const contact: Contact = { name: doc.header.name, email: f.email, phone: f.phone, location: f.location, linkedin: f.linkedin }
   const lines = (blocks: { text: string }[]) => blocks.map(b => b.text.trim()).filter(Boolean)
