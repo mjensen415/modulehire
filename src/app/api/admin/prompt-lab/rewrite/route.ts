@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/admin-guard'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
+import { stripUnsupportedSentences } from '@/lib/fact-check'
 import { getUserPreferences, buildPreferenceContext } from '@/lib/preferences'
 
 export const maxDuration = 60
@@ -20,7 +21,7 @@ Key phrases from JD: ${phrases.join(', ')}
 
 Rewrite the module content to better match this role. Rules:
 - Keep all factual claims, job titles, company names, and dates exactly as written
-- Do not invent metrics or achievements not already implied
+- Do not invent metrics, tools, names, or achievements that the module content does not state
 - Do not change the candidate's seniority level or job title
 - Keep the same approximate length and bullet structure
 - Focus the language on the JD themes without becoming generic
@@ -72,8 +73,14 @@ export async function POST(req: Request) {
 
     const raw = await aiComplete([{ role: 'user', content: prompt }], 512, { model: typeof model === 'string' ? model : undefined, tier: 'quality' })
 
+    // The same fact check production runs, reported rather than applied, so a prompt change
+    // can be judged on how much it makes up.
+    const checked = stripUnsupportedSentences(raw.trim(), [moduleRow.content, moduleRow.title])
+
     return NextResponse.json({
       suggestion: raw.trim(),
+      checked_suggestion: checked.text,
+      fact_check: checked.removed,
       original: moduleRow.content,
       raw_ai_response: raw,
       prompt_used: prompt,

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
+import { stripUnsupportedSentences } from '@/lib/fact-check'
 import { getUserPreferences, buildPreferenceContext } from '@/lib/preferences'
 
 export const maxDuration = 60
@@ -63,7 +64,7 @@ Key phrases from JD: ${phrases.join(', ')}
 
 Rewrite the module content to better match this role. Rules:
 - Keep all factual claims, job titles, company names, and dates exactly as written
-- Do not invent metrics or achievements not already implied
+- Do not invent metrics, tools, names, or achievements that the module content does not state
 - Do not change the candidate's seniority level or job title
 - Keep the same approximate length and bullet structure
 - Focus the language on the JD themes without becoming generic
@@ -72,7 +73,11 @@ Return ONLY the rewritten module content, no preamble, no explanation.`
 
     const raw = await aiComplete([{ role: 'user', content: prompt }], 512, { tier: 'quality', action: 'ai_module_rewrite', userId: user.id })
 
-    return NextResponse.json({ suggestion: raw.trim() })
+    // Drop any sentence that names a number or proper noun the original module doesn't contain.
+    const checked = stripUnsupportedSentences(raw.trim(), [moduleRow.content, moduleRow.title])
+    if (!checked.text) return NextResponse.json({ error: 'Could not suggest a rewrite that stays true to this module.' }, { status: 422 })
+
+    return NextResponse.json({ suggestion: checked.text })
   } catch (error) {
     console.error('[suggest-module-rewrite]', error)
     return NextResponse.json({ error: 'Request failed' }, { status: 500 })

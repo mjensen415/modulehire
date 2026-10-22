@@ -7,10 +7,10 @@ import { ROLE_TEMPLATES, getRoleTemplate } from '@/data/role-templates'
 const DEFAULT_CONTENT_PLACEHOLDER =
   'Describe what you did, the impact, and any metrics. This content will be used directly in your resume.'
 
-export default function NewModuleForm({ pinnedCount }: { pinnedCount: number }) {
+export default function NewModuleForm({ pinnedCount, initialTitle = '' }: { pinnedCount: number; initialTitle?: string }) {
   const router = useRouter()
   const [fields, setFields] = useState({
-    title: '',
+    title: initialTitle,
     content: '',
     weight: 'supporting',
     type: 'experience',

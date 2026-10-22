@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import ScoreGauge from '@/components/ScoreGauge'
 import { OutreachButton } from '@/components/OutreachSheet'
+import UnsupportedPhrases from '@/components/UnsupportedPhrases'
 
 export default async function ResumeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -42,6 +43,14 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
   const { data: modulesUsed } = moduleIds.length > 0
     ? await supabase.from('modules').select('id, title').in('id', moduleIds)
     : { data: [] as Array<{ id: string; title: string }> }
+
+  // Separate query so this page still loads if the generation_flags migration isn't applied.
+  const { data: flagsRow } = await supabase
+    .from('generated_resumes')
+    .select('unsupported_phrases')
+    .eq('id', resume.id)
+    .maybeSingle()
+  const unsupportedPhrases: string[] = Array.isArray(flagsRow?.unsupported_phrases) ? flagsRow.unsupported_phrases : []
 
   const createdDate = new Date(resume.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
@@ -118,6 +127,8 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
               This file is no longer available. <Link href={`/generate?jd_id=${resume.job_description_id}`} style={{ color: 'var(--teal)' }}>Regenerate →</Link>
             </div>
           )}
+
+          <UnsupportedPhrases phrases={unsupportedPhrases} />
 
           {modulesUsed && modulesUsed.length > 0 && (
             <div>

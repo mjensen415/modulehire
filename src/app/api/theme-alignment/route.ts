@@ -5,6 +5,7 @@ import { jsonrepair } from 'jsonrepair'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
+import { stripUnsupportedSentences } from '@/lib/fact-check'
 
 export const maxDuration = 60
 
@@ -130,6 +131,12 @@ Output ONLY valid JSON in this exact shape, no markdown:
         module_title: moduleTitleById.get(g.module_id) ?? g.module_title ?? '',
         original: moduleContentById.get(g.module_id) ?? g.original ?? '',
         suggestion: typeof g.suggestion === 'string' ? g.suggestion : '',
+      }))
+      // Same check as generation: a sentence naming a number or proper noun the module
+      // doesn't contain is dropped; a suggestion with nothing left is dropped entirely.
+      .map(g => ({
+        ...g,
+        suggestion: stripUnsupportedSentences(g.suggestion, [g.original, g.module_title]).text,
       }))
       .filter(g => g.suggestion.length > 0)
 

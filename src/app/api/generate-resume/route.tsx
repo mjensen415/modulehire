@@ -6,6 +6,7 @@ import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
+import { factCheckBullets, stripUnsupportedSentences, type FactFlag, type SourceModule } from '@/lib/fact-check'
 // canGenerate removed — generation is always allowed; download is gated client-side via canDownload.
 import { FREE_MONTHLY_GENERATIONS, isProTier } from '@/lib/plan'
 import * as docx from 'docx'
@@ -19,7 +20,7 @@ type ResumeFormat = 'classic' | 'tech' | 'combination' | 'executive' | 'minimal'
 type StructuredData = {
   job_title?: string
   summary?: string
-  experience?: { title: string; company: string; dates: string; bullets: string[] }[]
+  experience?: { title: string; company: string; dates: string; bullets: string[]; bullet_sources?: string[] }[]
   skills?: string
   education?: string
   awards?: string
@@ -30,7 +31,7 @@ type CombinationData = {
   job_title: string
   summary: string
   skill_sections: { category: string; bullets: string[] }[]
-  work_experience: { title: string; company: string; dates: string; bullets: string[] }[]
+  work_experience: { title: string; company: string; dates: string; bullets: string[]; bullet_sources?: string[] }[]
   education: { degree: string; school: string; year: string }[]
   skills_list: string[]
   awards?: string
@@ -1544,7 +1545,7 @@ export async function POST(req: Request) {
       role: string
       date_start: string | null
       date_end: string | null
-      modules: { title: string; content: string }[]
+      modules: SourceModule[]
     }
     const experienceGroups: ExperienceGroup[] = jobOrder.map(k => {
       const mods = jobGroups.get(k)!
@@ -1557,7 +1558,7 @@ export async function POST(req: Request) {
         role:       String(mods[0].source_role_title ?? ''),
         date_start: starts.length ? [...starts].sort()[0] : null,
         date_end:   hasPresent ? null : (ends.length ? [...ends].sort().reverse()[0] : null),
-        modules:    mods.map(m => ({ title: String(m.title ?? ''), content: String(m.content ?? '') })),
+        modules:    mods.map(m => ({ id: String(m.id), title: String(m.title ?? ''), content: String(m.content ?? '') })),
       }
     })
 
@@ -1599,15 +1600,17 @@ export async function POST(req: Request) {
     const phrasesToUse: string[] = confirmed_phrases?.length ? confirmed_phrases : (jd.extracted_phrases || [])
     const themesToUse: string[] = confirmed_themes?.length ? confirmed_themes : (jd.extracted_themes || [])
 
+    // The resume describes the candidate, not the posting. JD wording is only allowed where a
+    // module already shows the candidate did that thing; everything else is reported back as
+    // unsupported_phrases (shown to the user as a gap to fill) instead of being written in.
     const atsInstruction = phrasesToUse.length > 0
-      ? `KEYWORD OPTIMIZATION RULES:
-- You MUST incorporate as many of the following JD key phrases verbatim into the resume as naturally possible: ${phrasesToUse.join(', ')}
-- For each JD theme that matches a module, use the exact theme language in bullet points: ${themesToUse.join(', ')}
-- Lead every bullet point with a strong action verb
-- Prioritize keyword density over stylistic variation — repetition of key terms is acceptable and desirable for ATS
-- Do NOT summarize or paraphrase key phrases — use them word-for-word where possible
-- Goal: ATS score above 90. Do not omit any phrase from the list.`
-      : (themesToUse.length > 0 ? `- Mirror these JD themes naturally: ${themesToUse.join(', ')}` : '')
+      ? `KEYWORD RULES:
+- Here are the posting's key phrases: ${phrasesToUse.join(', ')}
+- Use a phrase only when a module's content shows the candidate actually did that thing. Then prefer the posting's exact wording over a synonym.
+- If no module supports a phrase, leave it out. Never add a skill, tool, scope, number, company, or outcome that is not in the modules.
+- Return the phrases you did NOT use in "unsupported_phrases".
+${themesToUse.length > 0 ? `- The posting's themes, for framing only where the modules support them: ${themesToUse.join(', ')}` : ''}`
+      : (themesToUse.length > 0 ? `- Mirror these JD themes only where the modules support them: ${themesToUse.join(', ')}` : '')
 
     // Repetition signal: the competencies a posting asks for in several places are the ones a
     // screener (human or ATS) is actually looking for. Pass criteria most-mentioned first and
@@ -1634,6 +1637,41 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
     const resumeTitle = `${roleTitle} - ${contact.name}`
     const docxFilename = `${resumeTitle}.docx`
 
+    // ── Fact check ────────────────────────────────────────────────────────────
+    // Every generated bullet is checked against the module it came from (numbers and proper
+    // nouns must appear there); a failing bullet becomes a plain sentence from that module.
+    // Names may also come from the target role, the candidate's own profile, and the jobs the
+    // selected modules came from.
+    const allSourceModules: SourceModule[] = sortedModules.map(m => ({ id: String(m.id), title: String(m.title ?? ''), content: String(m.content ?? '') }))
+    const factContext: string[] = [
+      String(jd.extracted_company ?? ''), String(jd.extracted_job_title ?? ''), job_level ?? '',
+      contact.name ?? '', contact.location ?? '', skillsText, educationText, awardsSection,
+      ...sortedModules.flatMap(m => [String(m.source_company ?? ''), String(m.source_role_title ?? '')]),
+    ]
+    const generationFlags: FactFlag[] = []
+    let modelUnsupported: string[] = []
+    const sameText = (a: unknown, b: unknown) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase()
+    function checkExperience<E extends { title: string; company: string; bullets: string[]; bullet_sources?: string[] }>(entries: E[] | undefined): E[] | undefined {
+      return entries?.map((e, i) => {
+        const group = experienceGroups.find(g => sameText(g.company, e.company) && sameText(g.role, e.title))
+          ?? experienceGroups[i]
+        const { bullets, flags } = factCheckBullets(
+          Array.isArray(e.bullets) ? e.bullets : [],
+          group?.modules ?? allSourceModules,
+          [...factContext, group?.company ?? '', group?.role ?? ''],
+          Array.isArray(e.bullet_sources) ? e.bullet_sources : [],
+        )
+        generationFlags.push(...flags)
+        return { ...e, bullets }
+      })
+    }
+    function checkSummary(summary: string | undefined): string | undefined {
+      if (!summary || summary_override) return summary
+      const { text, removed } = stripUnsupportedSentences(summary, allSourceModules.flatMap(m => [m.content, m.title]), factContext)
+      generationFlags.push(...removed.map(r => ({ module_id: null, bullet: r.sentence, reason: r.reason, replacement: null })))
+      return text
+    }
+
     // ── Combination template: separate structured prompt ──────────────────────
     let resumeHtml: string
     let docxBuffer: Buffer
@@ -1644,7 +1682,7 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
       const comboPrompt = `Assemble a tailored resume in structured JSON for: ${jd.extracted_role_type} at ${jd.extracted_company}.
 
 Rules:
-- Write punchy, metric-driven bullet points (start each with a strong verb)
+- Write punchy bullet points that start with a strong verb, using only the metrics the modules state
 ${atsInstruction}
 ${repetitionInstruction}
 ${levelInstruction ? `- ${levelInstruction}` : ''}
@@ -1658,8 +1696,9 @@ Respond with JSON ONLY matching this exact structure:
     { "category": "Skill Domain Name", "bullets": ["Achievement or responsibility...", "..."] }
   ],
   "work_experience": [
-    { "title": "Job Title", "company": "Company · City, State", "dates": "Mon YYYY – Mon YYYY", "bullets": ["...", "..."] }
+    { "title": "Job Title", "company": "Company · City, State", "dates": "Mon YYYY – Mon YYYY", "bullets": ["...", "..."], "bullet_sources": ["<id of the module bullet 1 came from>", "..."] }
   ],
+  "unsupported_phrases": ["posting phrases you did not use because no module supports them"],
   "education": [
     { "degree": "Degree and Major", "school": "University Name", "year": "YYYY" }
   ],
@@ -1668,7 +1707,7 @@ Respond with JSON ONLY matching this exact structure:
 }
 
 - skill_sections: one entry per module in skill_modules below (use module title as category, convert content to 2–4 bullets)
-- work_experience: use EXACTLY the pre-built experience_groups below — one experience entry per group, in order. Do NOT merge groups, split groups, or move any module to a different group. The company, role, and dates are pre-set — do not change them. Convert each module's content into 2–4 bullets.
+- work_experience: use EXACTLY the pre-built experience_groups below — one experience entry per group, in order. Do NOT merge groups, split groups, or move any module to a different group. The company, role, and dates are pre-set — do not change them. Convert each module's content into 2–4 bullets. bullet_sources lists, for each bullet in order, the id of the module it came from.
 - education: ${include_education_section && educationText ? educationText : 'leave as empty array []'}
 - skills_list: ${include_skills_section && skillsText ? skillsText : 'leave as empty array []'}
 - awards: ${awardsSection ? `include this verbatim: ${awardsSection}` : 'set to empty string ""'}
@@ -1685,7 +1724,23 @@ ${JSON.stringify(experienceGroups)}
       const strippedCombo = rawCombo.replace(/```json/g, '').replace(/```/g, '')
       const cs = strippedCombo.indexOf('{'), ce = strippedCombo.lastIndexOf('}')
       if (cs === -1 || ce === -1) throw new Error(`Combination template: model did not return JSON. Got: ${strippedCombo.slice(0, 200)}`)
-      const comboData: CombinationData = JSON.parse(strippedCombo.slice(cs, ce + 1).replace(/,(\s*[}\]])/g, '$1'))
+      const parsedCombo: CombinationData & { unsupported_phrases?: string[] } = JSON.parse(strippedCombo.slice(cs, ce + 1).replace(/,(\s*[}\]])/g, '$1'))
+      modelUnsupported = Array.isArray(parsedCombo.unsupported_phrases) ? parsedCombo.unsupported_phrases : []
+      const comboData: CombinationData = {
+        ...parsedCombo,
+        summary: checkSummary(parsedCombo.summary) ?? '',
+        // One skill section per module, in sortedModules order.
+        skill_sections: (parsedCombo.skill_sections ?? []).map((sec, i) => {
+          const { bullets, flags } = factCheckBullets(
+            Array.isArray(sec.bullets) ? sec.bullets : [],
+            allSourceModules[i] ? [allSourceModules[i]] : allSourceModules,
+            factContext,
+          )
+          generationFlags.push(...flags)
+          return { ...sec, bullets }
+        }),
+        work_experience: checkExperience(parsedCombo.work_experience) ?? [],
+      }
 
       const comboDoc = buildDocxCombination(contact, comboData, bullet_style)
       docxBuffer = await docx.Packer.toBuffer(comboDoc) as Buffer
@@ -1744,7 +1799,7 @@ CRITICAL BULLET RULES — follow exactly:
 - Every experience entry MUST have a "bullets" array of 2–4 short bullet strings
 - Each bullet MUST be under 20 words
 - Each bullet MUST start with a past-tense action verb (Built, Led, Grew, Launched, Managed, Drove, Scaled, etc.)
-- Extract specific metrics and outcomes from the module content — do NOT copy the paragraph verbatim
+- Use only the metrics and outcomes the module content states — never add a number that isn't there. Do NOT copy the paragraph verbatim
 - Do NOT put paragraph text as a single bullet — always decompose into multiple short bullets
 ${atsInstruction}
 ${repetitionInstruction}
@@ -1763,8 +1818,9 @@ Respond with ONLY this JSON structure — no markdown, no explanation:
   "job_title": "the exact job title from the job description",
   "summary": "3-4 sentence professional summary",
   "experience": [
-    { "title": "Job Title", "company": "Company Name", "dates": "Jan 2020 – Present", "bullets": ["Led team of 8 across 3 regions, delivering 40% growth.", "Built ambassador program reaching 1,200 members in 6 months."] }
+    { "title": "Job Title", "company": "Company Name", "dates": "Jan 2020 – Present", "bullets": ["<bullet from a module>", "<bullet from a module>"], "bullet_sources": ["<id of the module bullet 1 came from>", "<id of the module bullet 2 came from>"] }
   ],
+  "unsupported_phrases": ["posting phrases you did not use because no module supports them"],
   "skills": "skill1, skill2, skill3",
   "education": "B.S. Communications, UC Berkeley (2017)",
   "awards": "award or certification text, or empty string if none"
@@ -1779,12 +1835,13 @@ ${JSON.stringify(experienceGroups)}`
       if (jsonStart === -1 || jsonEnd === -1) throw new Error(`Model did not return JSON. Response: ${stripped.slice(0, 200)}`)
       const cleanJson = stripped.slice(jsonStart, jsonEnd + 1)
         .replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/,(\s*[}\]])/g, '$1')
-      const resumeData: StructuredData = JSON.parse(cleanJson)
+      const resumeData: StructuredData & { unsupported_phrases?: string[] } = JSON.parse(cleanJson)
+      modelUnsupported = Array.isArray(resumeData.unsupported_phrases) ? resumeData.unsupported_phrases : []
 
       const structuredData: StructuredData = {
         job_title: resumeData.job_title,
-        summary: include_summary ? resumeData.summary : undefined,
-        experience: resumeData.experience,
+        summary: include_summary ? checkSummary(resumeData.summary) : undefined,
+        experience: checkExperience(resumeData.experience),
         skills: include_skills_section ? resumeData.skills : undefined,
         education: include_education_section ? resumeData.education : undefined,
         awards: awardsSection || undefined,
@@ -1903,6 +1960,21 @@ ${JSON.stringify(experienceGroups)}`
       .update({ ats_score: atsScore })
       .eq('id', resumeId)
 
+    // Posting phrases left off because no module supports them — shown to the user as gaps
+    // to fill, not hidden. A phrase the model says it skipped counts unless it's literally on
+    // the page (the fuzzy keyword match above is too lenient to overrule the model there).
+    const unsupportedPhrases = phrasesToUse.filter(p => {
+      const lower = p.toLowerCase().trim()
+      if (missingKeywords.includes(lower)) return true
+      return modelUnsupported.some(u => sameText(u, p)) && !cleanResumeText.includes(lower)
+    })
+    // Separate update so a missing column (migration not yet applied) can't lose the score.
+    const { error: flagsError } = await supabase
+      .from('generated_resumes')
+      .update({ generation_flags: generationFlags, unsupported_phrases: unsupportedPhrases })
+      .eq('id', resumeId)
+    if (flagsError) console.error('[generate-resume] saving generation_flags failed:', flagsError)
+
     let coverLetterText: string | null = null
     let coverLetterUrl: string | null = null
 
@@ -1980,6 +2052,8 @@ Rules:
       matched_keywords: proBreakdown ? matchedKeywords : [],
       missing_keywords: proBreakdown ? missingKeywords : [],
       ats_score: atsScore,
+      unsupported_phrases: unsupportedPhrases,
+      fact_check_rewrites: generationFlags.length,
     })
   } catch (error) {
     console.error(error)

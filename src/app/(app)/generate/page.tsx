@@ -10,6 +10,7 @@ import ApplicationSignalChips from '@/components/ApplicationSignalChips'
 import OutreachSheet from '@/components/OutreachSheet'
 import { parsePostingAge, type ApplicationSource, type PostingAge } from '@/lib/tracker'
 import MatchReport, { type MatchReportData } from '@/components/MatchReport'
+import UnsupportedPhrases from '@/components/UnsupportedPhrases'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -271,6 +272,7 @@ export default function GeneratePage() {
   const [showAllKeywords, setShowAllKeywords] = useState(false)
   const [matchedKeywords, setMatchedKeywords] = useState<string[]>([])
   const [missingKeywords, setMissingKeywords] = useState<string[]>([])
+  const [unsupportedPhrases, setUnsupportedPhrases] = useState<string[]>([])
   const [showDownloadMenu, setShowDownloadMenu] = useState(false)
   const [atsScore, setAtsScore] = useState<number | null>(null)
   const [confirmedPhrases, setConfirmedPhrases] = useState<string[]>([])
@@ -1623,6 +1625,7 @@ export default function GeneratePage() {
       setCoverLetterUrl(data.cover_letter_url ?? null)
       setMatchedKeywords(data.matched_keywords ?? [])
       setMissingKeywords(data.missing_keywords ?? [])
+      setUnsupportedPhrases(data.unsupported_phrases ?? [])
       setAtsScore(data.ats_score ?? null)
       fetch('/api/draft-generation', { method: 'DELETE' }).catch(() => {})
       setDraftRestored(false)
@@ -1686,6 +1689,7 @@ export default function GeneratePage() {
     setResumeFormat('classic')
     setMatchedKeywords([])
     setMissingKeywords([])
+    setUnsupportedPhrases([])
     setAtsScore(null)
     setShowDownloadMenu(false)
     setGeneratedUrls(null)
@@ -3961,6 +3965,8 @@ export default function GeneratePage() {
 
               {/* ── RIGHT: score + keywords ── */}
               <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                <UnsupportedPhrases phrases={unsupportedPhrases} />
 
                 {/* ATS Score gauge card */}
                 {(atsScore != null || totalKw > 0) && (

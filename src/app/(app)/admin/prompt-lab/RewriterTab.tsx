@@ -12,6 +12,8 @@ type RewriteResult = {
   raw_ai_response: string;
   prompt_used: string;
   model_used?: string;
+  checked_suggestion?: string;
+  fact_check?: { sentence: string; reason: string }[];
 };
 
 const ISSUE_OPTIONS = ['Too wordy', 'Wrong tone', 'Missing keywords', 'Over-engineered', 'Lost my voice', 'Inaccurate claim'];
@@ -115,7 +117,7 @@ export default function RewriterTab() {
         body: JSON.stringify({
           lab_type: 'module_rewrite',
           input_snapshot: { module_id: moduleId, jd_id: jdId, prompt_used: result.prompt_used, model_used: result.model_used },
-          output_snapshot: { original: result.original, suggestion: result.suggestion, raw_ai_response: result.raw_ai_response },
+          output_snapshot: { original: result.original, suggestion: result.suggestion, raw_ai_response: result.raw_ai_response, fact_check: result.fact_check ?? [] },
           feedback: { overall, issues, edited_text: editedText !== result.suggestion ? editedText : undefined },
           notes,
         }),
@@ -209,6 +211,27 @@ export default function RewriterTab() {
                   </div>
                 )}
               </div>
+            </div>
+
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>
+                Fabrication check
+              </div>
+              {(result.fact_check ?? []).length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--teal)' }}>✓ No numbers or names that aren&apos;t in the original</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 12.5, color: 'var(--text2)' }}>
+                    Production would drop {result.fact_check!.length} {result.fact_check!.length === 1 ? 'sentence' : 'sentences'}:
+                  </div>
+                  {result.fact_check!.map((f, i) => (
+                    <div key={i} style={{ fontSize: 13, lineHeight: 1.5 }}>
+                      <div style={{ color: 'var(--rose)', textDecoration: 'line-through' }}>{f.sentence}</div>
+                      <div style={{ fontSize: 11.5, color: 'var(--text3)' }}>{f.reason}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div style={{ marginBottom: 14 }}>

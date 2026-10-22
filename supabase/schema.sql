@@ -98,6 +98,8 @@ create table public.generated_resumes (
   is_temp boolean not null default true,
   expires_at timestamptz,
   deleted_at timestamptz,
+  generation_flags jsonb,       -- fact-check rewrites: [{ module_id, bullet, reason, replacement }]
+  unsupported_phrases text[],   -- posting phrases left off because no module supports them
   created_at timestamptz not null default now()
 );
 

@@ -4,7 +4,8 @@ import { getActiveProfileId } from '@/lib/profile'
 import Link from 'next/link'
 import NewModuleForm from './NewModuleForm'
 
-export default async function NewModulePage() {
+export default async function NewModulePage({ searchParams }: { searchParams: Promise<{ title?: string }> }) {
+  const { title } = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -32,7 +33,7 @@ export default async function NewModulePage() {
         </div>
       </div>
       <div className="dash-content" style={{ maxWidth: 680, margin: '0 auto' }}>
-        <NewModuleForm pinnedCount={pinnedCount ?? 0} />
+        <NewModuleForm pinnedCount={pinnedCount ?? 0} initialTitle={typeof title === 'string' ? title.slice(0, 200) : ''} />
       </div>
     </>
   )
