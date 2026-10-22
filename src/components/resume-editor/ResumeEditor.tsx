@@ -86,6 +86,8 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
   const [aiMessage, setAiMessage] = useState<{ blockId: string; text: string } | null>(null)
   const [askFor, setAskFor] = useState<string | null>(null)
   const [askText, setAskText] = useState('')
+  // Library write-back: offered under the last line you finished changing; never automatic.
+  const [writeBack, setWriteBack] = useState<{ blockId: string; state: 'offer' | 'saving' | 'saved' } | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
 
   const onConflict = useCallback((latest: { doc: ResumeDoc; version: number }) => {
@@ -210,12 +212,16 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
 
   const finish = useCallback(() => {
     if (!activeId) return
+    const finished = blockById(activeId)
+    if (finished?.module_id && finished.text.trim() && finished.text !== finished.original) {
+      setWriteBack({ blockId: finished.id, state: 'offer' })
+    }
     // Contact line: normalize the display string to the parsed fields once editing ends.
     if (activeId === CONTACT_ID) setLive(d => ({ ...d, header: { ...d.header, contact: contactLine(d.header.contact_fields) } }))
     endEdit()
     setActiveId(null)
     setSwapOpen(false)
-  }, [activeId, endEdit, setLive])
+  }, [activeId, endEdit, setLive, blockById])
 
   const onType = useCallback((block: Block) => {
     beginEdit()
@@ -412,6 +418,29 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
     setLibrary(prev => prev.map(m => (m.id === w.module.id ? { ...m, content } : m)))
   }
 
+  // Replace the line's original wording inside the module if it's there verbatim; otherwise add
+  // the new line to the module, so the improved wording carries forward to future resumes.
+  const saveToLibrary = async (blockId: string) => {
+    const block = blockById(blockId)
+    const m = block?.module_id ? moduleById.get(block.module_id) : undefined
+    if (!block || !m) return
+    setWriteBack({ blockId, state: 'saving' })
+    const text = block.text.trim()
+    const sentence = /[.!?]$/.test(text) ? text : `${text}.`
+    const original = block.original.trim()
+    const content = original && m.content.includes(original)
+      ? m.content.replace(original, text)
+      : `${m.content.trim()} ${sentence}`.trim()
+    const res = await fetch(`/api/modules/${m.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    })
+    if (!res.ok) { setWriteBack({ blockId, state: 'offer' }); setNotice("Couldn't update your library. Try again."); return }
+    setLibrary(prev => prev.map(x => (x.id === m.id ? { ...x, content } : x)))
+    setWriteBack({ blockId, state: 'saved' })
+  }
+
   const undoFact = (blockId: string) => {
     const clean = lastClean.current.get(blockId)
     const block = blockById(blockId)
@@ -536,6 +565,20 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
             </div>
           )
         })()}
+        {writeBack?.blockId === id && !active && !warnings.has(id) && (
+          <div className="rd-writeback">
+            {writeBack.state === 'saved' ? (
+              <span>Saved to your library ✓</span>
+            ) : (
+              <>
+                <button type="button" disabled={writeBack.state === 'saving'} onClick={() => saveToLibrary(id)}>
+                  {writeBack.state === 'saving' ? 'Saving…' : 'Save to your library too?'}
+                </button>
+                <button type="button" aria-label="No thanks" onClick={() => setWriteBack(null)}>×</button>
+              </>
+            )}
+          </div>
+        )}
         {aiMessage?.blockId === id && (
           <div className="rd-note rd-note-warn" role="status">
             {aiMessage.text}
@@ -838,5 +881,9 @@ const EDITOR_CSS = `
 .rd-note-actions { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .rd-note-actions button { font: 600 12px var(--font, system-ui); text-decoration: underline; padding: 0; }
 .rd-line.rd-line-warn, .rd-line.rd-line-warn:hover { background: #fdf0d5; }
+.rd-writeback { display: flex; align-items: center; gap: 6px; margin-top: 2px; font: 12px var(--font, system-ui); color: #0F6E56; }
+.rd-writeback button { background: none; border: none; padding: 0; cursor: pointer; font: inherit; color: inherit; }
+.rd-writeback button:first-child { text-decoration: underline; }
+.rd-writeback button[aria-label] { color: #999; font-size: 14px; }
 @media (max-width: 640px) { .rd-paper { padding: 28px 22px 32px; } .rd-handle { display: none; } }
 `
