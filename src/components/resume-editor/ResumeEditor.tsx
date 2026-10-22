@@ -6,11 +6,12 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from '@dnd-kit/utilities'
 import BlockEditor from './BlockEditor'
 import FitPanel from './FitPanel'
+import SuggestionsPanel from './SuggestionsPanel'
 import { useDocHistory } from './useDocHistory'
 import { useAutosave, type SaveState } from './useAutosave'
 import {
   RESUME_FORMATS, contactLine, docText, makeBlock, mapBlocks, modulesOnResume, updateBlockText,
-  type Block, type ResumeDoc, type ResumeDocFormat,
+  type Block, type BlockSuggestion, type ResumeDoc, type ResumeDocFormat,
 } from '@/lib/resume-doc'
 import { groupExperienceByCompany, normalizeCompany } from '@/lib/resume-dates'
 import { splitSentences, unsupportedTerms, type UnsupportedTerm } from '@/lib/fact-check'
@@ -87,6 +88,9 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
   const [askFor, setAskFor] = useState<string | null>(null)
   const [askText, setAskText] = useState('')
   // Library write-back: offered under the last line you finished changing; never automatic.
+  const [suggestions, setSuggestions] = useState<BlockSuggestion[] | null>(null)
+  const [sugLoading, setSugLoading] = useState(false)
+  const [sugError, setSugError] = useState<string | null>(null)
   const [writeBack, setWriteBack] = useState<{ blockId: string; state: 'offer' | 'saving' | 'saved' } | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
 
@@ -441,6 +445,36 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
     setWriteBack({ blockId, state: 'saved' })
   }
 
+  const findSuggestions = async () => {
+    setSugLoading(true)
+    setSugError(null)
+    try {
+      const res = await fetch(`/api/resume-docs/${docId}/suggestions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doc: docRef.current }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not find suggestions.')
+      setSuggestions(data.suggestions ?? [])
+    } catch (e) {
+      setSugError((e as Error).message)
+    } finally {
+      setSugLoading(false)
+    }
+  }
+
+  // A suggestion is an operation on one block; accepting it is a normal commit, so undo,
+  // autosave and history treat it exactly like typing.
+  const acceptSuggestion = (sug: BlockSuggestion) => {
+    commit(d => mapBlocks(d, b => (b.id === sug.block_id ? { ...b, text: sug.new_text } : b)))
+    setSuggestions(prev => (prev ?? []).filter(x => x.block_id !== sug.block_id))
+  }
+
+  const showBlock = (blockId: string) => {
+    document.querySelector(`[data-block-anchor="${blockId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
   const undoFact = (blockId: string) => {
     const clean = lastClean.current.get(blockId)
     const block = blockById(blockId)
@@ -469,7 +503,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
     const active = activeId === id
     const isSynthetic = id.startsWith('__')
     return (
-      <div className={`rd-line${active ? ' rd-line-active' : ''}${warnings.has(id) ? ' rd-line-warn' : ''}`} style={{ position: 'relative' }}>
+      <div data-block-anchor={id} className={`rd-line${active ? ' rd-line-active' : ''}${warnings.has(id) ? ' rd-line-warn' : ''}`} style={{ position: 'relative' }}>
         {active && (
           <div
             ref={toolbarRef}
@@ -773,6 +807,16 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
           checking={fitChecking}
           serverChecked={!!serverFit && serverFit.clientAt === live.score}
         />
+        <SuggestionsPanel
+          suggestions={suggestions}
+          loading={sugLoading}
+          error={sugError}
+          isStale={sug => blockById(sug.block_id)?.text !== sug.based_on}
+          onFind={findSuggestions}
+          onAccept={acceptSuggestion}
+          onDismiss={sug => setSuggestions(prev => (prev ?? []).filter(x => x.block_id !== sug.block_id))}
+          onShow={sug => showBlock(sug.block_id)}
+        />
       </aside>
     )}
     </div>
@@ -822,6 +866,11 @@ const EDITOR_CSS = `
 .rd-chip.pop { animation: rd-pop 0.6s ease; }
 @keyframes rd-pop { 0% { transform: scale(1); } 40% { transform: scale(1.12); } 100% { transform: scale(1); } }
 .rd-fit-foot { font-size: 11px; color: var(--text3); margin-top: 12px; }
+.rd-sugs { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.rd-sug { border-top: 1px solid var(--border2); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.rd-sug-reason { font-size: 11.5px; color: var(--teal); font-weight: 600; }
+.rd-sug-text { text-align: left; background: none; border: none; padding: 0; cursor: pointer; font: 13px/1.45 Georgia, 'Times New Roman', serif; color: var(--text); }
+.rd-sug-actions { display: flex; gap: 6px; }
 @media (prefers-reduced-motion: reduce) { .rd-chip.pop, .rd-fit-delta { animation: none; } }
 @media (max-width: 900px) { .rd-aside { position: static; flex-basis: 100%; } }
 .rd-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }

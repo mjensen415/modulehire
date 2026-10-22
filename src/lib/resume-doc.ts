@@ -130,3 +130,13 @@ export function docEvidence(doc: ResumeDoc): { id: string; title: string; conten
     ...(doc.awards.trim() ? [{ id: 'awards', title: 'Awards', content: doc.awards.trim() }] : []),
   ].filter(item => item.content)
 }
+
+/** A suggested change, as an operation on one block (POST /api/resume-docs/[id]/suggestions). */
+export type BlockSuggestion = {
+  block_id: string
+  new_text: string
+  reason: string
+  module_id: string | null
+  /** The line's text the suggestion was written against; the editor marks it stale if it changed. */
+  based_on: string
+}
