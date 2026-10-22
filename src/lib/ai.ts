@@ -191,3 +191,41 @@ export async function aiCompleteJson<T>(
   logUsage(opts, model, { input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens, duration_ms: durationMs })
   return toolUse.input as T
 }
+
+/**
+ * Streamed plain-text completion: yields text deltas as they arrive (the editor types a line
+ * rewrite into place). Usage is logged when the stream ends, like aiComplete. On the ollama
+ * provider the whole completion is yielded once.
+ */
+export async function* aiStream(messages: Message[], maxTokens = 1024, opts?: AiOpts): AsyncGenerator<string> {
+  const provider = process.env.AI_PROVIDER ?? 'claude'
+  if (provider === 'ollama') {
+    yield await aiComplete(messages, maxTokens, opts)
+    return
+  }
+
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const model = opts?.model || resolveModel(opts?.tier ?? 'default', opts?.action)
+  const systemMessage = messages.find(m => m.role === 'system')
+  const startedAt = Date.now()
+  const stream = client.messages.stream({
+    model,
+    max_tokens: maxTokens,
+    messages: messages.filter(m => m.role !== 'system').map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: typeof m.content === 'string'
+        ? m.content
+        : m.content.map(b => ({
+            type: 'text' as const,
+            text: b.text,
+            ...(b.cache ? { cache_control: { type: 'ephemeral' as const } } : {}),
+          })),
+    })),
+    ...(systemMessage ? { system: flattenContent(systemMessage.content) } : {}),
+  })
+  for await (const event of stream) {
+    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') yield event.delta.text
+  }
+  const final = await stream.finalMessage()
+  logUsage(opts, model, { input_tokens: final.usage.input_tokens, output_tokens: final.usage.output_tokens, duration_ms: Date.now() - startedAt })
+}

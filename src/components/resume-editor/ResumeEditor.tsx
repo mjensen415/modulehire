@@ -8,7 +8,7 @@ import BlockEditor from './BlockEditor'
 import { useDocHistory } from './useDocHistory'
 import { useAutosave, type SaveState } from './useAutosave'
 import {
-  RESUME_FORMATS, contactLine, makeBlock, modulesOnResume, updateBlockText,
+  RESUME_FORMATS, contactLine, makeBlock, mapBlocks, modulesOnResume, updateBlockText,
   type Block, type ResumeDoc, type ResumeDocFormat,
 } from '@/lib/resume-doc'
 import { groupExperienceByCompany, normalizeCompany } from '@/lib/resume-dates'
@@ -77,6 +77,11 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
   const [swapOpen, setSwapOpen] = useState(false)
   const [addOpenFor, setAddOpenFor] = useState<number | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // Line-level AI: which line is being rewritten, and the last message per line.
+  const [aiBusy, setAiBusy] = useState<string | null>(null)
+  const [aiMessage, setAiMessage] = useState<{ blockId: string; text: string } | null>(null)
+  const [askFor, setAskFor] = useState<string | null>(null)
+  const [askText, setAskText] = useState('')
   const toolbarRef = useRef<HTMLDivElement>(null)
 
   const onConflict = useCallback((latest: { doc: ResumeDoc; version: number }) => {
@@ -185,6 +190,80 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
     setAddOpenFor(null)
   }
 
+  const insertBlank = (entryIndex: number) => {
+    const block = makeBlock('', null)
+    commit(d => ({ ...d, experience: d.experience.map((e, i) => (i === entryIndex ? { ...e, bullets: [...e.bullets, block] } : e)) }))
+    setAddOpenFor(null)
+    setActiveId(block.id)
+  }
+
+  // Streams a rewrite of one line into place, then keeps it only if the server's fact check
+  // passed; otherwise the line goes back to what it was. One undo step either way.
+  const runAi = async (id: string, action: 'shorter' | 'stronger' | 'their_words' | 'custom', instruction?: string) => {
+    const block = blockById(id)
+    if (!block || aiBusy) return
+    const at = locate(id)
+    const section = doc.skill_sections.find(sec => sec.bullets.some(b => b.id === id))
+    const siblings = at ? doc.experience[at.entry].bullets : section ? section.bullets : []
+    const before = block.text
+    setAiBusy(id)
+    setAiMessage(null)
+    setAskFor(null)
+    try {
+      const res = await fetch(`/api/resume-docs/${docId}/rewrite-block`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          block_id: id,
+          action,
+          instruction,
+          text: before,
+          module_id: block.module_id,
+          job_id: !block.module_id && at ? doc.experience[at.entry].job_id : undefined,
+          neighbors: siblings.filter(b => b.id !== id).map(b => b.text),
+        }),
+      })
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error ?? 'The rewrite failed. Try again.')
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      let streamed = ''
+      let outcome: { type: string; text?: string; module_id?: string | null; message?: string } | null = null
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        let nl: number
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const msg = JSON.parse(buf.slice(0, nl))
+          buf = buf.slice(nl + 1)
+          if (msg.type === 'delta') {
+            streamed += msg.text
+            setLive(d => withText(d, id, streamed.trimStart()))
+          } else {
+            outcome = msg
+          }
+        }
+      }
+      setLive(d => withText(d, id, before))
+      if (outcome?.type === 'done' && outcome.text) {
+        const text = outcome.text
+        const moduleId = outcome.module_id ?? null
+        commit(d => mapBlocks(d, b => (b.id === id ? { ...b, text, module_id: b.module_id ?? moduleId } : b)))
+      } else {
+        setAiMessage({ blockId: id, text: outcome?.message ?? 'The rewrite failed. Try again.' })
+      }
+    } catch (e) {
+      setLive(d => withText(d, id, before))
+      setAiMessage({ blockId: id, text: (e as Error).message })
+    } finally {
+      setAiBusy(null)
+    }
+  }
+
   const swapWith = (id: string, m: EditorModule) => {
     const at = locate(id)
     if (!at) return
@@ -251,7 +330,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
   )
 
   // ── Rendering ─────────────────────────────────────────────────────────────
-  const line = (id: string, opts: { placeholder?: string; style?: React.CSSProperties; removable?: boolean; swapEntry?: number } = {}) => {
+  const line = (id: string, opts: { placeholder?: string; style?: React.CSSProperties; removable?: boolean; swapEntry?: number; ai?: boolean } = {}) => {
     const block = blockById(id)
     if (!block) return null
     const active = activeId === id
@@ -267,6 +346,16 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
             className="rd-toolbar"
             onMouseDown={e => { if ((e.target as HTMLElement).tagName !== 'BUTTON') e.preventDefault() }}
           >
+            {!isSynthetic && opts.ai !== false && (
+              <>
+                <button type="button" disabled={!!aiBusy || !block.text.trim()} onClick={() => runAi(id, 'shorter')}>✦ Shorter</button>
+                <button type="button" disabled={!!aiBusy || !block.text.trim()} onClick={() => runAi(id, 'stronger')}>✦ Stronger</button>
+                {jd && jd.criteria.length > 0 && (
+                  <button type="button" disabled={!!aiBusy || !block.text.trim()} onClick={() => runAi(id, 'their_words')} title="Use the posting's wording where your module supports it">✦ Their words</button>
+                )}
+              </>
+            )}
+            {aiBusy === id && <span className="rd-toolbar-hint">Writing…</span>}
             {opts.swapEntry !== undefined && availableFor(opts.swapEntry).length > 0 && (
               <button type="button" onClick={() => setSwapOpen(v => !v)} title="Replace with another module from this job">⇄ Swap</button>
             )}
@@ -275,6 +364,23 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
             )}
             {opts.removable && <button type="button" onClick={() => removeBlock(id)} title="Remove this line">✕</button>}
             {isSynthetic && <span className="rd-toolbar-hint">Enter to finish</span>}
+            {askFor === id && (
+              <form
+                className="rd-ask"
+                onSubmit={e => { e.preventDefault(); if (askText.trim()) void runAi(id, 'custom', askText.trim()) }}
+              >
+                <span aria-hidden>✦</span>
+                <input
+                  autoFocus
+                  value={askText}
+                  onChange={e => setAskText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Escape') { setAskFor(null); setActiveId(id) } }}
+                  placeholder="Ask AI: make this about enterprise expansion"
+                  maxLength={200}
+                  aria-label="Ask AI to write this line"
+                />
+              </form>
+            )}
             {swapOpen && opts.swapEntry !== undefined && (
               <div className="rd-popover" role="listbox" aria-label="Swap with">
                 {availableFor(opts.swapEntry).map(m => (
@@ -296,6 +402,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
             onChange={onType}
             onFinish={finish}
             onOpenToolbar={() => toolbarRef.current?.querySelector('button')?.focus()}
+            onSlash={isSynthetic || opts.ai === false ? undefined : () => { setAskText(''); setAskFor(id) }}
           />
         ) : (
           <div
@@ -307,6 +414,12 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); activate(id) } }}
           >
             {block.text || <span className="rd-placeholder">{opts.placeholder ?? 'Click to add'}</span>}
+          </div>
+        )}
+        {aiMessage?.blockId === id && (
+          <div className="rd-note rd-note-warn" role="status">
+            {aiMessage.text}
+            <button type="button" onClick={() => setAiMessage(null)} aria-label="Dismiss">×</button>
           </div>
         )}
       </div>
@@ -334,23 +447,25 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
             </ul>
           </SortableContext>
         </DndContext>
-        {available.length > 0 && (
-          <div className="rd-add">
-            <button type="button" className="rd-add-toggle" onClick={() => setAddOpenFor(v => (v === entryIndex ? null : entryIndex))}>
-              + Add from your library ({available.length})
-            </button>
-            {addOpenFor === entryIndex && (
-              <div className="rd-add-list">
-                {available.map(m => (
-                  <button key={m.id} type="button" className="rd-popover-item" onClick={() => insertModule(entryIndex, m)}>
-                    <strong>{m.title}</strong>
-                    <span>{moduleResumeLine(m.content)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        <div className="rd-add">
+          <button type="button" className="rd-add-toggle" onClick={() => setAddOpenFor(v => (v === entryIndex ? null : entryIndex))}>
+            + Add from your library{available.length > 0 ? ` (${available.length})` : ''}
+          </button>
+          {addOpenFor === entryIndex && (
+            <div className="rd-add-list">
+              <button type="button" className="rd-popover-item" onClick={() => insertBlank(entryIndex)}>
+                <strong>Blank line</strong>
+                <span>Write it yourself, or type / to ask AI to write it from this job&apos;s modules.</span>
+              </button>
+              {available.map(m => (
+                <button key={m.id} type="button" className="rd-popover-item" onClick={() => insertModule(entryIndex, m)}>
+                  <strong>{m.title}</strong>
+                  <span>{moduleResumeLine(m.content)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </>
     )
   }
@@ -470,7 +585,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
         {doc.education.length > 0 && (
           <section>
             <h2 className="rd-h2">Education</h2>
-            {doc.education.map(b => <div key={b.id}>{line(b.id, { removable: true })}</div>)}
+            {doc.education.map(b => <div key={b.id}>{line(b.id, { removable: true, ai: false })}</div>)}
           </section>
         )}
 
@@ -564,5 +679,10 @@ const EDITOR_CSS = `
 .rd-add-toggle { background: none; border: none; padding: 2px 0; cursor: pointer; font-size: 12px; color: #0F6E56; }
 .rd-add-list { margin-top: 4px; }
 .rd-help { font-size: 12px; color: var(--text3); margin: 0; }
+.rd-ask { display: flex; align-items: center; gap: 6px; padding: 0 6px 0 8px; border-left: 1px solid var(--border2, #ddd); color: #0F6E56; }
+.rd-ask input { font: 12.5px var(--font, system-ui); border: none; outline: none; background: transparent; color: var(--text, #222); width: 260px; padding: 5px 0; }
+.rd-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 3px; padding: 4px 8px; border-radius: 4px; font: 12px var(--font, system-ui); }
+.rd-note button { background: none; border: none; cursor: pointer; color: inherit; font-size: 14px; padding: 0 2px; }
+.rd-note-warn { background: #fdf3e1; color: #7a4b07; }
 @media (max-width: 640px) { .rd-paper { padding: 28px 22px 32px; } .rd-handle { display: none; } }
 `
