@@ -189,7 +189,7 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
             })}
           </ol>
           <div className="gv2-bar" aria-hidden>
-            <div style={{ width: `${(done.size / STAGES.length) * 100}%` }} />
+            <div style={{ transform: `scaleX(${done.size / STAGES.length})` }} />
           </div>
           <div className="gv2-elapsed">{elapsed}s · usually about 20 seconds</div>
         </div>
@@ -254,7 +254,7 @@ const GEN_CSS = `
 .gv2-stage.current .gv2-dot { border-color: var(--teal); animation: gv2-pulse 1.2s ease-in-out infinite; }
 .gv2-note { font-size: 12px; color: var(--text3); font-weight: 400; }
 .gv2-bar { height: 3px; background: var(--bg3); border-radius: 999px; overflow: hidden; }
-.gv2-bar div { height: 100%; background: var(--teal); border-radius: 999px; transition: width 0.4s ease; }
+.gv2-bar div { height: 100%; width: 100%; background: var(--teal); border-radius: 999px; transform-origin: left center; transition: transform 0.4s ease; }
 .gv2-elapsed { font-size: 12px; color: var(--text3); margin-top: 10px; font-variant-numeric: tabular-nums; }
 .gv2-card { background: var(--surface); border: 1px solid var(--border2); border-radius: 12px; padding: 22px 24px; }
 @keyframes gv2-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(29,158,117,0.35); } 50% { box-shadow: 0 0 0 5px rgba(29,158,117,0); } }
