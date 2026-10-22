@@ -132,16 +132,18 @@ function repeatsAny(sentence: string, others: string[]): boolean {
  * `sourceIds[i]` names the module bullet i came from when the model said so; otherwise the
  * closest module by word overlap is used. A failing bullet is replaced by the next unused
  * sentence of its module (no JD phrasing), or dropped when the module has none left.
+ * `sources[i]` is the module output bullet i came from, for provenance in the resume document.
  */
 export function factCheckBullets(
   bullets: string[],
   modules: SourceModule[],
   context: string[],
   sourceIds: (string | null | undefined)[] = [],
-): { bullets: string[]; flags: FactFlag[] } {
+): { bullets: string[]; sources: (string | null)[]; flags: FactFlag[] } {
   const flags: FactFlag[] = []
   const used = new Map<string, number>()
   const out: string[] = []
+  const sources: (string | null)[] = []
   bullets.forEach((bullet, i) => {
     if (typeof bullet !== 'string' || !bullet.trim()) return
     const named = modules.find(m => m.id === sourceIds[i])
@@ -149,7 +151,7 @@ export function factCheckBullets(
     const reasons = source
       ? unsupportedClaims(bullet, [source.content, source.title], context)
       : unsupportedClaims(bullet, modules.map(m => m.content), context)
-    if (reasons.length === 0) { out.push(bullet); return }
+    if (reasons.length === 0) { out.push(bullet); sources.push(source?.id ?? null); return }
 
     let replacement: string | null = null
     if (source) {
@@ -160,10 +162,10 @@ export function factCheckBullets(
       if (next < sentences.length) replacement = plainSentence(sentences[next])
       used.set(source.id, next + 1)
     }
-    if (replacement) out.push(replacement)
+    if (replacement) { out.push(replacement); sources.push(source?.id ?? null) }
     flags.push({ module_id: source?.id ?? null, bullet, reason: reasons.join('; '), replacement })
   })
-  return { bullets: out, flags }
+  return { bullets: out, sources, flags }
 }
 
 /**

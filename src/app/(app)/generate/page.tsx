@@ -286,6 +286,7 @@ export default function GeneratePage() {
   const [matchedKeywords, setMatchedKeywords] = useState<string[]>([])
   const [missingKeywords, setMissingKeywords] = useState<string[]>([])
   const [unsupportedPhrases, setUnsupportedPhrases] = useState<string[]>([])
+  const [generatedResumeId, setGeneratedResumeId] = useState<string | null>(null)
   const [showDownloadMenu, setShowDownloadMenu] = useState(false)
   const [atsScore, setAtsScore] = useState<number | null>(null)
   const [confirmedPhrases, setConfirmedPhrases] = useState<string[]>([])
@@ -1659,6 +1660,7 @@ export default function GeneratePage() {
       setMatchedKeywords(data.matched_keywords ?? [])
       setMissingKeywords(data.missing_keywords ?? [])
       setUnsupportedPhrases(data.unsupported_phrases ?? [])
+      setGeneratedResumeId(data.resume_doc_id ? data.resume_id : null)
       setAtsScore(data.ats_score ?? null)
       fetch('/api/draft-generation', { method: 'DELETE' }).catch(() => {})
       setDraftRestored(false)
@@ -3961,8 +3963,13 @@ export default function GeneratePage() {
                 )}
 
                 {/* Resume saved indicator */}
-                <div style={{ fontSize: 13, padding: '10px 14px', borderRadius: 8, border: '1px solid var(--teal-glow)', background: 'var(--teal-dim)', color: 'var(--teal)', marginBottom: 12 }}>
-                  ✓ Resume saved to your library. <a href="/resumes" style={{ color: 'var(--teal)' }}>View in My Resumes →</a>
+                <div style={{ fontSize: 13, padding: '10px 14px', borderRadius: 8, border: '1px solid var(--teal-glow)', background: 'var(--teal-dim)', color: 'var(--teal)', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span>✓ Resume saved to your library. <a href="/resumes" style={{ color: 'var(--teal)' }}>View in My Resumes →</a></span>
+                  {generatedResumeId && (
+                    <Link href={`/resumes/${generatedResumeId}`} className="btn-primary" style={{ fontSize: 12.5, textDecoration: 'none' }}>
+                      Edit this resume
+                    </Link>
+                  )}
                 </div>
 
                 {/* Add to tracker */}
