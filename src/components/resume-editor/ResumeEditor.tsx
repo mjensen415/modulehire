@@ -13,7 +13,7 @@ import {
   type Block, type ResumeDoc, type ResumeDocFormat,
 } from '@/lib/resume-doc'
 import { groupExperienceByCompany, normalizeCompany } from '@/lib/resume-dates'
-import { splitSentences } from '@/lib/fact-check'
+import { splitSentences, unsupportedTerms, type UnsupportedTerm } from '@/lib/fact-check'
 import { scoreLiveFit } from '@/lib/live-fit'
 import type { JdCriterion } from '@/lib/dimensions'
 
@@ -99,6 +99,42 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
 
   const onResume = useMemo(() => modulesOnResume(doc), [doc])
 
+  // Library modules as state: "Add it to the module" / "Save to your library" update them here.
+  const [library, setLibrary] = useState(modules)
+  const moduleById = useMemo(() => new Map(library.map(m => [m.id, m])), [library])
+
+  // ── Fact guard ────────────────────────────────────────────────────────────
+  // 200ms after typing stops, every line's numbers and capitalized terms are checked against
+  // its source module (the same check generation uses). New facts are flagged, never blocked.
+  const [guardDoc, setGuardDoc] = useState(doc)
+  useEffect(() => {
+    const t = setTimeout(() => setGuardDoc(doc), 200)
+    return () => clearTimeout(t)
+  }, [doc])
+  const warnings = useMemo(() => {
+    const context = [
+      guardDoc.header.name, guardDoc.header.title, jd?.company ?? '', jd?.title ?? '',
+      ...guardDoc.experience.flatMap(e => [e.company, e.title]),
+    ]
+    const out = new Map<string, { terms: UnsupportedTerm[]; module: EditorModule }>()
+    const check = (b: Block) => {
+      const m = b.module_id ? moduleById.get(b.module_id) : undefined
+      if (!m || !b.text.trim()) return
+      const terms = unsupportedTerms(b.text, [m.content, m.title], context)
+      if (terms.length > 0) out.set(b.id, { terms, module: m })
+    }
+    guardDoc.experience.forEach(e => e.bullets.forEach(check))
+    guardDoc.skill_sections.forEach(sec => sec.bullets.forEach(check))
+    return out
+  }, [guardDoc, moduleById, jd])
+  // The last text of each line that had no warning, for the warning's "Undo".
+  const lastClean = useRef(new Map<string, string>())
+  useEffect(() => {
+    const visit = (b: Block) => { if (!warnings.has(b.id)) lastClean.current.set(b.id, b.text) }
+    guardDoc.experience.forEach(e => e.bullets.forEach(visit))
+    guardDoc.skill_sections.forEach(sec => sec.bullets.forEach(visit))
+  }, [guardDoc, warnings])
+
   // ── Live fit ──────────────────────────────────────────────────────────────
   // The client score updates on every keystroke; after 10s idle the server scores the saved
   // doc (same scorer as the match report) and the shown number is re-anchored to it: shown =
@@ -119,12 +155,12 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
     const entry = doc.experience[entryIndex]
     if (!entry) return []
     const company = normalizeCompany(entry.company)
-    return modules.filter(m => {
+    return library.filter(m => {
       if (onResume.has(m.id)) return false
       if (m.job_ids.includes(entry.job_id)) return true
       return m.job_ids.length === 0 && !!company && normalizeCompany(m.source_company) === company
     })
-  }, [doc.experience, modules, onResume])
+  }, [doc.experience, library, onResume])
 
   // ── Block lookups and edits ───────────────────────────────────────────────
   const locate = useCallback((id: string): { entry: number; index: number } | null => {
@@ -360,8 +396,34 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, criteria, docId, flushSave])
 
+  const addFactToModule = async (blockId: string) => {
+    const w = warnings.get(blockId)
+    const block = blockById(blockId)
+    if (!w || !block) return
+    if (!window.confirm('This becomes part of your library and can appear on future resumes.')) return
+    const sentence = /[.!?]$/.test(block.text.trim()) ? block.text.trim() : `${block.text.trim()}.`
+    const content = `${w.module.content.trim()} ${sentence}`.trim()
+    const res = await fetch(`/api/modules/${w.module.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    })
+    if (!res.ok) { setNotice("Couldn't update that module. Try again."); return }
+    setLibrary(prev => prev.map(m => (m.id === w.module.id ? { ...m, content } : m)))
+  }
+
+  const undoFact = (blockId: string) => {
+    const clean = lastClean.current.get(blockId)
+    const block = blockById(blockId)
+    commit(d => withText(d, blockId, clean ?? block?.original ?? ''))
+  }
+
   const download = async (type: 'pdf' | 'docx') => {
     finish()
+    if (warnings.size > 0) {
+      const n = warnings.size
+      if (!window.confirm(`${n} ${n === 1 ? 'line has' : 'lines have'} facts that aren't in your library. Download anyway?`)) return
+    }
     await flushSave()
     window.location.href = `/api/resume-docs/${docId}/download?type=${type}`
   }
@@ -378,7 +440,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
     const active = activeId === id
     const isSynthetic = id.startsWith('__')
     return (
-      <div className={`rd-line${active ? ' rd-line-active' : ''}`} style={{ position: 'relative' }}>
+      <div className={`rd-line${active ? ' rd-line-active' : ''}${warnings.has(id) ? ' rd-line-warn' : ''}`} style={{ position: 'relative' }}>
         {active && (
           <div
             ref={toolbarRef}
@@ -458,6 +520,22 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
             {block.text || <span className="rd-placeholder">{opts.placeholder ?? 'Click to add'}</span>}
           </div>
         )}
+        {warnings.has(id) && aiBusy !== id && (() => {
+          const w = warnings.get(id)!
+          const terms = w.terms.map(t => `“${t.term}”`)
+          const named = terms.length === 1 ? terms[0] : `${terms.slice(0, -1).join(', ')} and ${terms.at(-1)}`
+          const label = [w.module.source_company, w.module.title].filter(Boolean).join(' · ')
+          return (
+            <div className="rd-note rd-note-warn" role="status">
+              <span>⚠ {named} {terms.length === 1 ? "isn't" : "aren't"} in your “{label}” module.</span>
+              <span className="rd-note-actions">
+                <button type="button" onClick={() => addFactToModule(id)}>Add it to the module</button>
+                <span aria-hidden>·</span>
+                <button type="button" onClick={() => undoFact(id)}>Undo</button>
+              </span>
+            </div>
+          )
+        })()}
         {aiMessage?.blockId === id && (
           <div className="rd-note rd-note-warn" role="status">
             {aiMessage.text}
@@ -756,6 +834,9 @@ const EDITOR_CSS = `
 .rd-ask input { font: 12.5px var(--font, system-ui); border: none; outline: none; background: transparent; color: var(--text, #222); width: 260px; padding: 5px 0; }
 .rd-note { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 3px; padding: 4px 8px; border-radius: 4px; font: 12px var(--font, system-ui); }
 .rd-note button { background: none; border: none; cursor: pointer; color: inherit; font-size: 14px; padding: 0 2px; }
-.rd-note-warn { background: #fdf3e1; color: #7a4b07; }
+.rd-note-warn { background: #fdf3e1; color: #7a4b07; flex-wrap: wrap; }
+.rd-note-actions { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.rd-note-actions button { font: 600 12px var(--font, system-ui); text-decoration: underline; padding: 0; }
+.rd-line.rd-line-warn, .rd-line.rd-line-warn:hover { background: #fdf0d5; }
 @media (max-width: 640px) { .rd-paper { padding: 28px 22px 32px; } .rd-handle { display: none; } }
 `

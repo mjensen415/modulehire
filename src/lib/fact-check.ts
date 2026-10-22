@@ -84,22 +84,31 @@ function hasTerm(source: string, word: string): boolean {
   return false
 }
 
+export type UnsupportedTerm = { kind: 'number' | 'name'; term: string }
+
 /**
- * Reasons `text` claims something the sources don't support; empty when it's clean.
- * `sources` is what the AI was given about this claim (module content, title); `context` is
- * extra text proper nouns may come from (company, title, the candidate's own profile).
+ * The numbers and proper nouns in `text` that the sources don't contain. `sources` is what the
+ * AI (or the user) was working from (module content, title); `context` is extra text proper
+ * nouns may come from (company, title, the candidate's own profile).
  */
-export function unsupportedClaims(text: string, sources: string[], context: string[] = []): string[] {
+export function unsupportedTerms(text: string, sources: string[], context: string[] = []): UnsupportedTerm[] {
   const source = normalize(sources.join('\n'))
   const nameSource = normalize([...sources, ...context].join('\n'))
-  const reasons: string[] = []
+  const out: UnsupportedTerm[] = []
+  const seen = new Set<string>()
   for (const n of numbersIn(text)) {
-    if (!hasNumber(source, n.core)) reasons.push(`number "${n.raw}" is not in the module`)
+    if (!hasNumber(source, n.core) && !seen.has(n.raw)) { seen.add(n.raw); out.push({ kind: 'number', term: n.raw }) }
   }
   for (const word of properNounsIn(text)) {
-    if (!hasTerm(nameSource, word)) reasons.push(`"${word}" is not in the module`)
+    if (!hasTerm(nameSource, word) && !seen.has(word)) { seen.add(word); out.push({ kind: 'name', term: word }) }
   }
-  return Array.from(new Set(reasons))
+  return out
+}
+
+/** Reasons `text` claims something the sources don't support; empty when it's clean. */
+export function unsupportedClaims(text: string, sources: string[], context: string[] = []): string[] {
+  return unsupportedTerms(text, sources, context).map(t =>
+    t.kind === 'number' ? `number "${t.term}" is not in the module` : `"${t.term}" is not in the module`)
 }
 
 export function splitSentences(text: string): string[] {
