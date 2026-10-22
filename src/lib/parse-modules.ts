@@ -3,6 +3,7 @@ import { jsonrepair } from 'jsonrepair'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { DIMENSIONS, isDimension } from './dimensions'
+import { normalizeCompany } from './resume-dates'
 
 function getAdminClient() {
   return createSupabaseClient(
@@ -113,45 +114,69 @@ const toArray = (v: unknown): string[] => {
   return []
 }
 
-// Strip parentheticals and split ONLY on commas. Slashes and "and"/"&" are
-// preserved because they often appear inside legitimate single-employer names
-// ("Microsoft / Yammer", "Smith & Wesson") or dual titles. The model is told
-// to never emit a comma-separated list, so this is a safety net only.
-function splitCompanyField(raw: unknown): string[] {
-  const s = String(raw ?? '').trim()
-  if (!s) return []
-  const stripped = s.replace(/\s*\([^)]*\)/g, '').trim()
-  const parts = stripped
-    .split(/\s*,\s*/)
-    .map(p => p.trim())
-    .filter(Boolean)
-  return parts.length > 0 ? parts : [stripped]
+// Strip "(acquired by X)"-style parentheticals from a company name.
+function cleanCompany(raw: unknown): string {
+  return String(raw ?? '').replace(/\s*\([^)]*\)/g, '').trim()
 }
 
-// Safety net for when the model ignores the prompt and merges multiple jobs into
-// one module (comma-joined source_company and/or source_role_title). Returns one
-// or more single-job clones so every persisted module is attributed to exactly
-// one (company, role) pair.
-function expandToSingleJobModules(m: Record<string, unknown>): Record<string, unknown>[] {
-  const companies = splitCompanyField(m.source_company)
-  const roles = splitCompanyField(m.source_role_title)
+// A company field naming several employers: a comma list ("Skipify, Plex, Twitter"), or a
+// slash list whose parts are 2+ of the resume's own roles. "Microsoft / Yammer" stays one
+// employer unless the outline lists Microsoft and Yammer as separate jobs.
+function isMultiCompany(company: string, knownCompanies: Set<string>): boolean {
+  if (/,|;/.test(company)) return company.split(/\s*[,;]\s*/).filter(Boolean).length > 1
+  if (company.includes('/')) {
+    const matches = company.split(/\s*\/\s*/).filter(part => knownCompanies.has(normalizeCompany(part)))
+    return matches.length >= 2
+  }
+  return false
+}
 
-  // Clean single job — the common, correct case.
-  if (companies.length <= 1 && roles.length <= 1) {
-    return [{ ...m, source_company: companies[0] ?? null, source_role_title: roles[0] ?? null }]
+// Every persisted module belongs to exactly one job, or to none. A module the model attributed
+// to several employers is summary/skills material from a career-level section, so it becomes a
+// positioning module with no company — never a clone under each job (that duplicated content
+// and produced combined "Skipify, Plex, Twitter" entries on generated resumes). The title is
+// kept whole: "SENIOR VICE PRESIDENT, People" is one title, not two.
+function attributeModule(m: Record<string, unknown>, knownCompanies: Set<string>): Record<string, unknown> {
+  const company = cleanCompany(m.source_company)
+  if (company && isMultiCompany(company, knownCompanies)) {
+    return { ...m, source_company: null, source_role_title: null, date_start: null, date_end: null, type: 'positioning' }
   }
-  // Both lists, same length → pair index-wise. Resumes list these in matching
-  // order (typically most-recent first), e.g. "Skipify, Plex" / "SVP, Director".
-  if (companies.length === roles.length) {
-    return companies.map((c, i) => ({ ...m, source_company: c, source_role_title: roles[i] }))
-  }
-  // Multiple companies, one (or no) role → one module per company sharing the role.
-  if (companies.length > 1) {
-    const role = roles.length === 1 ? roles[0] : null
-    return companies.map(c => ({ ...m, source_company: c, source_role_title: role }))
-  }
-  // One company, multiple roles → one module per role sharing the company.
-  return roles.map(r => ({ ...m, source_company: companies[0] ?? null, source_role_title: r }))
+  const role = String(m.source_role_title ?? '').trim()
+  return { ...m, source_company: company || null, source_role_title: role || null }
+}
+
+// ─── Duplicate detection ─────────────────────────────────────────────────────
+
+function contentTokens(text: unknown): Set<string> {
+  return new Set(String(text ?? '').toLowerCase().replace(/[^a-z0-9%$\s]/g, ' ').split(/\s+/).filter(w => w.length > 1))
+}
+
+// Dice coefficient over normalized word sets: 1 = same words.
+function similarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0
+  let shared = 0
+  for (const w of a) if (b.has(w)) shared++
+  return (2 * shared) / (a.size + b.size)
+}
+
+const DUPLICATE_THRESHOLD = 0.9
+
+// Tracks module content already in the profile (from earlier uploads) and already accepted in
+// this upload. Within one upload any >90% match is a duplicate (the same job read twice under
+// two titles); against earlier uploads it must also be the same company.
+type DedupeState = {
+  existing: { company: string; tokens: Set<string> }[]
+  accepted: Set<string>[]
+}
+
+function takeIfNew(m: Record<string, unknown>, state: DedupeState): boolean {
+  const tokens = contentTokens(m.content)
+  if (tokens.size === 0) return true
+  if (state.accepted.some(t => similarity(t, tokens) > DUPLICATE_THRESHOLD)) return false
+  const company = normalizeCompany(m.source_company)
+  if (state.existing.some(e => e.company === company && similarity(e.tokens, tokens) > DUPLICATE_THRESHOLD)) return false
+  state.accepted.push(tokens)
+  return true
 }
 
 type EducationEntry = { school: string; degree: string; field: string; year: string }
@@ -248,7 +273,12 @@ export type OutlineRole = { index: number; company: string; title: string | null
 
 const OUTLINE_SYSTEM_PROMPT = `Identify every distinct job or role in this resume, in the order they appear (most recent first, matching the resume's own order). For each, give its 0-based index, company, title, and dates.
 
-Do NOT include the resume's top-level Summary, Profile, Objective, or About section as a role.
+A role is one company plus one date range.
+- The title is everything written on the title line, including text after a comma or inside parentheses: "SENIOR VICE PRESIDENT, People" and "DIRECTOR, OPERATIONS (People & Finance)" are each ONE title for ONE role. Never split a title at a comma.
+- Two roles may not share the same company and the same date range. Promotions at one company are separate roles only when they have their own dates.
+- "company" is exactly one employer, never a list.
+
+Do NOT include the resume's top-level Summary, Profile, Objective, Skills, or About section as a role, even when it names several past employers.
 
 has_extras: true if the resume has non-role content worth extracting as its own modules — standalone skills, side projects, open-source contributions, awards, certifications. False if everything of substance belongs to a specific role.`
 
@@ -272,6 +302,22 @@ const OUTLINE_SCHEMA = {
     has_extras: { type: 'boolean' },
   },
   required: ['roles', 'has_extras'],
+}
+
+// Safety net for the outline splitting one role into two at a comma ("SENIOR VICE PRESIDENT" +
+// "People"): roles with the same company and dates are one role, their title parts rejoined.
+function mergeSplitRoles(roles: OutlineRole[]): OutlineRole[] {
+  const merged: OutlineRole[] = []
+  for (const r of roles) {
+    const same = merged.find(m =>
+      normalizeCompany(m.company) === normalizeCompany(r.company) &&
+      m.date_start === r.date_start && m.date_end === r.date_end)
+    if (!same) { merged.push({ ...r }); continue }
+    if (r.title && !(same.title ?? '').toLowerCase().includes(r.title.toLowerCase())) {
+      same.title = same.title ? `${same.title}, ${r.title}` : r.title
+    }
+  }
+  return merged.map((r, i) => ({ ...r, index: i }))
 }
 
 async function extractOutline(rawText: string, userId: string): Promise<{ roles: OutlineRole[]; hasExtras: boolean }> {
@@ -298,7 +344,7 @@ async function extractOutline(rawText: string, userId: string): Promise<{ roles:
         }
       })
       .filter((r): r is OutlineRole => r !== null)
-    return { roles, hasExtras: !!result.has_extras }
+    return { roles: mergeSplitRoles(roles), hasExtras: !!result.has_extras }
   } catch (err) {
     console.error('[parseModules] outline pass failed, falling back to single-call parse:', err)
     return { roles: [], hasExtras: false }
@@ -447,12 +493,22 @@ function sanitizeModule(m: Record<string, unknown>, userId: string, profileId: s
   }
 }
 
+type BatchContext = {
+  knownCompanies: Set<string>
+  dedupe: DedupeState
+  // The outline role this batch was extracted for. Its company, title and dates win over the
+  // model's per-module values, so job records get the outline's dates — never a range widened
+  // across modules — and a split title can't create a second job.
+  role?: OutlineRole
+}
+
 async function insertModulesBatch(
   supabase: SupabaseClient,
   userId: string,
   profileId: string,
   resumeId: string,
-  rawModules: Record<string, unknown>[]
+  rawModules: Record<string, unknown>[],
+  ctx: BatchContext
 ): Promise<Record<string, unknown>[]> {
   // Defensive: forced tool-use is reliable but not airtight — on a thin resume the model has
   // occasionally returned a bare string in the modules array instead of an object. Spreading
@@ -461,11 +517,18 @@ async function insertModulesBatch(
   const validModules = (Array.isArray(rawModules) ? rawModules : [])
     .filter((m): m is Record<string, unknown> => !!m && typeof m === 'object' && !Array.isArray(m))
 
-  const expanded: Record<string, unknown>[] = []
-  for (const m of validModules) expanded.push(...expandToSingleJobModules(m))
-  if (expanded.length === 0) return []
+  const attributed = validModules
+    .map(m => attributeModule(m, ctx.knownCompanies))
+    .map(m => {
+      const role = ctx.role
+      if (!role || !m.source_company || m.type === 'positioning') return m
+      return { ...m, source_company: role.company, source_role_title: role.title, date_start: role.date_start, date_end: role.date_end }
+    })
+    // Runs synchronously between awaits, so parallel role batches can't both take one duplicate.
+    .filter(m => takeIfNew(m, ctx.dedupe))
+  if (attributed.length === 0) return []
 
-  const toInsert = expanded.map(m => sanitizeModule(m, userId, profileId, resumeId))
+  const toInsert = attributed.map(m => sanitizeModule(m, userId, profileId, resumeId))
   const { data, error } = await supabase.from('modules').insert(toInsert).select()
   if (error) throw error
   return data ?? []
@@ -492,8 +555,24 @@ export async function parseModules(
     return contact
   })
 
-  const { roles: outlineRoles, hasExtras } = await extractOutline(rawText, userId)
+  const [{ roles: outlineRoles, hasExtras }, { data: existingModules }] = await Promise.all([
+    extractOutline(rawText, userId),
+    // Modules already in this profile from earlier uploads — a second resume for the same
+    // person shouldn't re-add the same accomplishments.
+    supabase
+      .from('modules')
+      .select('source_company, content')
+      .eq('user_id', userId)
+      .eq('profile_id', profileId)
+      .is('deleted_at', null),
+  ])
   onEvent?.({ type: 'outline', roles: outlineRoles, extras: hasExtras })
+
+  const knownCompanies = new Set(outlineRoles.map(r => normalizeCompany(r.company)))
+  const dedupe: DedupeState = {
+    existing: (existingModules ?? []).map(m => ({ company: normalizeCompany(m.source_company), tokens: contentTokens(m.content) })),
+    accepted: [],
+  }
 
   let allInsertedModules: Record<string, unknown>[] = []
 
@@ -501,7 +580,16 @@ export async function parseModules(
     // 0 or 1 roles found — not worth splitting into parallel calls; parse the whole
     // resume in one call like before.
     const rawModulesData = await extractModulesWithFocus(rawText, null, userId)
-    const inserted = await insertModulesBatch(supabase, userId, profileId, resumeId, rawModulesData)
+    // With one outline role, modules from that employer take its title and dates.
+    const onlyRole = outlineRoles[0]
+    const forRole = onlyRole
+      ? rawModulesData.filter(m => m && typeof m === 'object' && normalizeCompany(cleanCompany(m.source_company)) === normalizeCompany(onlyRole.company))
+      : []
+    const others = rawModulesData.filter(m => !forRole.includes(m))
+    const inserted = [
+      ...await insertModulesBatch(supabase, userId, profileId, resumeId, forRole, { knownCompanies, dedupe, role: onlyRole }),
+      ...await insertModulesBatch(supabase, userId, profileId, resumeId, others, { knownCompanies, dedupe }),
+    ]
     allInsertedModules = inserted
     if (outlineRoles.length === 1) {
       const role = outlineRoles[0]
@@ -546,7 +634,11 @@ export async function parseModules(
         return []
       }
       try {
-        const inserted = await insertModulesBatch(supabase, userId, profileId, resumeId, rawModulesData)
+        const inserted = await insertModulesBatch(supabase, userId, profileId, resumeId, rawModulesData, {
+          knownCompanies,
+          dedupe,
+          role: task.kind === 'role' ? task.role : undefined,
+        })
         onEvent?.(task.kind === 'role'
           ? {
               type: 'role_done',
