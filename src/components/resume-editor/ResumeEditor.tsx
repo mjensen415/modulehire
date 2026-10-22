@@ -5,14 +5,16 @@ import { DndContext, PointerSensor, KeyboardSensor, closestCenter, useSensor, us
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import BlockEditor from './BlockEditor'
+import FitPanel from './FitPanel'
 import { useDocHistory } from './useDocHistory'
 import { useAutosave, type SaveState } from './useAutosave'
 import {
-  RESUME_FORMATS, contactLine, makeBlock, mapBlocks, modulesOnResume, updateBlockText,
+  RESUME_FORMATS, contactLine, docText, makeBlock, mapBlocks, modulesOnResume, updateBlockText,
   type Block, type ResumeDoc, type ResumeDocFormat,
 } from '@/lib/resume-doc'
 import { groupExperienceByCompany, normalizeCompany } from '@/lib/resume-dates'
 import { splitSentences } from '@/lib/fact-check'
+import { scoreLiveFit } from '@/lib/live-fit'
 import type { JdCriterion } from '@/lib/dimensions'
 
 export type EditorModule = {
@@ -32,6 +34,8 @@ type Props = {
   initialVersion: number
   modules: EditorModule[]
   jd: EditorJd
+  /** The stored server fit, if it was scored for this version. */
+  initialFit?: { overall: number; doc_version: number } | null
 }
 
 const FORMAT_LABELS: Record<ResumeDocFormat, string> = {
@@ -70,9 +74,9 @@ function saveLabel(state: SaveState): string {
   return 'Saved'
 }
 
-export default function ResumeEditor({ docId, initialDoc, initialVersion, modules, jd }: Props) {
+export default function ResumeEditor({ docId, initialDoc, initialVersion, modules, jd, initialFit }: Props) {
   const history = useDocHistory(initialDoc)
-  const { doc, commit, setLive, beginEdit, endEdit, undo, redo, reset } = history
+  const { doc, docRef, commit, setLive, beginEdit, endEdit, undo, redo, reset, canUndo, canRedo } = history
   const [activeId, setActiveId] = useState<string | null>(null)
   const [swapOpen, setSwapOpen] = useState(false)
   const [addOpenFor, setAddOpenFor] = useState<number | null>(null)
@@ -91,9 +95,24 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
   }, [reset])
   // On a 409 the autosave hook has already marked the server's doc as saved, so reset() to that
   // same object doesn't trigger another save.
-  const autosave = useAutosave(docId, doc, initialVersion, onConflict)
+  const { state: saveState, flush: flushSave } = useAutosave(docId, doc, initialVersion, onConflict)
 
   const onResume = useMemo(() => modulesOnResume(doc), [doc])
+
+  // ── Live fit ──────────────────────────────────────────────────────────────
+  // The client score updates on every keystroke; after 10s idle the server scores the saved
+  // doc (same scorer as the match report) and the shown number is re-anchored to it: shown =
+  // live + (server − live-at-the-time), so later keystrokes still move it from there.
+  const criteria = useMemo(() => jd?.criteria ?? [], [jd])
+  const live = useMemo(() => scoreLiveFit(docText(doc), criteria), [doc, criteria])
+  const [serverFit, setServerFit] = useState<{ overall: number; clientAt: number } | null>(() =>
+    initialFit && initialFit.doc_version === initialVersion
+      ? { overall: initialFit.overall, clientAt: scoreLiveFit(docText(initialDoc), jd?.criteria ?? []).score }
+      : null)
+  const [fitChecking, setFitChecking] = useState(false)
+  const shownScore = serverFit
+    ? Math.max(0, Math.min(100, live.score + serverFit.overall - serverFit.clientAt))
+    : live.score
 
   // Modules that belong to a job (by assignment, else by company) and aren't on the resume yet.
   const availableFor = useCallback((entryIndex: number): EditorModule[] => {
@@ -318,9 +337,32 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
     return () => window.removeEventListener('keydown', handler)
   }, [activeId, undo, redo])
 
+  useEffect(() => {
+    if (criteria.length === 0) return
+    const timer = setTimeout(async () => {
+      setFitChecking(true)
+      try {
+        await flushSave()
+        const res = await fetch(`/api/resume-docs/${docId}/fit`, { method: 'POST' })
+        if (!res.ok) return
+        const fit = await res.json()
+        if (typeof fit.overall === 'number') {
+          setServerFit({ overall: fit.overall, clientAt: scoreLiveFit(docText(docRef.current), criteria).score })
+        }
+      } catch {
+        // The live preview stays; the next idle period tries again.
+      } finally {
+        setFitChecking(false)
+      }
+    }, 10_000)
+    return () => clearTimeout(timer)
+  // docRef is a stable ref; it's read when the timer fires, not during render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, criteria, docId, flushSave])
+
   const download = async (type: 'pdf' | 'docx') => {
     finish()
-    await autosave.flush()
+    await flushSave()
     window.location.href = `/api/resume-docs/${docId}/download?type=${type}`
   }
 
@@ -471,14 +513,15 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
   }
 
   return (
+    <div className="rd-layout">
     <div className="rd-root">
       <style>{EDITOR_CSS}</style>
 
       <div className="rd-bar">
         <div className="rd-bar-left">
-          <span className={`rd-save rd-save-${autosave.state}`} aria-live="polite">{saveLabel(autosave.state)}</span>
-          <button type="button" className="btn-ghost rd-small" onClick={undo} disabled={!history.canUndo || !!activeId} title="Undo (⌘Z)">↶</button>
-          <button type="button" className="btn-ghost rd-small" onClick={redo} disabled={!history.canRedo || !!activeId} title="Redo (⌘⇧Z)">↷</button>
+          <span className={`rd-save rd-save-${saveState}`} aria-live="polite">{saveLabel(saveState)}</span>
+          <button type="button" className="btn-ghost rd-small" onClick={undo} disabled={!canUndo || !!activeId} title="Undo (⌘Z)">↶</button>
+          <button type="button" className="btn-ghost rd-small" onClick={redo} disabled={!canRedo || !!activeId} title="Redo (⌘⇧Z)">↷</button>
           <label className="rd-format">
             Template
             <select
@@ -601,6 +644,17 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
         Click any line to edit it. Enter or Esc finishes. Drag ⋮⋮ to reorder within a job. Downloads use exactly what you see here.
       </p>
     </div>
+    {criteria.length > 0 && (
+      <aside className="rd-aside">
+        <FitPanel
+          live={live}
+          score={shownScore}
+          checking={fitChecking}
+          serverChecked={!!serverFit && serverFit.clientAt === live.score}
+        />
+      </aside>
+    )}
+    </div>
   )
 }
 
@@ -629,7 +683,26 @@ function SortableBullet({ id, glyph, children }: { id: string; glyph: string; ch
 }
 
 const EDITOR_CSS = `
-.rd-root { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.rd-layout { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.rd-root { display: flex; flex-direction: column; gap: 14px; min-width: 0; flex: 1 1 560px; max-width: 780px; }
+.rd-aside { flex: 0 1 300px; position: sticky; top: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 260px; }
+.rd-fit { background: var(--surface); border: 1px solid var(--border2); border-radius: 10px; padding: 16px; }
+.rd-fit-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.rd-fit-label { font-size: 13px; font-weight: 700; color: var(--text); }
+.rd-fit-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+.rd-fit-score { position: relative; font-size: 34px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.rd-fit-delta { position: absolute; right: 0; top: -14px; font-size: 12px; font-weight: 700; animation: rd-rise 1.6s ease forwards; }
+.rd-fit-delta.up { color: var(--teal); }
+.rd-fit-delta.down { color: var(--rose); }
+@keyframes rd-rise { 0% { opacity: 0; transform: translateY(4px); } 15% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-4px); } }
+.rd-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.rd-chip { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border2); color: var(--text3); transition: background 0.2s, color 0.2s, border-color 0.2s; }
+.rd-chip.covered { background: var(--teal-dim); border-color: var(--teal-glow, var(--teal)); color: var(--teal); }
+.rd-chip.pop { animation: rd-pop 0.6s ease; }
+@keyframes rd-pop { 0% { transform: scale(1); } 40% { transform: scale(1.12); } 100% { transform: scale(1); } }
+.rd-fit-foot { font-size: 11px; color: var(--text3); margin-top: 12px; }
+@media (prefers-reduced-motion: reduce) { .rd-chip.pop, .rd-fit-delta { animation: none; } }
+@media (max-width: 900px) { .rd-aside { position: static; flex-basis: 100%; } }
 .rd-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .rd-bar-left, .rd-bar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rd-small { font-size: 12.5px; }

@@ -117,3 +117,16 @@ export function docText(doc: ResumeDoc): string {
 export function modulesOnResume(doc: ResumeDoc): Set<string> {
   return new Set(allBlocks(doc).map(b => b.block.module_id).filter((id): id is string => !!id))
 }
+
+/** The resume's sections as scoring evidence (server fit uses the match report's scorer). */
+export function docEvidence(doc: ResumeDoc): { id: string; title: string; content: string }[] {
+  const lines = (blocks: Block[]) => blocks.map(b => b.text.trim()).filter(Boolean).join('\n')
+  return [
+    ...(doc.summary.text.trim() ? [{ id: 'summary', title: 'Summary', content: doc.summary.text.trim() }] : []),
+    ...doc.experience.map((e, i) => ({ id: `job-${i}`, title: [e.title, e.company].filter(Boolean).join(', ') || 'Experience', content: lines(e.bullets) })),
+    ...doc.skill_sections.map((s, i) => ({ id: `skills-${i}`, title: s.category || 'Skills', content: lines(s.bullets) })),
+    ...(doc.skills.length > 0 ? [{ id: 'skills', title: 'Skills', content: doc.skills.join(', ') }] : []),
+    ...(doc.education.length > 0 ? [{ id: 'education', title: 'Education', content: lines(doc.education) }] : []),
+    ...(doc.awards.trim() ? [{ id: 'awards', title: 'Awards', content: doc.awards.trim() }] : []),
+  ].filter(item => item.content)
+}

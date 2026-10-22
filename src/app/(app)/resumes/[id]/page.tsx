@@ -59,7 +59,7 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
   // existed don't, and keep the file preview below). Missing table → null → file preview.
   const { data: docRow } = await supabase
     .from('resume_documents')
-    .select('id, doc, version')
+    .select('id, doc, version, fit_report')
     .eq('generated_resume_id', resume.id)
     .eq('user_id', user.id)
     .maybeSingle()
@@ -138,6 +138,7 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
                 initialVersion={docRow.version}
                 modules={editorModules}
                 jd={editorJd}
+                initialFit={docRow.fit_report as { overall: number; doc_version: number } | null}
               />
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {hasReport && jd && <Link className="btn-ghost" href={`/matches/${jd.id}`}>Open match report</Link>}
