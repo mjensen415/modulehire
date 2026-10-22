@@ -6,6 +6,7 @@ import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
+import { compareResumeRanges, formatResumeRange, isPresentDate, normalizeCompany, parseResumeDate, splitResumeRange } from '@/lib/resume-dates'
 import { factCheckBullets, stripUnsupportedSentences, type FactFlag, type SourceModule } from '@/lib/fact-check'
 // canGenerate removed — generation is always allowed; download is gated client-side via canDownload.
 import { FREE_MONTHLY_GENERATIONS, isProTier } from '@/lib/plan'
@@ -45,46 +46,35 @@ type CombinationData = {
 type ExpEntry = { title: string; company: string; dates: string; bullets: string[] }
 type CompanyGroup = { company: string; tenure: string; roles: ExpEntry[] }
 
-const MONTH_TOKENS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
-
-// Split a formatted range like "Jan 2020 – Present" / "2018 - 2021" into [start, end].
-function splitDates(dates: string): [string, string] {
-  const parts = (dates ?? '').split(/\s*[–—-]\s*/)
-  return [(parts[0] ?? '').trim(), (parts[1] ?? '').trim()]
-}
-
-// Sortable key from the start of a range (higher = more recent). 0 if unparseable.
-function startKey(dates: string): number {
-  const start = splitDates(dates)[0].toLowerCase()
-  const year = start.match(/\d{4}/)
-  if (!year) return 0
-  const monthIdx = MONTH_TOKENS.findIndex(m => start.includes(m))
-  return parseInt(year[0], 10) * 12 + (monthIdx >= 0 ? monthIdx : 0)
-}
-
-// Group by normalized company (trim+lowercase), preserving first-seen display casing.
-// Roles within a group sort by start DESC; groups sort by their most-recent start DESC.
-// Company tenure = earliest start across roles → latest end (or "Present" if any role is open).
+// Group by normalized company ("Fiverr" / "Fiverr International", "33Crickets" / "33 Crickets"),
+// keeping the first-seen display name. Roles within a company and companies themselves follow
+// compareResumeRanges: current roles first, then by end date, undated last. Company tenure =
+// earliest start → latest end (or "Present" if any role is open). Every format (HTML preview,
+// DOCX, PDF) renders through this, so they all match.
 function groupExperienceByCompany(experience: ExpEntry[]): CompanyGroup[] {
+  const byRange = (a: ExpEntry, b: ExpEntry) => {
+    const [as, ae] = splitResumeRange(a.dates)
+    const [bs, be] = splitResumeRange(b.dates)
+    return compareResumeRanges(as, ae, bs, be)
+  }
   const map = new Map<string, ExpEntry[]>()
   const displayName = new Map<string, string>()
   const order: string[] = []
   for (const e of experience) {
-    const key = (e.company ?? '').trim().toLowerCase()
+    const key = normalizeCompany(e.company) || (e.company ?? '').trim().toLowerCase()
     if (!map.has(key)) { map.set(key, []); displayName.set(key, e.company ?? ''); order.push(key) }
     map.get(key)!.push(e)
   }
   const groups: CompanyGroup[] = order.map(key => {
-    const roles = [...map.get(key)!].sort((a, b) => startKey(b.dates) - startKey(a.dates))
-    const oldest = roles[roles.length - 1]
-    const newest = roles[0]
-    const start = splitDates(oldest.dates)[0]
-    const anyPresent = roles.some(r => /present|current/i.test(splitDates(r.dates)[1] || r.dates))
-    const end = anyPresent ? 'Present' : splitDates(newest.dates)[1]
-    const tenure = start && end ? `${start} – ${end}` : (newest.dates ?? '')
+    const roles = [...map.get(key)!].sort(byRange)
+    const starts = roles.map(r => splitResumeRange(r.dates)[0]).filter(d => parseResumeDate(d))
+    const oldestStart = [...starts].sort((x, y) => compareResumeRanges(y, y, x, x))[0] ?? ''
+    const anyPresent = roles.some(r => isPresentDate(splitResumeRange(r.dates)[1]))
+    const end = anyPresent ? 'Present' : splitResumeRange(roles[0].dates)[1]
+    const tenure = oldestStart && end && oldestStart !== end ? `${oldestStart} to ${end}` : (roles[0].dates ?? '')
     return { company: displayName.get(key)!, tenure, roles }
   })
-  groups.sort((a, b) => startKey(b.roles[0].dates) - startKey(a.roles[0].dates))
+  groups.sort((a, b) => byRange(a.roles[0], b.roles[0]))
   return groups
 }
 
@@ -1505,62 +1495,87 @@ export async function POST(req: Request) {
         return augmented ? { ...m, content: augmented } : m
       })
 
-    // Pre-group by (source_company, source_role_title) to enforce job anchoring.
-    // Modules within the same job are clustered so the AI never confuses which
-    // bullets belong to which role. Order within each group is preserved.
-    const jobKeyOf = (m: Record<string, unknown>) =>
-      `${String(m.source_company ?? '')}||${String(m.source_role_title ?? '')}`
-    const jobOrder: string[] = []
-    const jobGroups = new Map<string, Record<string, unknown>[]>()
+    // ── Experience groups from real job records ─────────────────────────────
+    // Group by the job a module is assigned to (module_job_assignments → job_experiences),
+    // never by raw module strings: those split one employer into several entries ("Fiverr" vs
+    // "Fiverr International") and invent employers ("Multiple", "Career narrative"). Modules
+    // with no job go to one only if their normalized company matches it; otherwise, and for
+    // positioning modules, they are career-level — summary/skills material, never an entry.
+    type JobRow = { id: string; company: string; title: string | null; start_date: string | null; end_date: string | null }
+    const [{ data: assignmentRows }, { data: jobRows }] = await Promise.all([
+      supabase.from('module_job_assignments').select('module_id, job_id').in('module_id', module_ids),
+      supabase.from('job_experiences').select('id, company, title, start_date, end_date').eq('user_id', user.id),
+    ])
+    const jobs: JobRow[] = (jobRows ?? []) as JobRow[]
+    const jobById = new Map(jobs.map(j => [j.id, j]))
+    const byRecency = (a: JobRow, b: JobRow) => compareResumeRanges(a.start_date, a.end_date, b.start_date, b.end_date)
+    const assignedJob = new Map<string, JobRow>()
+    for (const row of assignmentRows ?? []) {
+      const job = jobById.get(row.job_id)
+      if (!job) continue
+      const prev = assignedJob.get(row.module_id)
+      if (!prev || byRecency(job, prev) < 0) assignedJob.set(row.module_id, job)
+    }
+
+    const jobForModule = (m: Record<string, unknown>): JobRow | null => {
+      if (m.type === 'positioning') return null
+      const assigned = assignedJob.get(String(m.id))
+      if (assigned) return assigned
+      const company = normalizeCompany(m.source_company)
+      if (!company) return null
+      const candidates = jobs.filter(j => normalizeCompany(j.company) === company)
+      if (candidates.length <= 1) return candidates[0] ?? null
+      const role = String(m.source_role_title ?? '').trim().toLowerCase()
+      return candidates.find(j => (j.title ?? '').trim().toLowerCase() === role) ?? [...candidates].sort(byRecency)[0]
+    }
+
+    type GroupDraft = { key: string; company: string; role: string; start: unknown; end: unknown; modules: Record<string, unknown>[] }
+    const groupMap = new Map<string, GroupDraft>()
+    const careerModules: Record<string, unknown>[] = []
+    // Strings that name no single employer: never an experience heading.
+    const notAnEmployer = (company: string) =>
+      !company || /[,;]/.test(company) || /^(multiple|various|career narrative|professional profile|summary|unknown|n\/a|none|self)$/i.test(company.trim())
     for (const m of orderedModules) {
-      const k = jobKeyOf(m)
-      if (!jobGroups.has(k)) { jobGroups.set(k, []); jobOrder.push(k) }
-      jobGroups.get(k)!.push(m)
+      const job = jobForModule(m)
+      if (job) {
+        if (!groupMap.has(job.id)) groupMap.set(job.id, { key: job.id, company: job.company, role: job.title ?? '', start: job.start_date, end: job.end_date, modules: [] })
+        groupMap.get(job.id)!.modules.push(m)
+        continue
+      }
+      // No job records at all (older accounts): fall back to the module's own strings,
+      // normalized, so one employer still gets one entry.
+      const company = String(m.source_company ?? '').trim()
+      if (jobs.length === 0 && m.type !== 'positioning' && !notAnEmployer(company)) {
+        const key = `${normalizeCompany(company)}||${String(m.source_role_title ?? '').trim().toLowerCase()}`
+        if (!groupMap.has(key)) groupMap.set(key, { key, company, role: String(m.source_role_title ?? ''), start: m.date_start, end: m.date_end, modules: [] })
+        groupMap.get(key)!.modules.push(m)
+        continue
+      }
+      careerModules.push(m)
     }
 
-    // Sort jobs chronologically (most recent first) before building experience groups.
-    const groupStartDate = (k: string): string => {
-      const isPresent = (v: unknown) => !v || String(v).toLowerCase() === 'present'
-      const starts = (jobGroups.get(k) ?? [])
-        .map(m => m.date_start as string | null)
-        .filter((s): s is string => Boolean(s) && !isPresent(s))
-      return starts.length ? [...starts].sort()[0] : ''
-    }
-    jobOrder.sort((a, b) => {
-      const da = groupStartDate(a)
-      const db = groupStartDate(b)
-      if (!da && !db) return 0
-      if (!da) return 1   // no date sinks to bottom
-      if (!db) return -1
-      return db.localeCompare(da)  // descending (most recent first)
-    })
+    const groupDrafts = [...groupMap.values()].sort((a, b) => compareResumeRanges(a.start, a.end, b.start, b.end))
+    const sortedModules = [...groupDrafts.flatMap(g => g.modules), ...careerModules]
 
-    const sortedModules = jobOrder.flatMap(k => jobGroups.get(k)!)
-
-    // Build pre-structured experience groups so the AI never has to decide which
-    // module belongs to which job. Passing pre-built groups eliminates the most
-    // common misattribution bug (same skill domain appearing under multiple roles).
+    // Pre-structured experience groups, so the AI never decides which module belongs to which
+    // job or what the dates are — company, role and dates are used verbatim (and re-applied
+    // after generation in checkExperience).
     type ExperienceGroup = {
       company: string
       role: string
-      date_start: string | null
-      date_end: string | null
+      dates: string
       modules: SourceModule[]
     }
-    const experienceGroups: ExperienceGroup[] = jobOrder.map(k => {
-      const mods = jobGroups.get(k)!
-      const isPresent = (v: unknown) => !v || String(v).toLowerCase() === 'present'
-      const starts = mods.map(m => m.date_start as string | null).filter((s): s is string => Boolean(s) && !isPresent(s))
-      const ends   = mods.map(m => m.date_end   as string | null).filter((s): s is string => Boolean(s) && !isPresent(s))
-      const hasPresent = mods.some(m => isPresent(m.date_end))
-      return {
-        company:    String(mods[0].source_company    ?? 'Unknown'),
-        role:       String(mods[0].source_role_title ?? ''),
-        date_start: starts.length ? [...starts].sort()[0] : null,
-        date_end:   hasPresent ? null : (ends.length ? [...ends].sort().reverse()[0] : null),
-        modules:    mods.map(m => ({ id: String(m.id), title: String(m.title ?? ''), content: String(m.content ?? '') })),
-      }
-    })
+    const toSource = (m: Record<string, unknown>): SourceModule => ({ id: String(m.id), title: String(m.title ?? ''), content: String(m.content ?? '') })
+    const experienceGroups: ExperienceGroup[] = groupDrafts.map(g => ({
+      company: g.company,
+      role: g.role,
+      dates: formatResumeRange(g.start, g.end),
+      modules: g.modules.map(toSource),
+    }))
+    const careerBlock = careerModules.length > 0
+      ? `\ncareer_modules (career-level material: use only in the summary and skills — never as an experience entry):\n${JSON.stringify(careerModules.map(toSource))}\n`
+      : ''
 
     const variantFraming: Record<string, string> = {
       A: 'Lead with community impact and grassroots momentum',
@@ -1642,11 +1657,12 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
     // nouns must appear there); a failing bullet becomes a plain sentence from that module.
     // Names may also come from the target role, the candidate's own profile, and the jobs the
     // selected modules came from.
-    const allSourceModules: SourceModule[] = sortedModules.map(m => ({ id: String(m.id), title: String(m.title ?? ''), content: String(m.content ?? '') }))
+    const allSourceModules: SourceModule[] = sortedModules.map(toSource)
     const factContext: string[] = [
       String(jd.extracted_company ?? ''), String(jd.extracted_job_title ?? ''), job_level ?? '',
       contact.name ?? '', contact.location ?? '', skillsText, educationText, awardsSection,
       ...sortedModules.flatMap(m => [String(m.source_company ?? ''), String(m.source_role_title ?? '')]),
+      ...experienceGroups.flatMap(g => [g.company, g.role]),
     ]
     const generationFlags: FactFlag[] = []
     let modelUnsupported: string[] = []
@@ -1662,7 +1678,7 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
           Array.isArray(e.bullet_sources) ? e.bullet_sources : [],
         )
         generationFlags.push(...flags)
-        return { ...e, bullets }
+        return group ? { ...e, company: group.company, title: group.role, dates: group.dates, bullets } : { ...e, bullets }
       })
     }
     function checkSummary(summary: string | undefined): string | undefined {
@@ -1696,7 +1712,7 @@ Respond with JSON ONLY matching this exact structure:
     { "category": "Skill Domain Name", "bullets": ["Achievement or responsibility...", "..."] }
   ],
   "work_experience": [
-    { "title": "Job Title", "company": "Company · City, State", "dates": "Mon YYYY – Mon YYYY", "bullets": ["...", "..."], "bullet_sources": ["<id of the module bullet 1 came from>", "..."] }
+    { "title": "Job Title", "company": "Company · City, State", "dates": "Mon YYYY to Mon YYYY", "bullets": ["...", "..."], "bullet_sources": ["<id of the module bullet 1 came from>", "..."] }
   ],
   "unsupported_phrases": ["posting phrases you did not use because no module supports them"],
   "education": [
@@ -1707,7 +1723,7 @@ Respond with JSON ONLY matching this exact structure:
 }
 
 - skill_sections: one entry per module in skill_modules below (use module title as category, convert content to 2–4 bullets)
-- work_experience: use EXACTLY the pre-built experience_groups below — one experience entry per group, in order. Do NOT merge groups, split groups, or move any module to a different group. The company, role, and dates are pre-set — do not change them. Convert each module's content into 2–4 bullets. bullet_sources lists, for each bullet in order, the id of the module it came from.
+- work_experience: use EXACTLY the pre-built experience_groups below — one experience entry per group, in order. Do NOT merge groups, split groups, or move any module to a different group. The company, role, and dates are pre-set — copy them verbatim (dates may be empty; leave them empty). Convert each module's content into 2–4 bullets. bullet_sources lists, for each bullet in order, the id of the module it came from.
 - education: ${include_education_section && educationText ? educationText : 'leave as empty array []'}
 - skills_list: ${include_skills_section && skillsText ? skillsText : 'leave as empty array []'}
 - awards: ${awardsSection ? `include this verbatim: ${awardsSection}` : 'set to empty string ""'}
@@ -1718,7 +1734,7 @@ ${JSON.stringify(sortedModules.map((m: Record<string, unknown>) => ({ title: m.t
 
 experience_groups (one work_experience entry per group — do not reorder or reassign):
 ${JSON.stringify(experienceGroups)}
-`
+${careerBlock}`
 
       const rawCombo = await aiComplete([{ role: 'user', content: comboPrompt }], 4096, { tier: 'quality', action: 'ai_generate_resume', userId: user.id })
       const strippedCombo = rawCombo.replace(/```json/g, '').replace(/```/g, '')
@@ -1807,7 +1823,7 @@ ${levelInstruction ? `- ${levelInstruction}` : ''}
 
 Summary: ${summaryInstruction}
 
-For the experience array: use EXACTLY the pre-built experience_groups below — produce one experience entry per group, in order. Do NOT merge groups, split groups, or reassign any module to a different group. The company, role, and dates for each entry are pre-set — use them verbatim. Convert each module's content into 2–4 bullets as described above. Format dates as "Mon YYYY – Mon YYYY" (date format YYYY-MM). If date_end is null use "Present".
+For the experience array: use EXACTLY the pre-built experience_groups below — produce one experience entry per group, in order. Do NOT merge groups, split groups, or reassign any module to a different group. The company, role, and dates for each entry are pre-set — copy them verbatim (dates may be empty; leave them empty). Convert each module's content into 2–4 bullets as described above.
 ${include_skills_section && skillsText ? `Skills: list these as a comma-separated string: ${skillsText}` : ''}
 ${include_education_section && educationText ? `Education: use this verbatim: ${educationText}` : ''}
 ${awardsSection ? `Awards & Certifications: include this section verbatim: ${awardsSection}` : ''}
@@ -1818,7 +1834,7 @@ Respond with ONLY this JSON structure — no markdown, no explanation:
   "job_title": "the exact job title from the job description",
   "summary": "3-4 sentence professional summary",
   "experience": [
-    { "title": "Job Title", "company": "Company Name", "dates": "Jan 2020 – Present", "bullets": ["<bullet from a module>", "<bullet from a module>"], "bullet_sources": ["<id of the module bullet 1 came from>", "<id of the module bullet 2 came from>"] }
+    { "title": "Job Title", "company": "Company Name", "dates": "Jan 2020 to Present", "bullets": ["<bullet from a module>", "<bullet from a module>"], "bullet_sources": ["<id of the module bullet 1 came from>", "<id of the module bullet 2 came from>"] }
   ],
   "unsupported_phrases": ["posting phrases you did not use because no module supports them"],
   "skills": "skill1, skill2, skill3",
@@ -1827,7 +1843,8 @@ Respond with ONLY this JSON structure — no markdown, no explanation:
 }
 
 experience_groups (one experience entry per group — do not reorder or reassign):
-${JSON.stringify(experienceGroups)}`
+${JSON.stringify(experienceGroups)}
+${careerBlock}`
 
       const rawResponseText = await aiComplete([{ role: 'user', content: prompt }], 4096, { tier: 'quality', action: 'ai_generate_resume', userId: user.id })
       const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
