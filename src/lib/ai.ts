@@ -183,6 +183,10 @@ export async function aiCompleteJson<T>(
 
   const toolUse = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === toolName)
   if (!toolUse) throw new Error('AI did not return structured output')
+  if (res.stop_reason === 'max_tokens') {
+    // A cut-off tool call returns partial or empty input; fail loudly instead of handing back {}.
+    throw new Error(`AI structured output was cut off at max_tokens (${maxTokens})`)
+  }
 
   logUsage(opts, model, { input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens, duration_ms: durationMs })
   return toolUse.input as T

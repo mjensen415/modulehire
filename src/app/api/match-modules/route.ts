@@ -24,11 +24,14 @@ const RANK_ITEM_SCHEMA = {
 const PASS1_SCHEMA = {
   type: 'object',
   properties: {
-    ranked_modules: { type: 'array', items: RANK_ITEM_SCHEMA },
-    recommended_stack: { type: 'array', items: { type: 'string' }, description: 'The 4-8 highest-scoring module ids, in order' },
+    ranked_modules: { type: 'array', items: RANK_ITEM_SCHEMA, description: 'One entry for every module in the list' },
   },
-  required: ['ranked_modules', 'recommended_stack'],
+  required: ['ranked_modules'],
 }
+
+// Pass 1 scores the library in parallel batches. One call over a large library (150+ modules)
+// ran past the output limit, the structured result came back empty, and the route crashed.
+const PASS1_BATCH_SIZE = 40
 
 const PASS2_SCHEMA = {
   type: 'object',
@@ -88,11 +91,14 @@ export async function POST(req: Request) {
       .select('id, title, themes, weight, pinned, type, content, source_company, source_role_title, date_start, date_end, dimensions')
       .eq('user_id', user.id)
       .eq('profile_id', profileId)
+      .is('deleted_at', null)
     if (modError) throw modError
-
-    const moduleList = modules.map(m =>
-      `- id: ${m.id} | title: ${m.title} | themes: ${(m.themes || []).join(', ')} | weight: ${m.weight}`
-    ).join('\n')
+    if (!modules || modules.length === 0) {
+      return NextResponse.json(
+        { error: 'Your module library is empty for this profile. Upload a resume or switch profiles, then try matching again.' },
+        { status: 400 }
+      )
+    }
 
     const prefs = await getUserPreferences(supabase, user.id)
     const prefContext = buildPreferenceContext(prefs)
@@ -107,16 +113,6 @@ export async function POST(req: Request) {
         ).join('\n')}`
       : ''
 
-    // Cacheable prefix: this user's full module library, unchanged across different JDs matched
-    // in the same session — Anthropic reuses it (ephemeral, ~5 min) instead of re-billing it.
-    // Kept in the user message (not system) since cache_control on content blocks is only
-    // honored there — the system message is always flattened to a plain string.
-    const libraryBlock = `Here is the candidate's full resume module library:
-
-RESUME MODULES:
-${moduleList}
-`
-
     // Dynamic suffix: everything specific to this JD/request.
     const taskBlock = `Score every module above against the job description below.
 
@@ -130,17 +126,42 @@ Key phrases: ${(jd.extracted_phrases || []).join(', ')}
 ${prefContext ? prefContext + '\n\n' : ''}SCORING RULES:
 - match_score is 0-100 based on how well the module's actual relevance matches the job description themes
 - score every module honestly on fit to this specific job — do not give any module an automatic high score
-- recommended_stack should contain the 4-8 highest-scoring module ids, in order${reportContext}`
+- return an entry for every module in the list${reportContext}`
 
-    const result = await aiCompleteJson<{ ranked_modules: RankedModule[]; recommended_stack: string[] }>(
-      [
-        { role: 'system', content: 'You are a resume reviewer.' },
-        { role: 'user', content: [{ text: libraryBlock, cache: true }, { text: taskBlock }] },
-      ],
-      PASS1_SCHEMA,
-      4096,
-      { tier: 'fast' }
-    )
+    const batches: typeof modules[] = []
+    for (let i = 0; i < modules.length; i += PASS1_BATCH_SIZE) batches.push(modules.slice(i, i + PASS1_BATCH_SIZE))
+
+    const scoreBatch = async (batch: typeof modules): Promise<RankedModule[]> => {
+      const list = batch.map(m =>
+        `- id: ${m.id} | title: ${m.title} | themes: ${(m.themes || []).join(', ')} | weight: ${m.weight}`
+      ).join('\n')
+      const call = () => aiCompleteJson<{ ranked_modules?: RankedModule[] }>(
+        [
+          { role: 'system', content: 'You are a resume reviewer.' },
+          { role: 'user', content: `Here are some of the candidate's resume modules:\n\nRESUME MODULES:\n${list}\n\n${taskBlock}` },
+        ],
+        PASS1_SCHEMA,
+        4096,
+        { tier: 'fast' }
+      )
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const r = await call()
+          if (Array.isArray(r?.ranked_modules) && r.ranked_modules.length > 0) return r.ranked_modules
+        } catch (e) {
+          console.error('[match-modules] pass 1 batch failed:', e)
+        }
+      }
+      return []
+    }
+
+    const batchResults = await Promise.all(batches.map(scoreBatch))
+    const knownIds = new Set(modules.map(m => m.id))
+    const pass1Raw = batchResults.flat().filter(rm => rm && knownIds.has(rm.module_id) && typeof rm.match_score === 'number')
+    if (pass1Raw.length === 0) {
+      return NextResponse.json({ error: 'We couldn\'t score your modules against this job right now. Please try again in a minute.' }, { status: 502 })
+    }
+    const result = { ranked_modules: pass1Raw }
 
     // Weight is a minor, code-applied nudge — never an override. This is deliberately not part
     // of the prompt: trusting the model to self-limit an "always score 100" rule is exactly what
