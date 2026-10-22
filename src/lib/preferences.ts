@@ -8,6 +8,19 @@ export interface UserPreferences {
   target_industries?: string[]                     // e.g. ["SaaS", "FinTech"]
   always_include_keywords?: string[]               // always weave into rewrites
   avoid_phrases?: string[]                         // never use these
+  resume_defaults?: ResumeDefaults                 // last generate options, pre-fill /generate
+}
+
+/** The options a user last generated with — written by generate-resume on every generate. */
+export interface ResumeDefaults {
+  format?: string
+  bullet_style?: string
+  include_summary?: boolean
+  include_skills?: boolean
+  include_education?: boolean
+  include_awards?: boolean
+  include_cover_letter?: boolean
+  cover_letter_tone?: string
 }
 
 /** Fetch user preferences. Returns empty object if none set. */

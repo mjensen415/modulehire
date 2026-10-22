@@ -7,6 +7,7 @@ import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
 import { compareResumeRanges, formatResumeRange, isPresentDate, normalizeCompany, parseResumeDate, splitResumeRange } from '@/lib/resume-dates'
+import type { UserPreferences } from '@/lib/preferences'
 import { factCheckBullets, stripUnsupportedSentences, type FactFlag, type SourceModule } from '@/lib/fact-check'
 // canGenerate removed — generation is always allowed; download is gated client-side via canDownload.
 import { FREE_MONTHLY_GENERATIONS, isProTier } from '@/lib/plan'
@@ -2032,6 +2033,24 @@ Rules:
     }
 
     await supabase.from('usage_events').insert({ user_id: user.id, action: 'generate_resume' })
+
+    // Remember these options so the next resume's confirm step is pre-filled with them.
+    const { data: prefsRow } = await supabase.from('users').select('preferences').eq('id', user.id).single()
+    const resumeDefaults: UserPreferences['resume_defaults'] = {
+      format,
+      bullet_style,
+      include_summary,
+      include_skills: include_skills_section,
+      include_education: include_education_section,
+      include_awards: !!include_awards_section,
+      include_cover_letter: !!cover_letter?.include,
+      cover_letter_tone: cover_letter?.tone,
+    }
+    const { error: prefsError } = await supabase
+      .from('users')
+      .update({ preferences: { ...((prefsRow?.preferences as UserPreferences | null) ?? {}), resume_defaults: resumeDefaults } })
+      .eq('id', user.id)
+    if (prefsError) console.error('[generate-resume] saving resume_defaults failed:', prefsError)
 
     // Consume one resume credit per generation for non-pro users with credits.
     // Free users with 0 credits still generate within their monthly quota.

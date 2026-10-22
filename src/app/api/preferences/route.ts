@@ -55,6 +55,11 @@ export async function PUT(req: Request) {
     throw e
   }
 
+  // resume_defaults is written by generate-resume, not this form — keep it.
+  const { data: current } = await supabase.from('users').select('preferences').eq('id', user.id).single()
+  const resumeDefaults = (current?.preferences as UserPreferences | null)?.resume_defaults
+  if (resumeDefaults) preferences.resume_defaults = resumeDefaults
+
   const { error } = await supabase
     .from('users')
     .update({ preferences })

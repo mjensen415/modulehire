@@ -144,6 +144,16 @@ const SKILL_GROUP_ORDER: { key: string | null; label: string }[] = [
   { key: null, label: 'General' },
 ]
 
+// Summary framing (A–D in generate-resume) picked from the posting instead of asked for.
+function pickPositioningVariant(jd: { extracted_role_type: string | null; extracted_seniority: string | null } | null): 'A' | 'B' | 'C' | 'D' {
+  const role = (jd?.extracted_role_type ?? '').toLowerCase()
+  const seniority = (jd?.extracted_seniority ?? '').toLowerCase()
+  if (/developer|engineer|technical|devrel|product|data|solutions/.test(role)) return 'D'
+  if (/community|social|ambassador|advocacy|creator/.test(role)) return 'A'
+  if (['director', 'vp', 'c-suite'].includes(seniority)) return 'B'
+  return 'C'
+}
+
 // ─── STEP INDICATOR ───────────────────────────────────────────────────────────
 
 const STEPS: Step[] = ['input', 'matching', 'assembling', 'confirm', 'done']
@@ -231,7 +241,10 @@ export default function GeneratePage() {
   const [moduleOrder, setModuleOrder] = useState<string[]>([])
   const [dragModuleId, setDragModuleId] = useState<string | null>(null)
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set())
-  const [previewOpen, setPreviewOpen] = useState(false)
+  const [moreOptionsOpen, setMoreOptionsOpen] = useState(false)
+  const [editingContact, setEditingContact] = useState(false)
+  // Set once a draft restores the generate options, so saved defaults don't overwrite them.
+  const optionsTouchedRef = useRef(false)
   const [showUnmatched, setShowUnmatched] = useState(false)
   const [contact, setContact] = useState<Contact>({ name: '', email: '', phone: '', linkedin: '', location: '' })
   const [summaryOverride, setSummaryOverride] = useState('')
@@ -338,6 +351,25 @@ export default function GeneratePage() {
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchParams = useSearchParams()
 
+  // Pre-fill the generate options with what the user last built with.
+  useEffect(() => {
+    fetch('/api/preferences')
+      .then(r => r.json())
+      .then(({ preferences }) => {
+        const d = preferences?.resume_defaults
+        if (!d || optionsTouchedRef.current) return
+        if (['classic', 'tech', 'combination', 'executive', 'minimal', 'two-column'].includes(d.format)) setResumeFormat(d.format)
+        if (typeof d.bullet_style === 'string') setBulletStyle(d.bullet_style)
+        if (typeof d.include_summary === 'boolean') setIncludeSummary(d.include_summary)
+        if (typeof d.include_skills === 'boolean') setIncludeSkills(d.include_skills)
+        if (typeof d.include_education === 'boolean') setIncludeEducation(d.include_education)
+        if (typeof d.include_awards === 'boolean') setIncludeAwards(d.include_awards)
+        if (typeof d.include_cover_letter === 'boolean') setIncludeCoverLetter(d.include_cover_letter)
+        if (d.cover_letter_tone === 'professional' || d.cover_letter_tone === 'warm' || d.cover_letter_tone === 'direct') setCoverLetterTone(d.cover_letter_tone)
+      })
+      .catch(() => {})
+  }, [])
+
   // Load tier on mount so the Pro-only ATS breakdown is ready before reaching done.
   useEffect(() => {
     fetch('/api/me')
@@ -363,6 +395,7 @@ export default function GeneratePage() {
   const [hydrating, setHydrating] = useState(false)
 
   function restoreDraftFields(draft: Record<string, unknown>) {
+    optionsTouchedRef.current = true
     const nonEmpty = (v: unknown): v is unknown[] => Array.isArray(v) && v.length > 0
     if (draft.jd_text) setJdText(draft.jd_text as string)
     if (nonEmpty(draft.confirmed_themes)) setConfirmedThemes(draft.confirmed_themes as string[])
@@ -1584,7 +1617,7 @@ export default function GeneratePage() {
           module_order: orderedIds,
           jd_id: jdData!.jd_id,
           ...(hasAugmentations && { module_augmentations: moduleAugmentations }),
-          positioning_variant: posVariant,
+          positioning_variant: pickPositioningVariant(jdData),
           contact,
           summary_override: summaryOverride || undefined,
           education: includeEducation ? education : [],
@@ -3229,6 +3262,83 @@ export default function GeneratePage() {
               </div>
             )}
 
+            {/* Ready card — one decision; every option lives under More options */}
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 12, padding: '22px 24px' }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
+                Ready to build your resume for {jdData?.extracted_job_title || 'this role'}{jdData?.extracted_company ? ` at ${jdData.extracted_company}` : ''}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.5, marginBottom: 16 }}>
+                {selectedIds.length} module{selectedIds.length === 1 ? '' : 's'} selected. We&apos;ll turn them into a resume using only what your modules say, newest job first.
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 12.5, color: 'var(--text3)', marginBottom: 18 }}>
+                <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                  {[contact.name, contact.email, contact.location].filter(Boolean).join(' · ') || 'Add your contact info'}
+                </span>
+                <span>·</span>
+                <button
+                  type="button"
+                  onClick={() => setEditingContact(v => !v)}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--teal)', fontSize: 12.5, fontFamily: 'var(--font)' }}
+                >
+                  {editingContact ? 'Done' : 'Edit'}
+                </button>
+              </div>
+              <button
+                className="btn-primary"
+                onClick={() => handleGenerate()}
+                disabled={!contact.name || !contact.email || selectedIds.length === 0}
+              >
+                Build my resume
+              </button>
+              {(!contact.name || !contact.email) && (
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8 }}>Add your name and email to continue.</div>
+              )}
+            </div>
+
+            {(editingContact || !contact.name || !contact.email) && (<>
+            {/* Contact (edit form) */}
+            <div className="config-section" style={{ marginTop: 16 }}>
+              <div className="config-section-title">Contact info</div>
+              <div className="mod-edit-cols">
+                <div className="mod-edit-row">
+                  <label>Name <span style={{ color: 'var(--rose)' }}>*</span></label>
+                  <input className="mod-edit-input" value={contact.name} onChange={e => setContact(c => ({ ...c, name: e.target.value }))} placeholder="Your full name" />
+                </div>
+                <div className="mod-edit-row">
+                  <label>Email <span style={{ color: 'var(--rose)' }}>*</span></label>
+                  <input className="mod-edit-input" type="email" value={contact.email} onChange={e => setContact(c => ({ ...c, email: e.target.value }))} placeholder="you@example.com" />
+                </div>
+              </div>
+              <div className="mod-edit-cols">
+                <div className="mod-edit-row">
+                  <label>Phone</label>
+                  <input className="mod-edit-input" value={contact.phone} onChange={e => setContact(c => ({ ...c, phone: e.target.value }))} placeholder="+1 555 000 0000" />
+                </div>
+                <div className="mod-edit-row">
+                  <label>Location</label>
+                  <input className="mod-edit-input" value={contact.location} onChange={e => setContact(c => ({ ...c, location: e.target.value }))} placeholder="City, State" />
+                </div>
+                <div className="mod-edit-row">
+                  <label>LinkedIn</label>
+                  <input className="mod-edit-input" value={contact.linkedin} onChange={e => setContact(c => ({ ...c, linkedin: e.target.value }))} placeholder="linkedin.com/in/you" />
+                </div>
+              </div>
+            </div>
+
+            </>)}
+
+            <button
+              type="button"
+              onClick={() => setMoreOptionsOpen(v => !v)}
+              aria-expanded={moreOptionsOpen}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0, margin: '22px 0 0', fontSize: 13, fontWeight: 600, color: 'var(--text2)', fontFamily: 'var(--font)' }}
+            >
+              <svg width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="currentColor" strokeWidth="1.6" style={{ transform: moreOptionsOpen ? 'none' : 'rotate(-90deg)', transition: 'transform 0.15s' }}><path d="M1 2l4 4 4-4" /></svg>
+              More options
+              <span style={{ fontWeight: 400, color: 'var(--text3)' }}>· format, summary, skills, cover letter…</span>
+            </button>
+
+            {moreOptionsOpen && (<div style={{ marginTop: 16 }}>
             {/* Estimated ATS score */}
             {selectedIds.length > 0 && (() => {
               const selected = rankedModules.filter(m => selectedIds.includes(m.module_id))
@@ -3252,11 +3362,6 @@ export default function GeneratePage() {
               )
             })()}
 
-            {selectedIds.length > 0 && (
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 16 }}>
-                Jobs appear most-recent first. To change which modules are included, go back to the building step.
-              </div>
-            )}
 
             {/* Job Title — what the resume gets saved as */}
             <div className="config-section">
@@ -3483,35 +3588,6 @@ export default function GeneratePage() {
                     </button>
                   )
                 })}
-              </div>
-            </div>
-
-            {/* Contact */}
-            <div className="config-section">
-              <div className="config-section-title">Contact info</div>
-              <div className="mod-edit-cols">
-                <div className="mod-edit-row">
-                  <label>Name <span style={{ color: 'var(--rose)' }}>*</span></label>
-                  <input className="mod-edit-input" value={contact.name} onChange={e => setContact(c => ({ ...c, name: e.target.value }))} placeholder="Your full name" />
-                </div>
-                <div className="mod-edit-row">
-                  <label>Email <span style={{ color: 'var(--rose)' }}>*</span></label>
-                  <input className="mod-edit-input" type="email" value={contact.email} onChange={e => setContact(c => ({ ...c, email: e.target.value }))} placeholder="you@example.com" />
-                </div>
-              </div>
-              <div className="mod-edit-cols">
-                <div className="mod-edit-row">
-                  <label>Phone</label>
-                  <input className="mod-edit-input" value={contact.phone} onChange={e => setContact(c => ({ ...c, phone: e.target.value }))} placeholder="+1 555 000 0000" />
-                </div>
-                <div className="mod-edit-row">
-                  <label>Location</label>
-                  <input className="mod-edit-input" value={contact.location} onChange={e => setContact(c => ({ ...c, location: e.target.value }))} placeholder="City, State" />
-                </div>
-                <div className="mod-edit-row">
-                  <label>LinkedIn</label>
-                  <input className="mod-edit-input" value={contact.linkedin} onChange={e => setContact(c => ({ ...c, linkedin: e.target.value }))} placeholder="linkedin.com/in/you" />
-                </div>
               </div>
             </div>
 
@@ -3798,33 +3874,14 @@ export default function GeneratePage() {
               </div>
             </div>
 
-            {/* PREVIEW summary (collapsible, collapsed by default) */}
-            <div className="config-section">
-              <button onClick={() => setPreviewOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}>
-                <span className="config-section-title">Preview</span>
-                <span style={{ flex: 1 }} />
-                <svg width="10" height="8" viewBox="0 0 10 8" fill="none" stroke="var(--text3)" strokeWidth="1.6" style={{ transform: previewOpen ? 'none' : 'rotate(-90deg)', transition: 'transform 0.15s' }}><path d="M1 2l4 4 4-4" /></svg>
-              </button>
-              {previewOpen && (
-                <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text2)', lineHeight: 1.9 }}>
-                  <div><strong style={{ color: 'var(--text)' }}>Role:</strong> {jdData?.extracted_job_title || 'Untitled role'}</div>
-                  <div><strong style={{ color: 'var(--text)' }}>Modules:</strong> {selectedIds.length} across {new Set(assembledOrder.filter(m => m.source_company).map(m => `${m.source_company}||${m.source_role_title ?? ''}`)).size} job(s)</div>
-                  <div><strong style={{ color: 'var(--text)' }}>Bullet style:</strong> {bulletStyle === '' ? 'None' : bulletStyle}</div>
-                  <div><strong style={{ color: 'var(--text)' }}>Cover letter:</strong> {includeCoverLetter ? 'Yes' : 'No'}</div>
-                </div>
-              )}
-            </div>
+            </div>)}
 
           </div>
           </div>
 
           {/* Footer bar */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border2)', padding: '12px 22px', flexShrink: 0 }}>
-            <span style={{ fontSize: 12, color: 'var(--text3)' }}>{selectedIds.length} module{selectedIds.length === 1 ? '' : 's'} · {bulletStyle === '' ? 'no bullets' : `bullet ${bulletStyle}`}</span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={goBack}>← Back</button>
-              <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => handleGenerate()} disabled={!contact.name || !contact.email}>Generate resume →</button>
-            </div>
+            <button className="btn-ghost" style={{ fontSize: 12 }} onClick={goBack}>← Back</button>
           </div>
         </div>
       )}
