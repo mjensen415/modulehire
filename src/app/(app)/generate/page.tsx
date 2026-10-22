@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, KeyboardEvent, useCallback, useMemo } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import ScoreGauge from '@/components/ScoreGauge'
 import { isDimension, DIMENSION_LABELS, type JdCriterion } from '@/lib/dimensions'
@@ -13,7 +13,7 @@ import MatchReport, { type MatchReportData } from '@/components/MatchReport'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
-type Step = 'input' | 'analyzing' | 'reviewThemes' | 'matchReport' | 'matching' | 'assembling' | 'confirm' | 'generating' | 'done'
+type Step = 'input' | 'analyzing' | 'reviewThemes' | 'matchReport' | 'choose' | 'matching' | 'assembling' | 'confirm' | 'generating' | 'done'
 
 type AlignmentSuggestion = {
   theme: string
@@ -92,6 +92,27 @@ type Contact = { name: string; email: string; phone: string; linkedin: string; l
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
+// Steps that live in the URL (`/generate?jd_id=…&step=…`) so each one is a browser history
+// entry. Transient steps (analyzing, generating) and input (plain `/generate`) are not here.
+const STEP_TO_URL: Partial<Record<Step, string>> = {
+  reviewThemes: 'review',
+  matchReport: 'report',
+  choose: 'choose',
+  matching: 'pick',
+  assembling: 'assemble',
+  confirm: 'confirm',
+  done: 'done',
+}
+const URL_TO_STEP: Record<string, Step> = Object.fromEntries(
+  Object.entries(STEP_TO_URL).map(([step, url]) => [url, step as Step])
+)
+
+// Same normalization as /api/analyze-jd's raw_text_hash (sha256 of the trimmed text).
+async function sha256Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text.trim()))
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
 function scoreClass(score: number) {
   if (score >= 85) return 's-hi'
   if (score >= 70) return 's-mid'
@@ -137,7 +158,7 @@ function StepIndicator({ current }: { current: Step }) {
   // Map transient steps to their display step
   const display: Step =
     current === 'analyzing' || current === 'reviewThemes' ? 'input' :
-    current === 'matchReport' ? 'matching' :
+    current === 'matchReport' || current === 'choose' ? 'matching' :
     current === 'generating' ? 'confirm' :
     current
   const displaySteps: Step[] = ['input', 'matching', 'assembling', 'confirm']
@@ -328,44 +349,201 @@ export default function GeneratePage() {
       })
   }, [])
 
-  // Pre-load JD if ?jd_id= param is present (e.g. from "Regenerate" on My Resumes)
+  const router = useRouter()
+  // True once this mount has pushed a step onto history, so in-page Back can pop it. A refresh
+  // or deep link lands with nothing of ours behind it; Back then replaces the URL instead.
+  const pushedStepRef = useRef(false)
+  // sha256 of the text that produced jdData: going Back to the input step only re-analyzes if
+  // the text actually changed.
+  const analyzedHashRef = useRef<string | null>(null)
+  // The jd_id already in memory (or loading), so a step change doesn't reload the JD.
+  const hydratedJdRef = useRef<string | null>(null)
+  const [hydrating, setHydrating] = useState(false)
+
+  function restoreDraftFields(draft: Record<string, unknown>) {
+    const nonEmpty = (v: unknown): v is unknown[] => Array.isArray(v) && v.length > 0
+    if (draft.jd_text) setJdText(draft.jd_text as string)
+    if (nonEmpty(draft.confirmed_themes)) setConfirmedThemes(draft.confirmed_themes as string[])
+    if (nonEmpty(draft.confirmed_phrases)) setConfirmedPhrases(draft.confirmed_phrases as string[])
+    if (draft.selected_module_ids) setSelectedIds(draft.selected_module_ids as string[])
+    if (draft.alignment_states) setAlignmentStates(draft.alignment_states as Record<string, 'accepted' | 'skipped'>)
+    if (draft.resume_format) setResumeFormat(draft.resume_format as 'classic' | 'tech' | 'combination')
+    if (draft.job_level !== undefined && draft.job_level !== null) setJobLevel(draft.job_level as string)
+    if (draft.pos_variant) setPosVariant(draft.pos_variant as 'A' | 'B' | 'C' | 'D')
+    if (draft.include_summary !== undefined && draft.include_summary !== null) setIncludeSummary(draft.include_summary as boolean)
+    if (draft.summary_override !== undefined && draft.summary_override !== null) setSummaryOverride(draft.summary_override as string)
+    if (draft.include_cover_letter !== undefined && draft.include_cover_letter !== null) setIncludeCoverLetter(draft.include_cover_letter as boolean)
+    if (draft.cover_letter_tone) setCoverLetterTone(draft.cover_letter_tone as 'professional' | 'warm' | 'direct')
+    if (draft.cover_letter_notes !== undefined && draft.cover_letter_notes !== null) setCoverLetterNotes(draft.cover_letter_notes as string)
+    if (draft.include_skills !== undefined && draft.include_skills !== null) setIncludeSkills(draft.include_skills as boolean)
+    if (draft.skills) setSkills(draft.skills as string[])
+    if (draft.include_education !== undefined && draft.include_education !== null) setIncludeEducation(draft.include_education as boolean)
+    if (draft.education) setEducation(draft.education as EducationEntry[])
+    if (draft.include_awards !== undefined && draft.include_awards !== null) setIncludeAwards(draft.include_awards as boolean)
+    if (draft.awards_text !== undefined && draft.awards_text !== null) setAwardsText(draft.awards_text as string)
+  }
+
+  // Move forward to a step. Each URL-backed step is its own history entry.
+  function goToStep(next: Step, jdId?: string) {
+    const id = jdId ?? jdData?.jd_id
+    const urlStep = STEP_TO_URL[next]
+    setStep(next)
+    if (!urlStep || !id) return
+    pushedStepRef.current = true
+    router.push(`/generate?jd_id=${id}&step=${urlStep}`, { scroll: false })
+  }
+
+  function previousStep(current: Step): Step {
+    switch (current) {
+      case 'matchReport': return 'reviewThemes'
+      case 'choose': return matchReportData || confirmedCriteria.length > 0 ? 'matchReport' : 'reviewThemes'
+      case 'matching': return 'choose'
+      case 'assembling': return 'matching'
+      case 'confirm': return 'assembling'
+      case 'done': return 'confirm'
+      default: return 'input'
+    }
+  }
+
+  // One step back, the same as the browser Back button.
+  function goBack() {
+    setErrorMessage('')
+    if (pushedStepRef.current) { router.back(); return }
+    const urlStep = STEP_TO_URL[previousStep(step)]
+    router.replace(urlStep && jdData ? `/generate?jd_id=${jdData.jd_id}&step=${urlStep}` : '/generate', { scroll: false })
+  }
+
+  // Ranked modules for a JD: the latest logged match run if there is one, a fresh AI match only
+  // if not. Restores a saved selection when its modules still exist.
+  async function loadMatch(jdId: string, savedSelection?: string[] | null) {
+    let data = await fetch(`/api/match-runs?jd_id=${jdId}`)
+      .then(r => r.json())
+      .then(d => d.run ?? null)
+      .catch(() => null)
+    if (!data) {
+      const res = await fetch('/api/match-modules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jd_id: jdId }),
+      })
+      data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Matching failed')
+    }
+    const ranked: RankedModule[] = [...(data.ranked_modules ?? [])]
+    let unmatched: LibModule[] = data.unmatched_modules ?? []
+    // Modules the user added by hand aren't in the ranked list; bring them back the way
+    // addUnmatched() does.
+    const saved = savedSelection ?? []
+    for (const m of unmatched.filter(u => saved.includes(u.id))) {
+      ranked.push({
+        module_id: m.id, match_score: 0, include_reason: 'Manually added',
+        id: m.id, title: m.title, source_company: m.source_company, source_role_title: null,
+        weight: m.weight, pinned: m.pinned, type: m.type, content: m.content, themes: m.themes, role_types: [],
+        date_start: null, date_end: null,
+      })
+    }
+    unmatched = unmatched.filter(u => !saved.includes(u.id))
+    setRankedModules(ranked)
+    setUnmatchedModules(unmatched)
+    const known = new Set(ranked.map(m => m.module_id))
+    const restored = saved.filter(id => known.has(id))
+    setSelectedIds(restored.length > 0 ? restored : ranked.filter(m => m.match_score >= 70).map(m => m.module_id))
+  }
+
+  // POST /api/match-report returns the cached report when it's still fresh.
+  function loadMatchReport(jdId: string) {
+    setMatchReportLoading(true)
+    fetch('/api/match-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jd_id: jdId }),
+    })
+      .then(r => r.json())
+      .then(data => { if (!data.error) setMatchReportData(data) })
+      .catch(() => {})
+      .finally(() => setMatchReportLoading(false))
+  }
+
+  // Rebuild the flow from saved data for a JD opened by URL (refresh, deep link, Regenerate, a
+  // resumed draft): no new analysis, and no new match when a logged run exists.
+  async function hydrateFromJd(jdId: string, target: Step) {
+    setHydrating(true)
+    setErrorMessage('')
+    try {
+      const [jdRes, draftRes] = await Promise.all([
+        fetch(`/api/job-descriptions/${jdId}`).then(r => r.json()),
+        fetch('/api/draft-generation').then(r => r.json()).catch(() => ({ draft: null })),
+      ])
+      if (jdRes.error) throw new Error(jdRes.error)
+      const jd = jdRes.jd as JDData
+      setJdData(jd)
+      setJdText(jdRes.jd_text ?? '')
+      analyzedHashRef.current = jdRes.raw_text_hash ?? null
+      setConfirmedPhrases(jd.extracted_phrases ?? [])
+      setConfirmedThemes(jd.extracted_themes ?? [])
+      setConfirmedCriteria(jd.extracted_criteria ?? [])
+      setCriteriaLoading(false)
+      criteriaReadyRef.current = null
+      setMatchReportData(jdRes.match_report ?? null)
+      const draft = draftRes?.draft?.jd_id === jdId ? draftRes.draft as Record<string, unknown> : null
+      if (draft) restoreDraftFields(draft)
+      setHasDraft(false)
+
+      if (target !== 'reviewThemes') {
+        await loadMatch(jdId, (draft?.selected_module_ids as string[] | undefined) ?? null)
+        if (!jdRes.match_report && (jd.extracted_criteria ?? []).length > 0) loadMatchReport(jdId)
+      }
+      // A finished resume isn't kept in memory across a reload; land on confirm instead.
+      if (target === 'done') {
+        setStep('confirm')
+        router.replace(`/generate?jd_id=${jdId}&step=confirm`, { scroll: false })
+      } else {
+        setStep(target)
+      }
+    } catch (e) {
+      hydratedJdRef.current = null
+      setErrorMessage((e as Error).message)
+      setStep('input')
+      router.replace('/generate', { scroll: false })
+    } finally {
+      setHydrating(false)
+    }
+  }
+
+  // The URL is the source of truth for the step. Runs on every navigation: forward pushes,
+  // in-page Back (router.back) and the browser's own Back/Forward buttons alike.
   useEffect(() => {
     const jdId = searchParams.get('jd_id')
-    if (!jdId || step !== 'input') return
-    setStep('analyzing')
-    setErrorMessage('')
-    fetch(`/api/job-descriptions/${jdId}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) throw new Error(data.error)
-        setJdData(data.jd)
-        setJdText(data.jd_text ?? '')
-        setConfirmedPhrases(data.jd.extracted_phrases ?? [])
-        setConfirmedThemes(data.jd.extracted_themes ?? [])
-        // Now match modules
-        return fetch('/api/match-modules', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jd_id: data.jd.jd_id }),
-        })
-      })
-      .then(r => r!.json())
-      .then(data => {
-        if (data.error) throw new Error(data.error)
-        setRankedModules(data.ranked_modules ?? [])
-        setUnmatchedModules(data.unmatched_modules ?? [])
-        setSelectedIds((data.ranked_modules ?? []).filter((m: RankedModule) => m.match_score >= 60).map((m: RankedModule) => m.module_id))
-        setStep('matching')
-      })
-      .catch(e => {
-        setErrorMessage((e as Error).message)
-        setStep('input')
-      })
+    const urlStep = searchParams.get('step')
+    if (!jdId) {
+      // Plain /generate is the input step. jdData is kept, so the text and analysis survive.
+      setStep(s => (s === 'analyzing' || s === 'generating' ? s : 'input'))
+      return
+    }
+    const target: Step | undefined = urlStep ? URL_TO_STEP[urlStep] : undefined
+    if (!target) {
+      // Legacy `?jd_id=` links (Regenerate, Build resume from a match report) open the pick step.
+      router.replace(`/generate?jd_id=${jdId}&step=pick`, { scroll: false })
+      return
+    }
+    if (hydratedJdRef.current !== jdId) {
+      hydratedJdRef.current = jdId
+      void hydrateFromJd(jdId, target)
+      return
+    }
+    if (target === 'done' && !generatedUrls) {
+      router.replace(`/generate?jd_id=${jdId}&step=confirm`, { scroll: false })
+      return
+    }
+    if (['choose', 'matching', 'assembling', 'confirm'].includes(target) && rankedModules.length === 0 && !hydrating) {
+      loadMatch(jdId, selectedIds).catch(e => setErrorMessage((e as Error).message))
+    }
+    setStep(target)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [searchParams])
 
   // ── Draft: load on mount ────────────────────────────────────────────────────
-  // Only load if no ?jd_id= param (that flow takes precedence)
+  // Only offer it when the URL doesn't already name a JD (that flow takes precedence).
   useEffect(() => {
     if (searchParams.get('jd_id')) return
     fetch('/api/draft-generation')
@@ -381,48 +559,17 @@ export default function GeneratePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Map a saved draft's step to one we can safely restore into.
+  // Map a saved draft's step to one we can restore into.
   function draftTargetStep(draft: Record<string, unknown>): Step {
     const legacy: Record<string, Step> = {
       confirming: 'matching', selecting: 'matching', aligning: 'matching', building: 'matching', configuring: 'confirm',
     }
     const raw = draft.step as string
     const mapped: Step = legacy[raw] ?? (raw as Step)
+    if (!draft.jd_id) return 'input'
     if (mapped === 'done' || mapped === 'generating') return 'confirm'
-    // These steps need in-memory analysis state that isn't in the draft.
-    if (mapped === 'analyzing' || mapped === 'reviewThemes' || mapped === 'matchReport') {
-      return draft.jd_id ? 'matching' : 'input'
-    }
-    return mapped
-  }
-
-  // One step back in the flow.
-  function goBack() {
-    setErrorMessage('')
-    switch (step) {
-      case 'reviewThemes':
-        // Back to the JD text so it can be edited or replaced.
-        setJdData(null)
-        setStep('input')
-        break
-      case 'matchReport':
-        setStep('reviewThemes')
-        break
-      case 'matching':
-        if (matchReportData) setStep('matchReport')
-        else if (jdData) setStep('reviewThemes')
-        else setStep('input')
-        break
-      case 'assembling':
-        setStep('matching')
-        break
-      case 'confirm':
-        setStep('assembling')
-        break
-      case 'done':
-        setStep('confirm')
-        break
-    }
+    if (mapped === 'analyzing' || mapped === 'input') return 'reviewThemes'
+    return STEP_TO_URL[mapped] ? mapped : 'matching'
   }
 
   function startNewJd() {
@@ -431,53 +578,20 @@ export default function GeneratePage() {
     reset()
   }
 
-  function restoreDraft(draft: Record<string, unknown>, safeStep?: Step) {
-    const targetStep: Step = (safeStep ?? (draft.step as Step))
-    if (draft.jd_text) setJdText(draft.jd_text as string)
-    if (draft.confirmed_themes) setConfirmedThemes(draft.confirmed_themes as string[])
-    if (draft.confirmed_phrases) setConfirmedPhrases(draft.confirmed_phrases as string[])
-    if (draft.selected_module_ids) setSelectedIds(draft.selected_module_ids as string[])
-    if (draft.alignment_states) setAlignmentStates(draft.alignment_states as Record<string, 'accepted' | 'skipped'>)
-    if (draft.resume_format) setResumeFormat(draft.resume_format as 'classic' | 'tech' | 'combination')
-    if (draft.job_level !== undefined) setJobLevel(draft.job_level as string)
-    if (draft.pos_variant) setPosVariant(draft.pos_variant as 'A' | 'B' | 'C' | 'D')
-    if (draft.include_summary !== undefined) setIncludeSummary(draft.include_summary as boolean)
-    if (draft.summary_override !== undefined) setSummaryOverride(draft.summary_override as string)
-    if (draft.include_cover_letter !== undefined) setIncludeCoverLetter(draft.include_cover_letter as boolean)
-    if (draft.cover_letter_tone) setCoverLetterTone(draft.cover_letter_tone as 'professional' | 'warm' | 'direct')
-    if (draft.cover_letter_notes !== undefined) setCoverLetterNotes(draft.cover_letter_notes as string)
-    if (draft.include_skills !== undefined) setIncludeSkills(draft.include_skills as boolean)
-    if (draft.skills) setSkills(draft.skills as string[])
-    if (draft.include_education !== undefined) setIncludeEducation(draft.include_education as boolean)
-    if (draft.education) setEducation(draft.education as EducationEntry[])
-    if (draft.include_awards !== undefined) setIncludeAwards(draft.include_awards as boolean)
-    if (draft.awards_text !== undefined) setAwardsText(draft.awards_text as string)
-    // Re-fetch ranked modules if restoring past input
-    if (draft.jd_id && ['matching', 'assembling', 'confirm'].includes(targetStep)) {
-      fetch(`/api/job-descriptions/${draft.jd_id}`)
-        .then(r => r.json())
-        .then(data => {
-          if (!data.error) setJdData(data.jd)
-        })
-        .catch(() => {})
-      fetch('/api/match-modules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jd_id: draft.jd_id }),
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (!data.error) {
-            setRankedModules(data.ranked_modules ?? [])
-            setUnmatchedModules(data.unmatched_modules ?? [])
-          }
-        })
-        .catch(() => {})
-    }
-    setStep(targetStep)
-    setDraftRestored(true)
+  function resumeDraft(draft: Record<string, unknown>) {
     setHasDraft(false)
+    setDraftRestored(true)
+    const target = draftTargetStep(draft)
+    if (target === 'input' || !draft.jd_id) {
+      restoreDraftFields(draft)
+      return
+    }
+    // hydrateFromJd restores the draft's fields once the URL names its JD.
+    hydratedJdRef.current = null
+    pushedStepRef.current = true
+    router.push(`/generate?jd_id=${draft.jd_id}&step=${STEP_TO_URL[target]}`, { scroll: false })
   }
+
 
   // ── Draft: save on state changes (debounced 2s) ─────────────────────────────
   // Build a serialisable snapshot of all persisted fields
@@ -684,9 +798,14 @@ export default function GeneratePage() {
   }, [rankedModules, selectedIds, moduleContentOverrides,
       confirmedThemes, jdData?.extracted_themes])
 
+  // Saved right away whenever the step moves (review and report included), so leaving mid-flow
+  // is safe; other edits are debounced.
+  const lastSavedStepRef = useRef<Step | null>(null)
   useEffect(() => {
-    // Don't save ephemeral / terminal states
-    if (['input', 'analyzing', 'generating', 'done'].includes(step)) return
+    // Don't save ephemeral / terminal states, or a half-restored one
+    if (['input', 'analyzing', 'generating', 'done'].includes(step) || hydrating) return
+    const stepChanged = lastSavedStepRef.current !== step
+    lastSavedStepRef.current = step
     if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current)
     draftSaveTimer.current = setTimeout(() => {
       fetch('/api/draft-generation', {
@@ -694,10 +813,10 @@ export default function GeneratePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(draftPayload),
       }).catch(() => {})
-    }, 2000)
+    }, stepChanged ? 0 : 2000)
     return () => { if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftPayload])
+  }, [draftPayload, hydrating])
 
   // Pre-fill contact + skills when reaching configuring step
   useEffect(() => {
@@ -948,12 +1067,24 @@ export default function GeneratePage() {
 
   async function handleMatch() {
     if (jdText.trim().length < 50) return
-    setStep('analyzing')
     setErrorMessage('')
+    const textHash = await sha256Hex(jdText)
+    // Back from review with the same text: keep the analysis (and any edits to it).
+    if (jdData && textHash === analyzedHashRef.current) {
+      goToStep('reviewThemes')
+      return
+    }
+    setStep('analyzing')
     try {
       const run = startAnalysis(jdText)
       const basics = await run.basicsPromise
       if (!basics) throw new Error('Analysis failed')
+      analyzedHashRef.current = textHash
+      hydratedJdRef.current = basics.jd_id
+      setRankedModules([])
+      setUnmatchedModules([])
+      setSelectedIds([])
+      setMatchReportData(null)
 
       setJdData({
         jd_id: basics.jd_id,
@@ -978,7 +1109,7 @@ export default function GeneratePage() {
 
       // Let the user confirm/edit what we extracted before it drives matching — a bad
       // extraction should be caught here, not silently propagate into a bad match.
-      setStep('reviewThemes')
+      goToStep('reviewThemes', basics.jd_id)
 
       criteriaReadyRef.current = run.criteriaPromise.then((criteria) => {
         setCriteriaLoading(false)
@@ -996,7 +1127,10 @@ export default function GeneratePage() {
   // starting cold. Nothing is shown until they click; it should just feel fast.
   useEffect(() => {
     if (step !== 'input' || inputTab !== 'paste' || jdText.trim().length <= 300) return
-    const timer = setTimeout(() => startAnalysis(jdText), 1200)
+    const timer = setTimeout(async () => {
+      if (jdData && (await sha256Hex(jdText)) === analyzedHashRef.current) return
+      startAnalysis(jdText)
+    }, 1200)
     return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jdText, step, inputTab])
@@ -1018,7 +1152,7 @@ export default function GeneratePage() {
       if (ids.length === 0) throw new Error('No matching modules found — build manually instead.')
       setSelectedIds(ids)
       // Skip matching + assembling — jump straight to the confirm step.
-      setStep('confirm')
+      goToStep('confirm')
     } catch (e) {
       setErrorMessage((e as Error).message)
     } finally {
@@ -1078,21 +1212,11 @@ export default function GeneratePage() {
       }
 
       if (criteriaForSubmit.length > 0) {
-        setStep('matchReport')
-        setMatchReportLoading(true)
-        fetch('/api/match-report', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jd_id: jdData!.jd_id }),
-        })
-          .then(r => r.json())
-          .then(data => { if (!data.error) setMatchReportData(data) })
-          .catch(() => {})
-          .finally(() => setMatchReportLoading(false))
+        goToStep('matchReport')
+        loadMatchReport(jdData!.jd_id)
       } else {
-        // No extracted criteria (older JD) — skip straight to the fast-track / manual
-        // fork rendered in the input step once jdData is set.
-        setStep('input')
+        // No extracted criteria (older JD) — skip straight to the fast-track / manual fork.
+        goToStep('choose')
       }
     } catch (e) {
       setErrorMessage((e as Error).message)
@@ -1502,7 +1626,7 @@ export default function GeneratePage() {
       setAtsScore(data.ats_score ?? null)
       fetch('/api/draft-generation', { method: 'DELETE' }).catch(() => {})
       setDraftRestored(false)
-      setStep('done')
+      goToStep('done')
     } catch (e) {
       setErrorMessage((e as Error).message)
       setStep('confirm')
@@ -1545,6 +1669,12 @@ export default function GeneratePage() {
     setDraftRestored(false)
     setHasDraft(false)
     setStep('input')
+    hydratedJdRef.current = null
+    analyzedHashRef.current = null
+    setMatchReportData(null)
+    setConfirmedCriteria([])
+    setUnmatchedModules([])
+    if (searchParams.get('jd_id')) router.push('/generate', { scroll: false })
     setEditingSummary(false)
     setJdText('')
     setJdUrl('')
@@ -1596,7 +1726,7 @@ export default function GeneratePage() {
           <StepIndicator current={step} />
         </div>
         <div className="top-bar-right">
-          {(step === 'reviewThemes' || step === 'matchReport' || step === 'matching' || step === 'assembling' || step === 'confirm') && (
+          {(step === 'reviewThemes' || step === 'matchReport' || step === 'choose' || step === 'matching' || step === 'assembling' || step === 'confirm') && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button className="btn-ghost" style={{ fontSize: 12 }} onClick={goBack}>← Back</button>
               <button className="btn-ghost" style={{ fontSize: 12 }} onClick={startNewJd}>New job description</button>
@@ -1608,7 +1738,7 @@ export default function GeneratePage() {
                 className="btn-ghost"
                 style={{ fontSize: 12 }}
                 title="Auto-adjust: re-rank modules for better keyword coverage"
-                onClick={() => setStep('matching')}
+                onClick={() => goToStep('matching')}
               >
                 ↺ Auto-adjust
               </button>
@@ -1672,7 +1802,7 @@ export default function GeneratePage() {
       </div>
 
       {/* ── INPUT ─────────────────────────────────────────────────────────── */}
-      {(step === 'input' || step === 'analyzing' || step === 'reviewThemes' || step === 'matchReport') && (
+      {(step === 'input' || step === 'analyzing' || step === 'reviewThemes' || step === 'matchReport' || step === 'choose') && (
         <div className="dash-content" style={{ maxWidth: 680, margin: '0 auto', width: '100%', padding: '40px 24px' }}>
           <div className="page-title">Generate a tailored resume</div>
           <p className="page-sub" style={{ marginBottom: 24 }}>Paste a job description or paste a URL — we&apos;ll match it to your module library and build a resume.</p>
@@ -1690,10 +1820,7 @@ export default function GeneratePage() {
                   style={{ fontSize: 12 }}
                   onClick={() => {
                     fetch('/api/draft-generation').then(r => r.json()).then(({ draft }) => {
-                      if (draft) {
-                        setHasDraft(false)
-                        restoreDraft(draft, draftTargetStep(draft))
-                      }
+                      if (draft) resumeDraft(draft)
                     })
                   }}
                 >
@@ -1709,7 +1836,13 @@ export default function GeneratePage() {
           )}
 
           {/* ── Path fork: shown once a JD is analyzed (jdData set) ── */}
-          {jdData && step === 'input' && (
+          {hydrating && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '32px 0', fontSize: 13, color: 'var(--text2)' }}>
+              <Spinner /> Picking up where you left off…
+            </div>
+          )}
+
+          {jdData && step === 'choose' && !hydrating && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 8 }}>
               <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>
                 Analyzed <strong style={{ color: 'var(--text)' }}>{jdData.extracted_company ?? 'this role'}</strong>{jdData.extracted_role_type ? ` · ${jdData.extracted_role_type}` : ''}. How do you want to build it?
@@ -1744,7 +1877,7 @@ export default function GeneratePage() {
               {/* Build manually */}
               <button
                 type="button"
-                onClick={() => setStep('matching')}
+                onClick={() => goToStep('matching')}
                 disabled={fastTrackLoading}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', width: '100%',
@@ -2087,7 +2220,7 @@ export default function GeneratePage() {
                 roleLabel={[jdData.extracted_job_title || 'Untitled role', jdData.extracted_company].filter(Boolean).join(' · ')}
               />
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <button type="button" className="btn-primary" onClick={() => setStep('input')}>
+                <button type="button" className="btn-primary" onClick={() => goToStep('choose')}>
                   Continue building →
                 </button>
                 <button type="button" className="btn-ghost" style={{ fontSize: 12 }} onClick={reset}>
@@ -2097,7 +2230,7 @@ export default function GeneratePage() {
             </div>
           )}
 
-          {!jdData && step !== 'analyzing' && (<>
+          {step === 'input' && !hydrating && (<>
           {/* Tab switcher */}
           <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid var(--border2)' }}>
             {(['paste', 'url'] as const).map(tab => (
@@ -2924,7 +3057,7 @@ export default function GeneratePage() {
             <span style={{ fontSize: 12, color: 'var(--text3)' }}>{selectedIds.length} module{selectedIds.length === 1 ? '' : 's'} selected</span>
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn-ghost" style={{ fontSize: 12 }} onClick={goBack}>← Back</button>
-              <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('assembling')} disabled={selectedIds.length === 0}>Next: Review →</button>
+              <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => goToStep('assembling')} disabled={selectedIds.length === 0}>Next: Review →</button>
             </div>
           </div>
         </div>
@@ -2954,7 +3087,7 @@ export default function GeneratePage() {
                 const sectionHead = (t: string) => <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '22px 0 10px' }}>{t}</div>
                 const empty = (label: string) => (
                   <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', padding: '8px 0' }}>
-                    No {label} modules selected. <button onClick={() => setStep('matching')} style={{ background: 'none', border: 'none', color: 'var(--teal)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 12, padding: 0 }}>+ Add</button>
+                    No {label} modules selected. <button onClick={goBack} style={{ background: 'none', border: 'none', color: 'var(--teal)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: 12, padding: 0 }}>+ Add</button>
                   </div>
                 )
                 const card = (m: RankedModule) => {
@@ -3041,8 +3174,8 @@ export default function GeneratePage() {
               {assembledOrder.length} module{assembledOrder.length === 1 ? '' : 's'} · {new Set(assembledOrder.filter(m => m.source_company).map(m => `${m.source_company}||${m.source_role_title ?? ''}`)).size} job{new Set(assembledOrder.filter(m => m.source_company).map(m => `${m.source_company}||${m.source_role_title ?? ''}`)).size === 1 ? '' : 's'} covered
             </span>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep('matching')}>← Back</button>
-              <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => setStep('confirm')} disabled={selectedIds.length === 0}>Next: Confirm →</button>
+              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={goBack}>← Back</button>
+              <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => goToStep('confirm')} disabled={selectedIds.length === 0}>Next: Confirm →</button>
             </div>
           </div>
         </div>
@@ -3685,7 +3818,7 @@ export default function GeneratePage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border2)', padding: '12px 22px', flexShrink: 0 }}>
             <span style={{ fontSize: 12, color: 'var(--text3)' }}>{selectedIds.length} module{selectedIds.length === 1 ? '' : 's'} · {bulletStyle === '' ? 'no bullets' : `bullet ${bulletStyle}`}</span>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep('assembling')}>← Back</button>
+              <button className="btn-ghost" style={{ fontSize: 12 }} onClick={goBack}>← Back</button>
               <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => handleGenerate()} disabled={!contact.name || !contact.email}>Generate resume →</button>
             </div>
           </div>
@@ -3821,7 +3954,7 @@ export default function GeneratePage() {
 
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button className="btn-ghost" style={{ fontSize: 13 }} onClick={() => setStep('confirm')}>Generate another variant</button>
+                  <button className="btn-ghost" style={{ fontSize: 13 }} onClick={goBack}>Generate another variant</button>
                   <button className="btn-ghost" style={{ fontSize: 13 }} onClick={reset}>Start over</button>
                 </div>
               </div>

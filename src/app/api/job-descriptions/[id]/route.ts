@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { sanitizeCriteria } from '@/lib/dimensions'
+import { getActiveProfileId } from '@/lib/profile'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -14,12 +15,15 @@ export async function GET(_req: Request, { params }: RouteContext) {
 
     const { data, error } = await supabase
       .from('job_descriptions')
-      .select('id, raw_text, extracted_company, extracted_role_type, extracted_job_title, extracted_themes, extracted_phrases, extracted_seniority, extracted_criteria, extracted_fluff, degree_requirement')
+      .select('id, raw_text, extracted_company, extracted_role_type, extracted_job_title, extracted_themes, extracted_phrases, extracted_seniority, extracted_criteria, extracted_fluff, degree_requirement, raw_text_hash, match_report, match_report_profile_id')
       .eq('id', id)
       .eq('user_id', user.id)
       .single()
 
     if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    // The cached report only belongs to the profile it was scored against.
+    const profileId = data.match_report ? await getActiveProfileId(supabase, user.id) : null
 
     return NextResponse.json({
       jd: {
@@ -35,6 +39,8 @@ export async function GET(_req: Request, { params }: RouteContext) {
         degree_requirement: data.degree_requirement ?? null,
       },
       jd_text: data.raw_text ?? '',
+      raw_text_hash: data.raw_text_hash ?? null,
+      match_report: data.match_report && data.match_report_profile_id === profileId ? data.match_report : null,
     })
   } catch (error) {
     console.error('[[id]/route.ts]', error)
