@@ -7,15 +7,18 @@ import { CSS } from '@dnd-kit/utilities'
 import BlockEditor from './BlockEditor'
 import FitPanel from './FitPanel'
 import SuggestionsPanel from './SuggestionsPanel'
+import LibraryRail, { type LibraryGroup } from './LibraryRail'
+import UnsupportedPhrases from '@/components/UnsupportedPhrases'
+import Link from 'next/link'
 import { useDocHistory } from './useDocHistory'
 import { useAutosave, type SaveState } from './useAutosave'
 import {
-  RESUME_FORMATS, contactLine, docText, makeBlock, mapBlocks, modulesOnResume, updateBlockText,
+  RESUME_FORMATS, allBlocks, contactLine, docText, makeBlock, mapBlocks, modulesOnResume, updateBlockText,
   type Block, type BlockSuggestion, type ResumeDoc, type ResumeDocFormat,
 } from '@/lib/resume-doc'
 import { groupExperienceByCompany, normalizeCompany } from '@/lib/resume-dates'
 import { splitSentences, unsupportedTerms, type UnsupportedTerm } from '@/lib/fact-check'
-import { scoreLiveFit } from '@/lib/live-fit'
+import { phraseCoverage, scoreLiveFit } from '@/lib/live-fit'
 import type { JdCriterion } from '@/lib/dimensions'
 
 export type EditorModule = {
@@ -27,7 +30,7 @@ export type EditorModule = {
   job_ids: string[]
 }
 
-export type EditorJd = { id: string; title: string; company: string | null; criteria: JdCriterion[] } | null
+export type EditorJd = { id: string; title: string; company: string | null; criteria: JdCriterion[]; phrases?: string[] } | null
 
 type Props = {
   docId: string
@@ -37,6 +40,8 @@ type Props = {
   jd: EditorJd
   /** The stored server fit, if it was scored for this version. */
   initialFit?: { overall: number; doc_version: number } | null
+  /** Posting phrases generation left off because no module supports them. */
+  unsupportedPhrases?: string[]
 }
 
 const FORMAT_LABELS: Record<ResumeDocFormat, string> = {
@@ -75,7 +80,7 @@ function saveLabel(state: SaveState): string {
   return 'Saved'
 }
 
-export default function ResumeEditor({ docId, initialDoc, initialVersion, modules, jd, initialFit }: Props) {
+export default function ResumeEditor({ docId, initialDoc, initialVersion, modules, jd, initialFit, unsupportedPhrases = [] }: Props) {
   const history = useDocHistory(initialDoc)
   const { doc, docRef, commit, setLive, beginEdit, endEdit, undo, redo, reset, canUndo, canRedo } = history
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -93,6 +98,10 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
   const [sugError, setSugError] = useState<string | null>(null)
   const [writeBack, setWriteBack] = useState<{ blockId: string; state: 'offer' | 'saving' | 'saved' } | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
+  // The rail: Fit (requirements), Changes (suggested edits + gaps), Library (modules by job).
+  const [railTab, setRailTab] = useState<'fit' | 'changes' | 'library'>(jd && jd.criteria.length > 0 ? 'fit' : 'library')
+  const [highlight, setHighlight] = useState<string | null>(null)
+  const [flashId, setFlashId] = useState<string | null>(null)
 
   const onConflict = useCallback((latest: { doc: ResumeDoc; version: number }) => {
     setActiveId(null)
@@ -167,6 +176,36 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
       return m.job_ids.length === 0 && !!company && normalizeCompany(m.source_company) === company
     })
   }, [doc.experience, library, onResume])
+
+  // ── Rail data ─────────────────────────────────────────────────────────────
+  // Which lines cover which requirement (scored per line with the same live-fit rules).
+  const coverage = useMemo(() => {
+    const map = new Map<string, string[]>()
+    if (criteria.length === 0) return map
+    for (const { block } of allBlocks(doc)) {
+      if (!block.text.trim()) continue
+      for (const c of scoreLiveFit(block.text, criteria).criteria) {
+        if (c.covered) map.set(c.label, [...(map.get(c.label) ?? []), block.id])
+      }
+    }
+    return map
+  }, [doc, criteria])
+  const highlightIds = useMemo(() => new Set(highlight ? coverage.get(highlight) ?? [] : []), [highlight, coverage])
+  const keywords = useMemo(() => {
+    const phrases = jd?.phrases ?? []
+    return { found: phraseCoverage(docText(doc), phrases).found.length, total: phrases.length }
+  }, [doc, jd])
+  // "Not on your resume" gaps that the user hasn't since covered by editing.
+  const openGaps = useMemo(() => phraseCoverage(docText(doc), unsupportedPhrases).missing, [doc, unsupportedPhrases])
+
+  const libraryGroups: LibraryGroup[] = useMemo(() => doc.experience.map((e, i) => {
+    const onResume: LibraryGroup['onResume'] = []
+    for (const b of e.bullets) {
+      const m = b.module_id ? moduleById.get(b.module_id) : undefined
+      if (m && !onResume.some(x => x.module.id === m.id)) onResume.push({ module: m, blockId: b.id })
+    }
+    return { entryIndex: i, heading: [e.title, e.company].filter(Boolean).join(', ') || 'Experience', onResume, available: availableFor(i) }
+  }), [doc.experience, moduleById, availableFor])
 
   // ── Block lookups and edits ───────────────────────────────────────────────
   const locate = useCallback((id: string): { entry: number; index: number } | null => {
@@ -473,6 +512,56 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
 
   const showBlock = (blockId: string) => {
     document.querySelector(`[data-block-anchor="${blockId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setFlashId(blockId)
+    setTimeout(() => setFlashId(f => (f === blockId ? null : f)), 1400)
+  }
+
+  const selectRequirement = (label: string | null) => {
+    setHighlight(label)
+    const first = label ? coverage.get(label)?.[0] : undefined
+    if (first) document.querySelector(`[data-block-anchor="${first}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
+  // For a requirement no line covers: a library module (not on the resume) that could, with a
+  // one-click add to its job, or plainly "Not in your library".
+  const renderGap = (label: string) => {
+    const criterion = criteria.find(c => c.label === label)
+    if (!criterion) return null
+    const candidates: { m: EditorModule; entry: number }[] = []
+    doc.experience.forEach((_, i) => {
+      for (const m of availableFor(i)) {
+        if (candidates.some(c => c.m.id === m.id)) continue
+        if (scoreLiveFit(`${m.title}. ${m.content}`, [criterion]).criteria[0]?.covered) candidates.push({ m, entry: i })
+      }
+    })
+    if (candidates.length === 0) {
+      return (
+        <span>
+          Not in your library.{' '}
+          <Link href={`/library/new?title=${encodeURIComponent(label)}`}>Add a module</Link> if you&apos;ve done this.
+        </span>
+      )
+    }
+    return (
+      <div className="rd-gap-list">
+        <span>Your library has this, but it&apos;s not on the page:</span>
+        {candidates.slice(0, 2).map(({ m, entry }) => (
+          <div key={m.id} className="rd-gap-item">
+            <span><strong>{m.title}</strong> · {doc.experience[entry].company}</span>
+            <button type="button" onClick={() => addFromRail(entry, m)}>+ Add</button>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  const addFromRail = (entryIndex: number, m: EditorModule) => {
+    insertModule(entryIndex, m)
+  }
+
+  const openTab = (tab: 'fit' | 'changes' | 'library') => {
+    setRailTab(tab)
+    if (tab === 'changes' && suggestions === null && !sugLoading && criteria.length > 0) void findSuggestions()
   }
 
   const undoFact = (blockId: string) => {
@@ -503,7 +592,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
     const active = activeId === id
     const isSynthetic = id.startsWith('__')
     return (
-      <div data-block-anchor={id} className={`rd-line${active ? ' rd-line-active' : ''}${warnings.has(id) ? ' rd-line-warn' : ''}`} style={{ position: 'relative' }}>
+      <div data-block-anchor={id} className={`rd-line${active ? ' rd-line-active' : ''}${warnings.has(id) ? ' rd-line-warn' : ''}${highlightIds.has(id) ? ' rd-line-hl' : ''}${flashId === id ? ' rd-line-flash' : ''}`} style={{ position: 'relative' }}>
         {active && (
           <div
             ref={toolbarRef}
@@ -799,26 +888,54 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
         Click any line to edit it. Enter or Esc finishes. Drag ⋮⋮ to reorder within a job. Downloads use exactly what you see here.
       </p>
     </div>
-    {criteria.length > 0 && (
-      <aside className="rd-aside">
-        <FitPanel
-          live={live}
-          score={shownScore}
-          checking={fitChecking}
-          serverChecked={!!serverFit && serverFit.clientAt === live.score}
-        />
-        <SuggestionsPanel
-          suggestions={suggestions}
-          loading={sugLoading}
-          error={sugError}
-          isStale={sug => blockById(sug.block_id)?.text !== sug.based_on}
-          onFind={findSuggestions}
-          onAccept={acceptSuggestion}
-          onDismiss={sug => setSuggestions(prev => (prev ?? []).filter(x => x.block_id !== sug.block_id))}
-          onShow={sug => showBlock(sug.block_id)}
-        />
-      </aside>
-    )}
+    <aside className="rd-aside">
+      <div className="rd-rail">
+        <div className="rd-tabs" role="tablist" aria-label="Resume tools">
+          {criteria.length > 0 && (
+            <button type="button" role="tab" aria-selected={railTab === 'fit'} className={railTab === 'fit' ? 'on' : ''} onClick={() => openTab('fit')}>Fit</button>
+          )}
+          <button type="button" role="tab" aria-selected={railTab === 'changes'} className={railTab === 'changes' ? 'on' : ''} onClick={() => openTab('changes')}>
+            Changes{openGaps.length + (suggestions?.length ?? 0) > 0 ? ` (${openGaps.length + (suggestions?.length ?? 0)})` : ''}
+          </button>
+          <button type="button" role="tab" aria-selected={railTab === 'library'} className={railTab === 'library' ? 'on' : ''} onClick={() => openTab('library')}>Library</button>
+        </div>
+        {railTab === 'fit' && criteria.length > 0 && (
+          <FitPanel
+            live={live}
+            score={shownScore}
+            checking={fitChecking}
+            serverChecked={!!serverFit && serverFit.clientAt === live.score}
+            selected={highlight}
+            onSelect={selectRequirement}
+            coverCount={label => coverage.get(label)?.length ?? 0}
+            renderGap={renderGap}
+            keywords={keywords}
+          />
+        )}
+        {railTab === 'changes' && (
+          <div className="rd-rail-body">
+            {criteria.length > 0 ? (
+              <SuggestionsPanel
+                suggestions={suggestions}
+                loading={sugLoading}
+                error={sugError}
+                isStale={sug => blockById(sug.block_id)?.text !== sug.based_on}
+                onFind={findSuggestions}
+                onAccept={acceptSuggestion}
+                onDismiss={sug => setSuggestions(prev => (prev ?? []).filter(x => x.block_id !== sug.block_id))}
+                onShow={sug => showBlock(sug.block_id)}
+              />
+            ) : (
+              <div className="rd-fit-sub">Suggested edits need the job&apos;s requirements, and this resume has none.</div>
+            )}
+            {openGaps.length > 0 && <div style={{ marginTop: 16 }}><UnsupportedPhrases phrases={openGaps} /></div>}
+          </div>
+        )}
+        {railTab === 'library' && (
+          <LibraryRail groups={libraryGroups} preview={m => moduleResumeLine(m.content)} onShow={showBlock} onAdd={addFromRail} />
+        )}
+      </div>
+    </aside>
     </div>
   )
 }
@@ -851,7 +968,38 @@ const EDITOR_CSS = `
 .rd-layout { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
 .rd-root { display: flex; flex-direction: column; gap: 14px; min-width: 0; flex: 1 1 560px; max-width: 780px; }
 .rd-aside { flex: 0 1 300px; position: sticky; top: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 260px; }
-.rd-fit { background: var(--surface); border: 1px solid var(--border2); border-radius: 10px; padding: 16px; }
+.rd-rail { background: var(--surface); border: 1px solid var(--border2); border-radius: 10px; overflow: hidden; }
+.rd-tabs { display: flex; border-bottom: 1px solid var(--border2); }
+.rd-tabs button { flex: 1; background: none; border: none; border-bottom: 2px solid transparent; padding: 10px 8px; font: 600 12.5px var(--font); color: var(--text3); cursor: pointer; margin-bottom: -1px; }
+.rd-tabs button.on { color: var(--teal); border-bottom-color: var(--teal); }
+.rd-tabs button:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+.rd-rail-body { padding: 16px; max-height: calc(100vh - 140px); overflow-y: auto; }
+.rd-reqs { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rd-req { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; padding: 7px 8px; cursor: pointer; font: 13px var(--font); color: var(--text2); }
+.rd-req:hover { background: var(--bg3); }
+.rd-req.selected { border-color: var(--teal-glow, var(--teal)); background: var(--teal-dim); }
+.rd-req.pop { animation: rd-pop 0.6s ease; }
+.rd-req-mark { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--border2); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+.rd-req.covered .rd-req-mark { background: var(--teal); border-color: var(--teal); color: #fff; }
+.rd-req-label { flex: 1; min-width: 0; }
+.rd-req-meta { font-size: 11px; color: var(--text3); white-space: nowrap; }
+.rd-req-gap { font-size: 12.5px; color: var(--text2); padding: 6px 10px 8px 34px; line-height: 1.45; }
+.rd-req-gap a { color: var(--teal); }
+.rd-gap-list { display: flex; flex-direction: column; gap: 6px; }
+.rd-gap-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rd-gap-item button, .rd-lib-add { background: none; border: 1px solid var(--teal); color: var(--teal); border-radius: 6px; padding: 2px 8px; font: 600 11.5px var(--font); cursor: pointer; white-space: nowrap; }
+.rd-lib-group { margin-bottom: 16px; }
+.rd-lib-heading { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.rd-lib-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: none; border-radius: 6px; padding: 6px 6px; font: 12.5px var(--font); color: var(--text2); cursor: pointer; }
+.rd-lib-item:hover { background: var(--bg3); }
+.rd-lib-avail { cursor: default; }
+.rd-lib-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rd-lib-title { color: var(--text); }
+.rd-lib-preview { font-size: 11.5px; color: var(--text3); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.rd-lib-state.on { font-size: 11px; color: var(--teal); white-space: nowrap; }
+.rd-line.rd-line-hl { background: rgba(29,158,117,0.12); box-shadow: inset 3px 0 0 #1d9e75; }
+.rd-line.rd-line-flash { animation: rd-flash 1.4s ease; }
+@keyframes rd-flash { 0%, 60% { background: rgba(29,158,117,0.22); } 100% { background: transparent; } }
 .rd-fit-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .rd-fit-label { font-size: 13px; font-weight: 700; color: var(--text); }
 .rd-fit-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }

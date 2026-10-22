@@ -90,3 +90,18 @@ export function scoreLiveFit(text: string, criteria: JdCriterion[]): LiveFit {
   const score = Math.max(0, Math.min(100, Math.round(CALIBRATION.intercept + CALIBRATION.slope * raw)))
   return { score, criteria: out }
 }
+
+/** How many of the posting's key phrases appear in the text (exactly, or most of their words). */
+export function phraseCoverage(text: string, phrases: string[]): { found: string[]; missing: string[] } {
+  const norm = normalize(text)
+  const stems = new Set(words(text).map(stem))
+  const found: string[] = []
+  const missing: string[] = []
+  for (const p of phrases) {
+    const n = normalize(p).trim()
+    const pStems = Array.from(new Set(words(p).map(stem)))
+    const hit = (n.length > 1 && norm.includes(` ${n} `)) || (pStems.length > 0 && pStems.filter(s => stems.has(s)).length / pStems.length >= 0.6)
+    ;(hit ? found : missing).push(p)
+  }
+  return { found, missing }
+}

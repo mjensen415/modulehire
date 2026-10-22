@@ -17,11 +17,11 @@ type Props = {
 // own history, so ⌘Z undoes a suggestion exactly like typing.
 export default function SuggestionsPanel({ suggestions, loading, error, isStale, onFind, onAccept, onDismiss, onShow }: Props) {
   return (
-    <div className="rd-fit">
+    <div>
       <div className="rd-fit-head">
         <div>
-          <div className="rd-fit-label">Suggestions</div>
-          <div className="rd-fit-sub">Line edits for requirements your resume doesn&apos;t show yet, using only what your modules say.</div>
+          <div className="rd-fit-label">Suggested edits</div>
+          <div className="rd-fit-sub">For requirements your resume doesn&apos;t show yet, using only what your modules say.</div>
         </div>
       </div>
       {suggestions === null || suggestions.length === 0 ? (
@@ -30,7 +30,7 @@ export default function SuggestionsPanel({ suggestions, loading, error, isStale,
             <div className="rd-fit-sub" style={{ marginBottom: 10 }}>Nothing to suggest right now: no line&apos;s module covers a missing requirement better than it already does.</div>
           )}
           <button type="button" className="btn-ghost rd-small" onClick={onFind} disabled={loading}>
-            {loading ? 'Looking…' : suggestions === null ? 'Find improvements' : 'Look again'}
+            {loading ? 'Looking…' : suggestions === null ? 'Suggest edits' : 'Look again'}
           </button>
         </div>
       ) : (
@@ -46,7 +46,7 @@ export default function SuggestionsPanel({ suggestions, loading, error, isStale,
                 {stale && <div className="rd-fit-sub">You&apos;ve edited this line since. Accepting replaces your edit.</div>}
                 <div className="rd-sug-actions">
                   <button type="button" className="btn-primary rd-small" onClick={() => onAccept(s)}>Accept</button>
-                  <button type="button" className="btn-ghost rd-small" onClick={() => onDismiss(s)}>Dismiss</button>
+                  <button type="button" className="btn-ghost rd-small" onClick={() => onDismiss(s)}>Keep original</button>
                 </div>
               </div>
             )

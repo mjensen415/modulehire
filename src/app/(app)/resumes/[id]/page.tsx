@@ -19,7 +19,7 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
     .select(`
       id, title, positioning_variant, created_at, docx_url, pdf_url, module_ids_used,
       job_description_id, ats_score, profile_id,
-      job_descriptions (id, extracted_job_title, extracted_role_type, extracted_company, source_url, match_report, extracted_criteria)
+      job_descriptions (id, extracted_job_title, extracted_role_type, extracted_company, source_url, match_report, extracted_criteria, extracted_phrases)
     `)
     .eq('id', id)
     .eq('user_id', user.id)
@@ -88,7 +88,7 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
       job_ids: jobsByModule.get(m.id) ?? [],
     }))
     editorJd = jd
-      ? { id: jd.id, title: jd.extracted_job_title || 'Untitled role', company: jd.extracted_company ?? null, criteria: sanitizeCriteria(jd.extracted_criteria) }
+      ? { id: jd.id, title: jd.extracted_job_title || 'Untitled role', company: jd.extracted_company ?? null, criteria: sanitizeCriteria(jd.extracted_criteria), phrases: Array.isArray(jd.extracted_phrases) ? jd.extracted_phrases : [] }
       : null
   }
   const editable = !!(docRow && parsedDoc?.ok)
@@ -139,6 +139,7 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
                 modules={editorModules}
                 jd={editorJd}
                 initialFit={docRow.fit_report as { overall: number; doc_version: number } | null}
+                unsupportedPhrases={unsupportedPhrases}
               />
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {hasReport && jd && <Link className="btn-ghost" href={`/matches/${jd.id}`}>Open match report</Link>}
@@ -192,7 +193,7 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
           )}
           </>)}
 
-          <UnsupportedPhrases phrases={unsupportedPhrases} />
+          {!editable && <UnsupportedPhrases phrases={unsupportedPhrases} />}
 
           {modulesUsed && modulesUsed.length > 0 && (
             <div>
