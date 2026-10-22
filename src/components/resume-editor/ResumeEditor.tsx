@@ -554,18 +554,20 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
         {candidates.slice(0, 2).map(({ m, entry }) => (
           <div key={m.id} className="rd-gap-item">
             <span><strong>{m.title}</strong> · {doc.experience[entry].company}</span>
-            <button type="button" onClick={() => addFromRail(entry, m)}>+ Add</button>
+            <button type="button" onClick={() => addFromRail(entry, m, 'fit')}>+ Add</button>
           </div>
         ))}
       </div>
     )
   }
 
-  const addFromRail = (entryIndex: number, m: EditorModule) => {
+  const addFromRail = (entryIndex: number, m: EditorModule, from: 'library' | 'fit' = 'library') => {
     insertModule(entryIndex, m)
+    track('library_add', { from })
   }
 
   const openTab = (tab: 'fit' | 'changes' | 'library') => {
+    if (tab !== railTab) track('rail_tab', { tab })
     setRailTab(tab)
     if (tab === 'changes' && suggestions === null && !sugLoading && criteria.length > 0) void findSuggestions()
   }
@@ -578,6 +580,14 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
 
   // ── Design & Export ───────────────────────────────────────────────────────
   // Design changes apply to this resume and become the defaults for new drafts.
+  const track = (name: 'export_text' | 'library_add' | 'rail_tab', metadata: Record<string, string | number | boolean> = {}) => {
+    fetch('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, metadata: { resume_doc_id: docId, ...metadata } }),
+    }).catch(() => {})
+  }
+
   const saveDefaults = (patch: Record<string, unknown>) => {
     fetch('/api/preferences', {
       method: 'PATCH',
@@ -623,6 +633,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
     finish()
     try {
       await navigator.clipboard.writeText(docPlainText(docRef.current))
+      track('export_text')
       setCopied(true)
       setTimeout(() => setCopied(false), 1800)
     } catch {

@@ -23,7 +23,7 @@ export async function GET(req: Request, { params }: RouteContext) {
 
     const { data: row } = await supabase
       .from('resume_documents')
-      .select('doc, generated_resumes (title)')
+      .select('doc, version, job_description_id, generated_resumes (title)')
       .eq('id', id)
       .eq('user_id', user.id)
       .single()
@@ -37,6 +37,13 @@ export async function GET(req: Request, { params }: RouteContext) {
     const base = String(resume?.title || parsed.doc.header.name || 'Resume').replace(/[^\w\s.-]+/g, '').trim() || 'Resume'
     const filename = `${base}.${type}`
     const body = type === 'pdf' ? rendered.pdf : rendered.docx
+
+    // Measurement: share of drafts exported, and edits (saves) per exported resume.
+    supabase.from('usage_events').insert({
+      user_id: user.id,
+      action: 'ev_export',
+      metadata: { type, resume_doc_id: id, saves: Math.max(0, (row.version ?? 1) - 1), jd_id: row.job_description_id },
+    }).then(({ error }) => { if (error) console.error('[resume-docs download] event log failed:', error) })
 
     return new NextResponse(new Uint8Array(body), {
       headers: {

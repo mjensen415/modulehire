@@ -109,6 +109,7 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - `draft_generations` table (user_id PK, step/jd_id/jd_text/selected_module_ids/confirmed_themes/confirmed_phrases/alignment_states/resume_format/job_level/pos_variant/include_summary/summary_override/include_cover_letter/cover_letter_tone/cover_letter_notes/include_skills/skills/include_education/education/include_awards/awards_text/updated_at) + own-rows RLS policy — applied via MCP, tracked in `supabase/migrations/20261001_draft_generations.sql`. Backs `/api/draft-generation`'s autosave in `/generate` (`src/app/(app)/generate/page.tsx`'s `draftPayload`); the table had never been migrated, so every autosave `PUT` had been 500ing in production (the `GET` path silently swallowed the same error via `data ?? null`, so it went unnoticed) until this fix.
 - `job_descriptions.extracted_fluff text[]` + `job_descriptions.degree_requirement jsonb` + `job_postings.degree_requirement jsonb` — applied via MCP, tracked in `supabase/migrations/20261013_jd_signal.sql` (also in `schema.sql`). Filled by the analyze-jd basics pass (`src/lib/jd-signal.ts` holds the shared prompts/schemas/sanitizers); criteria also carry `mentions`/`also_called` inside the existing `extracted_criteria` jsonb. A waivable degree on a business posting never trips an applicant dealbreaker (`score-applicant.ts`).
 - `job_applications.source/posting_age/first_response_at/response_type` + `no_response` added to `job_applications_status_check` — applied via MCP, tracked in `supabase/migrations/20261013_tracker_signal.sql`. Nudges and the "What's working for you" card are computed on read in `src/lib/tracker.ts`.
+- Widened `usage_events_action_check` to also allow an `ev_` prefix (generate v2 product events) — tracked in `supabase/migrations/20261024_usage_events_product_events.sql`. **Not yet applied** as of 2026-10-24; until it is, every `ev_` insert fails the CHECK and is only logged to the console.
 - `resume_documents` (+ `fit_report jsonb`) and `resume_document_history`, both with own-rows RLS — applied via MCP, tracked in `supabase/migrations/20261023_resume_documents.sql`. If the `resume_documents` insert ever fails, `generate-resume` logs it and that resume falls back to the file-only view.
 - `generated_resumes.generation_flags jsonb` + `generated_resumes.unsupported_phrases text[]` — applied via MCP, tracked in `supabase/migrations/20261022_generation_flags.sql` (also in `schema.sql`). Written by `generate-resume` after the server-side fact check (`src/lib/fact-check.ts`): bullets rewritten because they named a number or proper noun their source module doesn't contain (`{ module_id, bullet, reason, replacement }`), and posting phrases left off because no module supports them (shown on the done step and `/resumes/[id]` with an Add a module link).
 
@@ -250,6 +251,34 @@ role, recent-JD list, recent-resumes label), `/matches`, `/matches/[jd_id]`, `/r
 `extracted_role_type` next to an already-distinct title (e.g. `generate/page.tsx`'s "Analyzed
 {company} · {role_type}" banners, `applications`'s small subtitle line under the resume's own
 title) and admin-only tooling (`admin/pipeline`, `admin/prompt-lab`).
+
+## Generate v2: paste → draft → edit (`/generate`)
+`/generate` is three states, no wizard: paste a posting (text or link) → Building (~20s,
+`GenerateV2.tsx`, stage list driven by real events) → `/resumes/[id]` open in the editor. The
+old four-step wizard is `ClassicGenerate.tsx` at `/generate?classic=1` for one release (every URL
+it writes keeps `classic=1`; legacy `&step=` links also land there) — remove it after.
+`/generate?jd_id=` (Regenerate / Make another version) starts a v2 draft for that JD directly.
+- `POST /api/jobs/start` (`{ raw_text } | { url } | { jd_id }`) streams NDJSON `basics` → `criteria`
+  → `match` → `document` → `done`, calling the analyze-jd, fetch-jd-url, match-modules (or the
+  latest `match_runs` row for a known JD) and generate-resume handlers **in-process** (same request
+  and auth cookies). Matching starts as soon as basics arrive. A posting with no title stops at
+  `need_title`; the client asks inline, PATCHes the JD, and calls again with `{ jd_id }`.
+- Auto-pick (`src/lib/job-grouping.ts`): recommended stack (pinned, then score), ≤3 modules for
+  the two most recent roles and ≤2 for older ones, empty recent roles backfilled with their best
+  module ≥60; generate-resume's `bullets_per_role` caps bullets (4 recent / 2 older) after the
+  fact check. `jobResolver` (module → job) is shared with generate-resume.
+- The editor rail replaces the Match screen: **Fit** (checklist; click a requirement to highlight
+  its lines, or see the library module that could cover it / "Not in your library"; the old ATS
+  keyword check is the "key phrases on the page" line), **Changes** (suggestion operations with
+  Accept / Keep original + "Not on your resume"), **Library** (modules per job: On resume / + Add).
+  Header: title, fit number, **Design** (template, sections via `ResumeDoc.hidden_sections`, cover
+  letter; saved to `preferences.resume_defaults` via `PATCH /api/preferences`) and **Export**
+  (PDF, Word, copy text).
+- Measurement in `usage_events` (`ev_` prefix — needs the 20261024 migration): `ev_draft_created`
+  (`metadata.ms` = paste → draft, target < 25s), `ev_export` (type, `saves` = edits batches before
+  export), `ev_export_text`, `ev_library_add` (`from: library|fit`), `ev_rail_tab`. E.g. share of
+  drafts exported: `count(distinct metadata->>'resume_doc_id') filter (where action like 'ev_export%')`
+  over `count(*) filter (where action = 'ev_draft_created')`.
 
 ## Live resume editor (`/resumes/[id]`)
 A generated resume is a live document, not a file. `generate-resume` builds a `ResumeDoc`
