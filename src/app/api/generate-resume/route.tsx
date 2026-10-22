@@ -7,6 +7,7 @@ import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
 import { compareResumeRanges, formatResumeRange, normalizeCompany } from '@/lib/resume-dates'
+import { jobResolver, type JobRow } from '@/lib/job-grouping'
 import type { UserPreferences } from '@/lib/preferences'
 import { factCheckBullets, stripUnsupportedSentences, type FactFlag, type SourceModule } from '@/lib/fact-check'
 // canGenerate removed — generation is always allowed; download is gated client-side via canDownload.
@@ -121,6 +122,7 @@ export async function POST(req: Request) {
       confirmed_phrases,
       confirmed_themes,
       module_augmentations,
+      bullets_per_role,
     }: {
       module_ids: string[]
       jd_id: string
@@ -141,6 +143,8 @@ export async function POST(req: Request) {
       confirmed_phrases?: string[]
       confirmed_themes?: string[]
       module_augmentations?: Record<string, string>
+      /** Auto-picked drafts: max bullets for the two most recent roles and for older ones. */
+      bullets_per_role?: { recent: number; older: number }
     } = await req.json()
 
     if (!isUuid(jd_id)) {
@@ -182,33 +186,13 @@ export async function POST(req: Request) {
     // "Fiverr International") and invent employers ("Multiple", "Career narrative"). Modules
     // with no job go to one only if their normalized company matches it; otherwise, and for
     // positioning modules, they are career-level — summary/skills material, never an entry.
-    type JobRow = { id: string; company: string; title: string | null; start_date: string | null; end_date: string | null }
     const [{ data: assignmentRows }, { data: jobRows }] = await Promise.all([
       supabase.from('module_job_assignments').select('module_id, job_id').in('module_id', module_ids),
       supabase.from('job_experiences').select('id, company, title, start_date, end_date').eq('user_id', user.id),
     ])
     const jobs: JobRow[] = (jobRows ?? []) as JobRow[]
-    const jobById = new Map(jobs.map(j => [j.id, j]))
-    const byRecency = (a: JobRow, b: JobRow) => compareResumeRanges(a.start_date, a.end_date, b.start_date, b.end_date)
-    const assignedJob = new Map<string, JobRow>()
-    for (const row of assignmentRows ?? []) {
-      const job = jobById.get(row.job_id)
-      if (!job) continue
-      const prev = assignedJob.get(row.module_id)
-      if (!prev || byRecency(job, prev) < 0) assignedJob.set(row.module_id, job)
-    }
-
-    const jobForModule = (m: Record<string, unknown>): JobRow | null => {
-      if (m.type === 'positioning') return null
-      const assigned = assignedJob.get(String(m.id))
-      if (assigned) return assigned
-      const company = normalizeCompany(m.source_company)
-      if (!company) return null
-      const candidates = jobs.filter(j => normalizeCompany(j.company) === company)
-      if (candidates.length <= 1) return candidates[0] ?? null
-      const role = String(m.source_role_title ?? '').trim().toLowerCase()
-      return candidates.find(j => (j.title ?? '').trim().toLowerCase() === role) ?? [...candidates].sort(byRecency)[0]
-    }
+    const resolveJob = jobResolver(jobs, assignmentRows ?? [])
+    const jobForModule = (m: Record<string, unknown>) => resolveJob({ id: String(m.id), type: m.type, source_company: m.source_company, source_role_title: m.source_role_title })
 
     type GroupDraft = { key: string; company: string; role: string; start: unknown; end: unknown; modules: Record<string, unknown>[] }
     const groupMap = new Map<string, GroupDraft>()
@@ -246,14 +230,21 @@ export async function POST(req: Request) {
       company: string
       role: string
       dates: string
+      max_bullets?: number
       modules: SourceModule[]
     }
     const toSource = (m: Record<string, unknown>): SourceModule => ({ id: String(m.id), title: String(m.title ?? ''), content: String(m.content ?? '') })
-    const experienceGroups: ExperienceGroup[] = groupDrafts.map(g => ({
+    const bulletCap = (index: number): number | undefined => {
+      if (!bullets_per_role) return undefined
+      const cap = index < 2 ? bullets_per_role.recent : bullets_per_role.older
+      return Number.isInteger(cap) && cap > 0 && cap <= 8 ? cap : undefined
+    }
+    const experienceGroups: ExperienceGroup[] = groupDrafts.map((g, i) => ({
       job_id: g.key,
       company: g.company,
       role: g.role,
       dates: formatResumeRange(g.start, g.end),
+      ...(bulletCap(i) ? { max_bullets: bulletCap(i) } : {}),
       modules: g.modules.map(toSource),
     }))
     const careerBlock = careerModules.length > 0
@@ -362,8 +353,9 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
           Array.isArray(e.bullet_sources) ? e.bullet_sources : [],
         )
         generationFlags.push(...flags)
+        const cap = group?.max_bullets ?? bullets.length
         return group
-          ? { job_id: group.job_id, company: group.company, title: group.role, dates: group.dates, bullets, sources }
+          ? { job_id: group.job_id, company: group.company, title: group.role, dates: group.dates, bullets: bullets.slice(0, cap), sources: sources.slice(0, cap) }
           : { job_id: `entry-${i}`, company: e.company ?? '', title: e.title ?? '', dates: e.dates ?? '', bullets, sources }
       })
     }
@@ -416,7 +408,7 @@ Respond with JSON ONLY matching this exact structure:
 }
 
 - skill_sections: one entry per module in skill_modules below (use module title as category, convert content to 2–4 bullets)
-- work_experience: use EXACTLY the pre-built experience_groups below — one experience entry per group, in order. Do NOT merge groups, split groups, or move any module to a different group. The company, role, and dates are pre-set — copy them verbatim (dates may be empty; leave them empty). Convert each module's content into 2–4 bullets. bullet_sources lists, for each bullet in order, the id of the module it came from.
+- work_experience: use EXACTLY the pre-built experience_groups below — one experience entry per group, in order. Do NOT merge groups, split groups, or move any module to a different group. The company, role, and dates are pre-set — copy them verbatim (dates may be empty; leave them empty). Convert each module's content into 2–4 bullets (when a group has "max_bullets", at most that many for the whole entry). bullet_sources lists, for each bullet in order, the id of the module it came from.
 - education: ${include_education_section && educationText ? educationText : 'leave as empty array []'}
 - skills_list: ${include_skills_section && skillsText ? skillsText : 'leave as empty array []'}
 - awards: ${awardsSection ? `include this verbatim: ${awardsSection}` : 'set to empty string ""'}
@@ -475,7 +467,7 @@ ${levelInstruction ? `- ${levelInstruction}` : ''}
 
 Summary: ${summaryInstruction}
 
-For the experience array: use EXACTLY the pre-built experience_groups below — produce one experience entry per group, in order. Do NOT merge groups, split groups, or reassign any module to a different group. The company, role, and dates for each entry are pre-set — copy them verbatim (dates may be empty; leave them empty). Convert each module's content into 2–4 bullets as described above.
+For the experience array: use EXACTLY the pre-built experience_groups below — produce one experience entry per group, in order. Do NOT merge groups, split groups, or reassign any module to a different group. The company, role, and dates for each entry are pre-set — copy them verbatim (dates may be empty; leave them empty). Convert each module's content into 2–4 bullets as described above. When a group has "max_bullets", write at most that many bullets for the whole entry, choosing the strongest.
 ${include_skills_section && skillsText ? `Skills: list these as a comma-separated string: ${skillsText}` : ''}
 ${include_education_section && educationText ? `Education: use this verbatim: ${educationText}` : ''}
 ${awardsSection ? `Awards & Certifications: include this section verbatim: ${awardsSection}` : ''}
