@@ -334,8 +334,8 @@ export default async function Dashboard() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, maxWidth: 680, margin: '0 auto 32px' }}>
                 {[
                   { step: '1', icon: '📤', title: 'Upload your resume', desc: 'We\'ll parse it into skill blocks called modules.', href: '/upload', cta: 'Upload resume', color: 'var(--teal)' },
-                  { step: '2', icon: '🔍', title: 'Paste a job description', desc: 'We match your modules to the role and rank them.', href: '/generate', cta: 'Find matches', color: 'var(--amber)' },
-                  { step: '3', icon: '⚡', title: 'Generate your resume', desc: 'Tailored, keyword-matched, ready to download.', href: '/generate', cta: 'Generate', color: 'var(--indigo)' },
+                  { step: '2', icon: '🔍', title: 'Paste a job posting', desc: 'We pick your best modules and write a draft in about 20 seconds.', href: '/generate', cta: 'Make my resume', color: 'var(--amber)' },
+                  { step: '3', icon: '⚡', title: 'Edit and export', desc: 'Tweak any line on the page, then export PDF or Word.', href: '/resumes', cta: 'My resumes', color: 'var(--indigo)' },
                 ].map(s => (
                   <div key={s.step} style={{ background: 'var(--bg3)', border: '1px solid var(--border2)', borderRadius: 12, padding: '20px 18px', textAlign: 'center' }}>
                     <div style={{ width: 36, height: 36, borderRadius: '50%', background: s.color + '22', border: `1.5px solid ${s.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, margin: '0 auto 12px' }}>

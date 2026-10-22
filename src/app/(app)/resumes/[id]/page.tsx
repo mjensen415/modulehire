@@ -111,7 +111,8 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
         <div style={{ maxWidth: editable ? 1180 : 820, display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>Created {createdDate}</div>
-            {typeof resume.ats_score === 'number' && (
+            {/* The editor's Fit number replaces the old ATS estimate for live documents. */}
+            {typeof resume.ats_score === 'number' && !editable && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <ScoreGauge score={resume.ats_score} size="sm" showLabel={false} />
                 <span
@@ -123,7 +124,7 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
               </div>
             )}
           </div>
-          {typeof resume.ats_score === 'number' && hasReport && jd && matchScore != null && matchScore <= resume.ats_score - 20 && (
+          {typeof resume.ats_score === 'number' && !editable && hasReport && jd && matchScore != null && matchScore <= resume.ats_score - 20 && (
             <div style={{ fontSize: 12, color: 'var(--text3)' }}>
               ATS-friendly, but your library shows gaps for this role ({matchScore}% match) —{' '}
               <Link href={`/matches/${jd.id}`} style={{ color: 'var(--teal)', textDecoration: 'none' }}>see Match Report ↗</Link>
