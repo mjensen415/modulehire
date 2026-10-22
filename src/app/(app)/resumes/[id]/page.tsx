@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import ScoreGauge from '@/components/ScoreGauge'
 import { OutreachButton } from '@/components/OutreachSheet'
 import UnsupportedPhrases from '@/components/UnsupportedPhrases'
+import ResumeEditor, { type EditorModule, type EditorJd } from '@/components/resume-editor/ResumeEditor'
+import { parseResumeDoc } from '@/lib/resume-doc'
+import { sanitizeCriteria } from '@/lib/dimensions'
 
 export default async function ResumeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -15,8 +18,8 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
     .from('generated_resumes')
     .select(`
       id, title, positioning_variant, created_at, docx_url, pdf_url, module_ids_used,
-      job_description_id, ats_score,
-      job_descriptions (id, extracted_job_title, extracted_role_type, extracted_company, source_url, match_report)
+      job_description_id, ats_score, profile_id,
+      job_descriptions (id, extracted_job_title, extracted_role_type, extracted_company, source_url, match_report, extracted_criteria)
     `)
     .eq('id', id)
     .eq('user_id', user.id)
@@ -52,6 +55,44 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
     .maybeSingle()
   const unsupportedPhrases: string[] = Array.isArray(flagsRow?.unsupported_phrases) ? flagsRow.unsupported_phrases : []
 
+  // The live document behind this resume, when it has one (resumes generated before the editor
+  // existed don't, and keep the file preview below). Missing table → null → file preview.
+  const { data: docRow } = await supabase
+    .from('resume_documents')
+    .select('id, doc, version')
+    .eq('generated_resume_id', resume.id)
+    .eq('user_id', user.id)
+    .maybeSingle()
+  const parsedDoc = docRow ? parseResumeDoc(docRow.doc) : null
+  let editorModules: EditorModule[] = []
+  let editorJd: EditorJd = null
+  if (docRow && parsedDoc?.ok) {
+    let moduleQuery = supabase
+      .from('modules')
+      .select('id, title, content, source_company')
+      .eq('user_id', user.id)
+      .is('deleted_at', null)
+    if (resume.profile_id) moduleQuery = moduleQuery.eq('profile_id', resume.profile_id)
+    const { data: libraryModules } = await moduleQuery
+    const libraryIds = (libraryModules ?? []).map(m => m.id)
+    const { data: assignments } = libraryIds.length > 0
+      ? await supabase.from('module_job_assignments').select('module_id, job_id').in('module_id', libraryIds)
+      : { data: [] as Array<{ module_id: string; job_id: string }> }
+    const jobsByModule = new Map<string, string[]>()
+    for (const a of assignments ?? []) jobsByModule.set(a.module_id, [...(jobsByModule.get(a.module_id) ?? []), a.job_id])
+    editorModules = (libraryModules ?? []).map(m => ({
+      id: m.id,
+      title: m.title ?? '',
+      content: m.content ?? '',
+      source_company: m.source_company ?? null,
+      job_ids: jobsByModule.get(m.id) ?? [],
+    }))
+    editorJd = jd
+      ? { id: jd.id, title: jd.extracted_job_title || 'Untitled role', company: jd.extracted_company ?? null, criteria: sanitizeCriteria(jd.extracted_criteria) }
+      : null
+  }
+  const editable = !!(docRow && parsedDoc?.ok)
+
   const createdDate = new Date(resume.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
   return (
@@ -67,7 +108,7 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
       </div>
 
       <div className="dash-content">
-        <div style={{ maxWidth: 820, display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ maxWidth: editable ? 1180 : 820, display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>Created {createdDate}</div>
             {typeof resume.ats_score === 'number' && (
@@ -89,6 +130,27 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
             </div>
           )}
 
+          {editable && docRow && parsedDoc?.ok ? (
+            <>
+              <ResumeEditor
+                docId={docRow.id}
+                initialDoc={parsedDoc.doc}
+                initialVersion={docRow.version}
+                modules={editorModules}
+                jd={editorJd}
+              />
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {hasReport && jd && <Link className="btn-ghost" href={`/matches/${jd.id}`}>Open match report</Link>}
+                {resume.job_description_id && <Link className="btn-ghost" href={`/generate?jd_id=${resume.job_description_id}`}>Make another version</Link>}
+                {resume.job_description_id && (
+                  <OutreachButton
+                    jdId={resume.job_description_id}
+                    roleLabel={[jdTitle, jd?.extracted_company].filter(Boolean).join(' · ') || undefined}
+                  />
+                )}
+              </div>
+            </>
+          ) : (<>
           {filesMissing ? (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '32px 24px', textAlign: 'center' }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>This file is no longer available</div>
@@ -127,6 +189,7 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
               This file is no longer available. <Link href={`/generate?jd_id=${resume.job_description_id}`} style={{ color: 'var(--teal)' }}>Regenerate →</Link>
             </div>
           )}
+          </>)}
 
           <UnsupportedPhrases phrases={unsupportedPhrases} />
 

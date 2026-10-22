@@ -4,7 +4,8 @@ import * as docx from 'docx'
 import { renderToBuffer, Document as PdfDoc, Page, Text, View } from '@react-pdf/renderer'
 import React from 'react'
 import type { ResumeDoc } from '@/lib/resume-doc'
-import { compareResumeRanges, isPresentDate, normalizeCompany, parseResumeDate, splitResumeRange } from '@/lib/resume-dates'
+import { groupExperienceByCompany } from '@/lib/resume-dates'
+export { groupExperienceByCompany }
 
 export type Contact = { name: string; email: string; phone?: string; linkedin?: string; location?: string }
 export type ResumeFormat = 'classic' | 'tech' | 'combination' | 'executive' | 'minimal' | 'two-column'
@@ -34,39 +35,6 @@ export type CombinationData = {
 // Taleo/Workday/Greenhouse/Lever parse correctly for multi-role tenure.
 
 type ExpEntry = { title: string; company: string; dates: string; bullets: string[] }
-type CompanyGroup = { company: string; tenure: string; roles: ExpEntry[] }
-
-// Group by normalized company ("Fiverr" / "Fiverr International", "33Crickets" / "33 Crickets"),
-// keeping the first-seen display name. Roles within a company and companies themselves follow
-// compareResumeRanges: current roles first, then by end date, undated last. Company tenure =
-// earliest start → latest end (or "Present" if any role is open). Every format (HTML preview,
-// DOCX, PDF) renders through this, so they all match.
-export function groupExperienceByCompany(experience: ExpEntry[]): CompanyGroup[] {
-  const byRange = (a: ExpEntry, b: ExpEntry) => {
-    const [as, ae] = splitResumeRange(a.dates)
-    const [bs, be] = splitResumeRange(b.dates)
-    return compareResumeRanges(as, ae, bs, be)
-  }
-  const map = new Map<string, ExpEntry[]>()
-  const displayName = new Map<string, string>()
-  const order: string[] = []
-  for (const e of experience) {
-    const key = normalizeCompany(e.company) || (e.company ?? '').trim().toLowerCase()
-    if (!map.has(key)) { map.set(key, []); displayName.set(key, e.company ?? ''); order.push(key) }
-    map.get(key)!.push(e)
-  }
-  const groups: CompanyGroup[] = order.map(key => {
-    const roles = [...map.get(key)!].sort(byRange)
-    const starts = roles.map(r => splitResumeRange(r.dates)[0]).filter(d => parseResumeDate(d))
-    const oldestStart = [...starts].sort((x, y) => compareResumeRanges(y, y, x, x))[0] ?? ''
-    const anyPresent = roles.some(r => isPresentDate(splitResumeRange(r.dates)[1]))
-    const end = anyPresent ? 'Present' : splitResumeRange(roles[0].dates)[1]
-    const tenure = oldestStart && end && oldestStart !== end ? `${oldestStart} to ${end}` : (roles[0].dates ?? '')
-    return { company: displayName.get(key)!, tenure, roles }
-  })
-  groups.sort((a, b) => byRange(a.roles[0], b.roles[0]))
-  return groups
-}
 
 // ─── HTML PREVIEW ─────────────────────────────────────────────────────────────
 

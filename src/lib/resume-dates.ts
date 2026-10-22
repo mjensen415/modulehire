@@ -96,3 +96,37 @@ export function normalizeCompany(name: unknown): string {
   const stripped = base.replace(COMPANY_SUFFIXES, ' ').replace(/\s+/g, '')
   return stripped || base.replace(/\s+/g, '')
 }
+
+export type CompanyGroup<E> = { company: string; tenure: string; roles: E[] }
+
+// Group by normalized company ("Fiverr" / "Fiverr International", "33Crickets" / "33 Crickets"),
+// keeping the first-seen display name. Roles within a company and companies themselves follow
+// compareResumeRanges: current roles first, then by end date, undated last. Company tenure =
+// earliest start → latest end (or "Present" if any role is open). Every format (HTML preview,
+// DOCX, PDF) and the live editor render through this, so they all match.
+export function groupExperienceByCompany<E extends { company: string; dates: string }>(experience: E[]): CompanyGroup<E>[] {
+  const byRange = (a: E, b: E) => {
+    const [as, ae] = splitResumeRange(a.dates)
+    const [bs, be] = splitResumeRange(b.dates)
+    return compareResumeRanges(as, ae, bs, be)
+  }
+  const map = new Map<string, E[]>()
+  const displayName = new Map<string, string>()
+  const order: string[] = []
+  for (const e of experience) {
+    const key = normalizeCompany(e.company) || (e.company ?? '').trim().toLowerCase()
+    if (!map.has(key)) { map.set(key, []); displayName.set(key, e.company ?? ''); order.push(key) }
+    map.get(key)!.push(e)
+  }
+  const groups: CompanyGroup<E>[] = order.map(key => {
+    const roles = [...map.get(key)!].sort(byRange)
+    const starts = roles.map(r => splitResumeRange(r.dates)[0]).filter(d => parseResumeDate(d))
+    const oldestStart = [...starts].sort((x, y) => compareResumeRanges(y, y, x, x))[0] ?? ''
+    const anyPresent = roles.some(r => isPresentDate(splitResumeRange(r.dates)[1]))
+    const end = anyPresent ? 'Present' : splitResumeRange(roles[0].dates)[1]
+    const tenure = oldestStart && end && oldestStart !== end ? `${oldestStart} to ${end}` : (roles[0].dates ?? '')
+    return { company: displayName.get(key)!, tenure, roles }
+  })
+  groups.sort((a, b) => byRange(a.roles[0], b.roles[0]))
+  return groups
+}
