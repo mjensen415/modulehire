@@ -109,28 +109,35 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - `draft_generations` table (user_id PK, step/jd_id/jd_text/selected_module_ids/confirmed_themes/confirmed_phrases/alignment_states/resume_format/job_level/pos_variant/include_summary/summary_override/include_cover_letter/cover_letter_tone/cover_letter_notes/include_skills/skills/include_education/education/include_awards/awards_text/updated_at) + own-rows RLS policy — applied via MCP, tracked in `supabase/migrations/20261001_draft_generations.sql`. Backs `/api/draft-generation`'s autosave in `/generate` (`src/app/(app)/generate/page.tsx`'s `draftPayload`); the table had never been migrated, so every autosave `PUT` had been 500ing in production (the `GET` path silently swallowed the same error via `data ?? null`, so it went unnoticed) until this fix.
 - `job_descriptions.extracted_fluff text[]` + `job_descriptions.degree_requirement jsonb` + `job_postings.degree_requirement jsonb` — applied via MCP, tracked in `supabase/migrations/20261013_jd_signal.sql` (also in `schema.sql`). Filled by the analyze-jd basics pass (`src/lib/jd-signal.ts` holds the shared prompts/schemas/sanitizers); criteria also carry `mentions`/`also_called` inside the existing `extracted_criteria` jsonb. A waivable degree on a business posting never trips an applicant dealbreaker (`score-applicant.ts`).
 - `job_applications.source/posting_age/first_response_at/response_type` + `no_response` added to `job_applications_status_check` — applied via MCP, tracked in `supabase/migrations/20261013_tracker_signal.sql`. Nudges and the "What's working for you" card are computed on read in `src/lib/tracker.ts`.
-- Widened `usage_events_action_check` to also allow an `ev_` prefix (generate v2 product events) — tracked in `supabase/migrations/20261024_usage_events_product_events.sql`. **Not yet applied** as of 2026-10-24; until it is, every `ev_` insert fails the CHECK and is only logged to the console.
+- Widened `usage_events_action_check` to also allow an `ev_` prefix (generate v2 product events) — applied, tracked in `supabase/migrations/20261024_usage_events_product_events.sql`.
+- `library_repairs` (audit rows, admin-read RLS) + `apply_library_repair` / `undo_library_repair` functions (service role only) — tracked in `supabase/migrations/20261027_library_repairs.sql`. **Not yet applied** as of 2026-10-27; the library health page's Preview works without it, Apply/Undo report that it's missing.
 - `resume_documents` (+ `fit_report jsonb`) and `resume_document_history`, both with own-rows RLS — applied via MCP, tracked in `supabase/migrations/20261023_resume_documents.sql`. If the `resume_documents` insert ever fails, `generate-resume` logs it and that resume falls back to the file-only view.
 - `generated_resumes.generation_flags jsonb` + `generated_resumes.unsupported_phrases text[]` — applied via MCP, tracked in `supabase/migrations/20261022_generation_flags.sql` (also in `schema.sql`). Written by `generate-resume` after the server-side fact check (`src/lib/fact-check.ts`): bullets rewritten because they named a number or proper noun their source module doesn't contain (`{ module_id, bullet, reason, replacement }`), and posting phrases left off because no module supports them (shown on the done step and `/resumes/[id]` with an Add a module link).
 
-## AI model tiering (`src/lib/ai.ts`)
-Every AI call site picks a tier explicitly — `ANTHROPIC_MODEL` is NOT flipped globally.
-`resolveModel(tier)` resolves `'fast'` → `ANTHROPIC_MODEL_FAST` (Haiku) and `'quality'` →
-`ANTHROPIC_MODEL_QUALITY` (Sonnet 5); `aiComplete`/`aiCompleteJson` take `{ tier }` (default
-`'fast'` via the untiered `'default'` resolution) and an optional `model` override (used by the
-Prompt Lab's model selector). `aiCompleteJson<T>(messages, schema, maxTokens, opts)` uses forced
-Anthropic tool-use for structured output — used by `/api/match-report`, `analyze-jd` (+ prompt-lab
-mirror), `match-modules` pass 1 and pass 2 (+ prompt-lab mirror), `parse-modules` (module
-extraction), and `score-applicant`. A schema's root must be `type: 'object'` — `parse-modules`
-wraps its module array as `{ modules: [...] }` since Anthropic tool-use requires an object at the
-top level. `match-modules` also injects a `match_report`'s per-criterion scores into its prompt
-context when one exists for the active profile (`reportContext` in `match-modules/route.ts`), so
-module ranking agrees with the report instead of re-deriving an independent judgment.
+## AI models and usage logging (`src/lib/ai.ts`)
+**Haiku everywhere.** Every call resolves to `ANTHROPIC_MODEL_FAST` (Haiku) unless its `action` is
+listed in the `SONNET_FEATURES` env var (comma-separated, or `all`), which opts that one feature into
+`ANTHROPIC_MODEL_QUALITY` (Sonnet). `tier: 'quality'` only marks a call as *eligible* for Sonnet; on
+its own it gets Haiku. `SONNET_FEATURES` is not set in Vercel. The Prompt Lab's model picker
+(`model` option) overrides for admin testing. `aiComplete` / `aiCompleteJson` / `aiStream` also take
+`temperature` (retries after a failed validation pass 0). `aiCompleteJson` uses forced tool use; a
+schema's root must be `type: 'object'`.
 
-| Tier | Call sites |
-|---|---|
-| `fast` | contact extraction + skill extraction (`parse-modules.ts`), `detect-duplicate-experiences`, `admin/backfill-dimensions`, `match-modules` pass 1 (+ prompt-lab mirror) |
-| `quality` | module extraction (`parse-modules.ts`), `analyze-jd` (+ prompt-lab mirror), `match-modules` pass 2 (+ prompt-lab mirror), `match-report`, `suggest-module-rewrite` (+ prompt-lab mirror), `interview-prep`, `score-applicant`, `business/applicants/[id]/ai-check`, `business/job-postings`, `generate-resume` (all 3 calls), `suggest-summary`, `theme-alignment` |
+Calls with `{ userId, action }` log to `usage_events.metadata`: `model`, `input_tokens`,
+`output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`, `duration_ms`. Action
+prefixes allowed by `usage_events_action_check`: the original fixed names, `ai_*` (AI cost rows),
+`rl_*` (rate-limit counters, `checkAndLog`), and `ev_*` (product events: `ev_draft_created`,
+`ev_stage_basics|criteria|match|document`, `ev_export`, `ev_export_text`, `ev_library_add`,
+`ev_rail_tab`, `ev_classic_open`). A new action outside those prefixes must be added to the check or
+its insert silently fails.
+
+Worked examples and retries (Haiku does narrow, checked jobs well): one short worked example each in
+per-role module extraction, JD criteria (`CRITERIA_WORKED_EXAMPLE` in `jd-signal.ts`), match-report
+scoring, and the resume bullet writer; one retry at temperature 0 when output fails validation
+(criteria < 3, an unscored criterion, a role with text returning no modules, unparseable resume JSON).
+`max_tokens` follow logged outputs (criteria 1600, match report 2400, resume 2400, pass 2 600;
+per-role parse 3200 because Haiku overran 2048). Before/after numbers:
+`docs/reports/haiku-first-2026-10-27.md`.
 
 `maxDuration` raised to 300 for `parse-resume`, `reparse-my-modules`, `admin/reparse-user`,
 `business/applicants/upload`, `business/applicants/[id]/rescore`, `business/applicants/[id]/ai-check`;
@@ -199,15 +206,21 @@ working unchanged); pass `?mode=json` for the old single-response shape (used in
 route at all). `src/components/ResumeBuildProgress.tsx` (used by `/upload` and onboarding) renders
 the live build: header text driven by real events (never a timer), a progress bar, a per-role
 timeline with module-count chips, and a live per-dimension breakdown that fills in as roles finish.
-Forced tool-use is reliable but not airtight on thin/sparse resumes — `insertModulesBatch` drops any
+Each role's call gets only its slice of the resume, from the `start_anchor` the outline returns to
+the next role's anchor (full text if the anchor isn't found). Outline roles that produce no modules
+(an "Earlier Career" line) still become job records; board and advisory roles are roles; placeholder
+employers ("<UNKNOWN>", "N/A") are treated as no company. `parseModules(..., { dryRun: true })` parses
+for real but writes nothing (the eval suite). Forced tool-use is reliable but not airtight on thin/sparse resumes — `insertModulesBatch` drops any
 non-object array element defensively (a bare string spread into an insert becomes numeric-keyed
 columns Postgres rejects) and `extractModulesWithFocus` coerces a non-array `modules` response to
 `[]` rather than letting it crash downstream `.filter`/`.map` calls.
 
 ## JD Match Report
 `POST /api/match-report` (`{ jd_id }`) scores each of a JD's `extracted_criteria` against the
-active profile's modules in one `aiCompleteJson` call (only modules tagged with the criterion's
-dimension, or untagged, are shown per criterion to keep the prompt small), computes a weighted
+active profile's modules in one `aiCompleteJson` call (`src/lib/criteria-score.ts`, shared with the
+editor's server fit: each module is listed once as id | title | dimensions | first 200 chars, only
+modules tagged with a criterion's dimension or untagged, at most 60 by local relevance; a candidate
+far above the role's level scores lower on seniority), computes a weighted
 overall score, and caches the result on `job_descriptions.match_report`/`match_report_at`/
 `match_report_profile_id` — reused until the JD or a module is edited afterward. Rendered by
 `src/components/MatchReport.tsx` (`full` variant on `/generate` after JD confirmation and on
@@ -259,10 +272,23 @@ old four-step wizard is `ClassicGenerate.tsx` at `/generate?classic=1` for one r
 it writes keeps `classic=1`; legacy `&step=` links also land there) — remove it after.
 `/generate?jd_id=` (Regenerate / Make another version) starts a v2 draft for that JD directly.
 - `POST /api/jobs/start` (`{ raw_text } | { url } | { jd_id }`) streams NDJSON `basics` → `criteria`
-  → `match` → `document` → `done`, calling the analyze-jd, fetch-jd-url, match-modules (or the
-  latest `match_runs` row for a known JD) and generate-resume handlers **in-process** (same request
-  and auth cookies). Matching starts as soon as basics arrive. A posting with no title stops at
-  `need_title`; the client asks inline, PATCHes the JD, and calls again with `{ jd_id }`.
+  → `match` → `draft_summary`/`draft_job` → `document` → `done`. It calls the analyze-jd,
+  fetch-jd-url and generate-resume handlers **in-process** (same request and auth cookies; see
+  `src/lib/internal-call.ts`) and runs matching itself from `src/lib/match.ts`. Stages overlap: the
+  analysis stream is read in the background, the local shortlist is built as soon as the basics line
+  arrives, re-ranked if criteria land within 4.5s, and pass 2 is never restarted. generate-resume is
+  called with `stream: true` and emits the summary and each job as written (`src/lib/stream-json.ts`),
+  then `document` as soon as the editable doc is saved (before keyword analysis and the cover letter).
+  The Building screen shows the resume filling in and opens the editor on `document`; after 120s it
+  stops with "This is taking longer than it should." and a retry that reuses the analyzed JD.
+  A known JD with a logged `match_runs` row reuses it. A posting with no title stops at
+  `need_title`; the client asks inline, PATCHes the JD, and calls again with `{ jd_id }`. Each run
+  logs `ev_stage_*` rows (`duration_ms`, `at_ms` from paste, `first_content_ms`, `used_criteria`).
+- Matching (`src/lib/match.ts`, also behind `/api/match-modules` and the Prompt Lab matcher): pass 1
+  is a local term-overlap shortlist (`src/lib/shortlist.ts`, milliseconds; the old AI pass 1 is behind
+  `?ai_pass1=1`), pass 2 re-scores the top 20 with content, scores only, listing modules by short refs
+  (`m1`…`m20`). With UUIDs the output overran `max_tokens` on every run and silently fell back to the
+  local scores.
 - Auto-pick (`src/lib/job-grouping.ts`): recommended stack (pinned, then score), ≤3 modules for
   the two most recent roles and ≤2 for older ones, empty recent roles backfilled with their best
   module ≥60; generate-resume's `bullets_per_role` caps bullets (4 recent / 2 older) after the
@@ -312,6 +338,30 @@ reloads. Each save writes `resume_document_history` (last 50 kept).
 - Library write-back is opt-in per edit ("Save to your library too?").
 - Suggestions: `POST /api/resume-docs/[id]/suggestions` returns block operations
   (`{ block_id, new_text, reason, module_id, based_on }`); Accept is a normal history commit.
+- Older resumes (no document): "Make it editable" on `/resumes/[id]` and "Make editable" on
+  `/resumes` call `POST /api/resume-docs/from-generated/[generatedResumeId]`, which rebuilds the doc
+  from the same modules and JD through generate-resume's doc-only mode (one AI call, `ai_doc_from_legacy`,
+  no new files or resume row, not counted against limits, 20/hour). Doc-only mode is honored only for
+  in-process calls carrying `internal-call.ts`'s per-instance token. On demand only; no backfill.
+
+## Eval suite (`npm run eval`)
+`scripts/eval/run.ts` checks parsing and scoring against `test-resumes/` (8 level resumes + a scanned
+PDF) and `scripts/eval/answer-key.ts` (from `test-resumes/answer-key-jd-levels.md`): jobs (company,
+title, start year), no modules from Objective/Interests/References/Earlier Career, no module numbers
+missing from the source, score ordering per JD, and a clear unreadable error for the scan. It runs the
+real pipeline with `parseModules(..., { dryRun: true })` (writes nothing, no account needed), shared
+text extraction (`src/lib/resume-text.ts`) and criteria (`src/lib/jd-criteria.ts`). JD fixtures live in
+`scripts/eval/jds/` (the Anthropic one is still a placeholder; its checks skip). About 60 Haiku calls
+per run, so not in CI. Output: stdout table + `scripts/eval/last-run.json` (gitignored).
+
+## Library health (`/admin/library-health`)
+Admin-only. Shows per-user parse damage (unlinked modules, multi-company modules, same-title
+duplicates, job dates wider than their modules — `src/lib/library-health.ts`). "Preview fix" lists
+every op (link to the job at the same normalized company, hide duplicate copies, multi-company →
+career-level positioning, job dates from the latest resume outline) without writing. "Apply fix"
+runs `apply_library_repair` (one transaction, ownership re-checked, `library_repairs` audit row with
+the before-state); `undo_library_repair` restores it. Never automatic; other users' accounts need
+their email typed and Matt's sign-off.
 
 ## Billing: `plan` vs `tier`
 `users.plan` (`free`/`starter`/`pro`) is the Stripe-facing SKU bucket; `users.tier`

@@ -147,8 +147,8 @@ const PASS2_SCHEMA = {
  * vague one with a good title. Re-score the shortlist with content so the score that decides
  * recommended_stack reflects what the module says. Falls back to pass 1 if the call fails.
  */
-export async function rescoreShortlist(jd: MatchJd, inputs: MatchInputs, pass1: RankedModule[], shortlist: MatchModule[], userId: string): Promise<RankedModule[]> {
-  if (shortlist.length === 0) return pass1
+/** The pass 2 prompt and its short-ref → module id map (exported for the Prompt Lab). */
+export function buildPass2Prompt(jd: MatchJd, inputs: MatchInputs, shortlist: MatchModule[]): { prompt: string; refToId: Map<string, string> } {
   const criteria = sanitizeCriteria(jd.extracted_criteria)
   // Short refs instead of UUIDs: 20 UUIDs in the output overran max_tokens (the call was cut
   // off and silently fell back to pass 1 on every run) and cost ~25 tokens each to write.
@@ -172,6 +172,21 @@ ${shortlistBlock}
 ${inputs.prefContext ? inputs.prefContext + '\n\n' : ''}SCORING RULES:
 - match_score is 0-100 based on how well the module's actual content matches the job description — a good title with weak or unrelated content should score lower than pass 1 suggested
 - score every module honestly on fit to this specific job — do not give any module an automatic high score${inputs.reportContext}`
+  return { prompt: pass2Prompt, refToId }
+}
+
+export async function rescoreShortlist(
+  jd: MatchJd,
+  inputs: MatchInputs,
+  pass1: RankedModule[],
+  shortlist: MatchModule[],
+  userId: string,
+  opts: { model?: string; promptOverride?: string } = {},
+): Promise<RankedModule[]> {
+  if (shortlist.length === 0) return pass1
+  const built = buildPass2Prompt(jd, inputs, shortlist)
+  const refToId = built.refToId
+  const pass2Prompt = opts.promptOverride?.trim() ? opts.promptOverride : built.prompt
 
   try {
     const result = await aiCompleteJson<{ ranked_modules: Array<{ ref: string; match_score: number }> }>(
@@ -181,7 +196,7 @@ ${inputs.prefContext ? inputs.prefContext + '\n\n' : ''}SCORING RULES:
       ],
       PASS2_SCHEMA,
       600,
-      { tier: 'quality', userId, action: 'match_job_pass2' }
+      { tier: 'quality', userId, action: 'match_job_pass2', ...(opts.model ? { model: opts.model } : {}) }
     )
     const pass2Scores = new Map<string, number>()
     for (const rm of result.ranked_modules ?? []) {

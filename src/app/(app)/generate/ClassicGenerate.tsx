@@ -364,6 +364,16 @@ export default function ClassicGenerate() {
       .catch(() => {})
   }, [])
 
+  // Measurement: is anyone still using the classic flow? (Removal is gated on 7 quiet days.)
+  useEffect(() => {
+    fetch('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'classic_open', metadata: { step: searchParams.get('step') ?? 'input' } }),
+    }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Load tier on mount so the Pro-only ATS breakdown is ready before reaching done.
   useEffect(() => {
     fetch('/api/me')
