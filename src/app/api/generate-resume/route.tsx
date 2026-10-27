@@ -14,6 +14,7 @@ import { factCheckBullets, stripUnsupportedSentences, type FactFlag, type Source
 // canGenerate removed — generation is always allowed; download is gated client-side via canDownload.
 import { FREE_MONTHLY_GENERATIONS, isProTier } from '@/lib/plan'
 import { nanoid } from 'nanoid'
+import { jsonrepair } from 'jsonrepair'
 import { createResumeStreamReader } from '@/lib/stream-json'
 import { contactLine, makeBlock, type ResumeDoc } from '@/lib/resume-doc'
 import { docToRenderInput, renderResume, type CombinationData, type Contact, type CoverLetterConfig, type EducationEntry, type ResumeFormat, type StructuredData } from '@/lib/resume-render'
@@ -386,13 +387,17 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
     // fact check as the final doc), so the Building screen shows the resume filling in. The
     // final doc is still built from the complete response.
     let emit: (obj: Record<string, unknown>) => void = () => {}
+    // 1.5x the largest logged output (1,043 tokens over the calls on record), floored for long
+    // multi-role resumes; a cut-off response fails the JSON parse and costs a retry.
+    const GEN_MAX_TOKENS = 2400
+    const genOpts = { tier: 'quality' as const, action: docOnlyFor ? 'ai_doc_from_legacy' : 'ai_generate_resume', userId: user.id }
     const writeResume = async (prompt: string, arrayKey: string): Promise<string> => {
-      const opts = { tier: 'quality' as const, action: docOnlyFor ? 'ai_doc_from_legacy' : 'ai_generate_resume', userId: user.id }
-      if (!stream) return aiComplete([{ role: 'user', content: prompt }], 4096, opts)
+      const opts = genOpts
+      if (!stream) return aiComplete([{ role: 'user', content: prompt }], GEN_MAX_TOKENS, opts)
       const read = createResumeStreamReader(arrayKey)
       let text = ''
       let index = 0
-      for await (const delta of aiStream([{ role: 'user', content: prompt }], 4096, opts)) {
+      for await (const delta of aiStream([{ role: 'user', content: prompt }], GEN_MAX_TOKENS, opts)) {
         text += delta
         const pieces = read(delta)
         if (pieces.summary !== undefined && include_summary) {
@@ -405,6 +410,22 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
         }
       }
       return text
+    }
+    const parseResumeJson = <T,>(raw: string): T => {
+      const stripped = raw.replace(/```json/g, '').replace(/```/g, '')
+      const start = stripped.indexOf('{'), end = stripped.lastIndexOf('}')
+      if (start === -1 || end === -1) throw new Error(`Model did not return JSON. Got: ${stripped.slice(0, 200)}`)
+      const body = stripped.slice(start, end + 1)
+      try { return JSON.parse(body.replace(/,(\s*[}\]])/g, '$1')) as T } catch { return JSON.parse(jsonrepair(body)) as T }
+    }
+    // Bad JSON gets one retry at temperature 0 (not streamed), then the error stands.
+    const writeResumeJson = async <T,>(prompt: string, arrayKey: string): Promise<T> => {
+      try {
+        return parseResumeJson<T>(await writeResume(prompt, arrayKey))
+      } catch (e) {
+        console.error('[generate-resume] unusable JSON, retrying at temperature 0:', e)
+        return parseResumeJson<T>(await aiComplete([{ role: 'user', content: prompt }], GEN_MAX_TOKENS, { ...genOpts, temperature: 0 }))
+      }
     }
 
     const finishGeneration = async () => {
@@ -463,11 +484,7 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
   ${JSON.stringify(experienceGroups)}
   ${careerBlock}`
 
-        const rawCombo = await writeResume(comboPrompt, 'work_experience')
-        const strippedCombo = rawCombo.replace(/```json/g, '').replace(/```/g, '')
-        const cs = strippedCombo.indexOf('{'), ce = strippedCombo.lastIndexOf('}')
-        if (cs === -1 || ce === -1) throw new Error(`Combination template: model did not return JSON. Got: ${strippedCombo.slice(0, 200)}`)
-        const parsedCombo: CombinationData & { unsupported_phrases?: string[] } = JSON.parse(strippedCombo.slice(cs, ce + 1).replace(/,(\s*[}\]])/g, '$1'))
+        const parsedCombo = await writeResumeJson<CombinationData & { unsupported_phrases?: string[] }>(comboPrompt, 'work_experience')
         modelUnsupported = Array.isArray(parsedCombo.unsupported_phrases) ? parsedCombo.unsupported_phrases : []
 
         resumeDoc = {
@@ -503,6 +520,12 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
   - Each bullet MUST start with a past-tense action verb (Built, Led, Grew, Launched, Managed, Drove, Scaled, etc.)
   - Use only the metrics and outcomes the module content states — never add a number that isn't there. Do NOT copy the paragraph verbatim
   - Do NOT put paragraph text as a single bullet — always decompose into multiple short bullets
+
+  EXAMPLE
+  Module m-41: "Led onboarding for 40 enterprise accounts and cut time to first value from 60 to 21 days by rebuilding the kickoff process with Sales."
+  bullets: ["Led onboarding for 40 enterprise accounts", "Cut time to first value from 60 to 21 days by rebuilding kickoff with Sales"]
+  bullet_sources: ["m-41", "m-41"]
+  Never: "Drove 3x faster onboarding across 100+ accounts" (numbers the module doesn't have).
   ${atsInstruction}
   ${repetitionInstruction}
   ${levelInstruction ? `- ${levelInstruction}` : ''}
@@ -532,13 +555,7 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
   ${JSON.stringify(experienceGroups)}
   ${careerBlock}`
 
-        const rawResponseText = await writeResume(prompt, 'experience')
-        const stripped = rawResponseText.replace(/```json/g, '').replace(/```/g, '')
-        const jsonStart = stripped.indexOf('{'), jsonEnd = stripped.lastIndexOf('}')
-        if (jsonStart === -1 || jsonEnd === -1) throw new Error(`Model did not return JSON. Response: ${stripped.slice(0, 200)}`)
-        const cleanJson = stripped.slice(jsonStart, jsonEnd + 1)
-          .replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/,(\s*[}\]])/g, '$1')
-        const resumeData: StructuredData & { unsupported_phrases?: string[] } = JSON.parse(cleanJson)
+        const resumeData = await writeResumeJson<StructuredData & { unsupported_phrases?: string[] }>(prompt, 'experience')
         modelUnsupported = Array.isArray(resumeData.unsupported_phrases) ? resumeData.unsupported_phrases : []
 
         resumeDoc = {

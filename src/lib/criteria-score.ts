@@ -3,6 +3,10 @@
 // so both numbers are on the same scale.
 import { aiCompleteJson } from '@/lib/ai'
 import { isDimension, type JdCriterion } from '@/lib/dimensions'
+import { shortlistScores } from '@/lib/shortlist'
+
+const MAX_EVIDENCE = 60
+const SNIPPET = 200
 
 export type Evidence = {
   id: string
@@ -40,9 +44,9 @@ const RESULT_SCHEMA = {
       items: {
         type: 'object',
         properties: {
-          label: { type: 'string', description: 'Exact label from the criterion list above' },
+          label: { type: 'string', description: 'Exact label from the requirements list above' },
           score: { type: 'number', description: '0-100' },
-          evidence_module_ids: { type: 'array', items: { type: 'string' }, description: 'Up to 3 module ids that best prove this criterion, or empty if none' },
+          evidence_module_ids: { type: 'array', items: { type: 'string' }, description: 'Up to 3 evidence ids that best prove this requirement, or empty if none' },
           why: { type: 'string', description: 'Max 15 words, plain English, second person' },
         },
         required: ['label', 'score', 'evidence_module_ids', 'why'],
@@ -58,47 +62,81 @@ export async function scoreCriteria(
   jobLabel: string,
   opts: { userId: string; action: string },
 ): Promise<CriteriaReport> {
-  const modules = evidenceItems
-  const criteriaBlock = criteria.map((c, i) => {
-    // Untagged modules (pre-backfill) are shown for every criterion so nothing is silently
-    // excluded; tagged modules are shown only for their matching dimension to keep the prompt small.
-    const relevant = (modules ?? []).filter(m => {
-      const dims = Array.isArray(m.dimensions) ? m.dimensions.filter(isDimension) : []
-      return dims.length === 0 || dims.includes(c.dimension)
-    })
-    const moduleLines = relevant.length > 0
-      ? relevant.map(m =>
-          `  - id: ${m.id} | title: ${m.title}${m.label ? ` | ${m.label}` : ''}\n    content: ${String(m.content ?? '').slice(0, 600)}`
-        ).join('\n')
-      : '  (no tagged modules for this dimension)'
-    return `CRITERION ${i + 1}: "${c.label}" [${c.dimension}] — weight ${c.weight}/5\n${c.description}\nCandidate modules that may be relevant:\n${moduleLines}`
-  }).join('\n\n')
+  // Each piece of evidence is listed once — id, title, dimensions, first 200 characters — and
+  // only if it's tagged with a criterion's dimension (or untagged), at most 60. Listing every
+  // relevant module in full under every criterion is what sent one call to 86k input tokens.
+  const dims = new Set(criteria.map(c => c.dimension))
+  let modules = evidenceItems.filter(m => {
+    const d = Array.isArray(m.dimensions) ? m.dimensions.filter(isDimension) : []
+    return d.length === 0 || d.some(x => dims.has(x))
+  })
+  if (modules.length > MAX_EVIDENCE) {
+    const relevance = shortlistScores({ extracted_criteria: criteria }, modules)
+    modules = [...modules].sort((a, b) => (relevance.get(b.id) ?? 0) - (relevance.get(a.id) ?? 0)).slice(0, MAX_EVIDENCE)
+  }
+  const evidenceBlock = modules.length > 0
+    ? modules.map(m => {
+        const d = Array.isArray(m.dimensions) ? m.dimensions.filter(isDimension) : []
+        return `- id: ${m.id} | ${m.title}${m.label ? ` (${m.label})` : ''}${d.length ? ` | ${d.join(', ')}` : ''} | ${String(m.content ?? '').replace(/\s+/g, ' ').slice(0, SNIPPET)}`
+      }).join('\n')
+    : '(no evidence)'
+  const criteriaBlock = criteria.map((c, i) => `${i + 1}. "${c.label}" [${c.dimension}] weight ${c.weight}/5 — ${c.description}`).join('\n')
 
-  const systemPrompt = `You are scoring how well a candidate's resume modules satisfy each requirement of a job description, one criterion at a time. Be conservative — don't give credit for keyword overlap alone, only for real evidence.
+  const systemPrompt = `You are scoring how well a candidate's evidence satisfies each requirement of a job description, one requirement at a time. Be conservative — don't give credit for keyword overlap alone, only for real evidence.
 
 Scoring guide:
 - 85-100: direct, specific, recent evidence at the right level
 - 60-84: clear evidence but at a lower level, less recent, or less specific
 - 30-59: adjacent or partial evidence
-- 0-29: nothing relevant in the candidate's modules
+- 0-29: nothing relevant in the evidence
 
-For each criterion, pick up to 3 module ids that best prove it (fewer or none if the evidence is weak). "why" is max 15 words, plain English, second person (e.g. "You've led teams this size before, but not in this industry.").`
+For each requirement, pick up to 3 evidence ids that best prove it (fewer or none if the evidence is weak). "why" is max 15 words, plain English, second person.
+
+Example:
+EVIDENCE
+- id: e1 | Enterprise onboarding | responsibility | Led onboarding for 40 enterprise accounts, cutting time to first value from 60 to 21 days.
+- id: e2 | Support team lead | collaboration | Managed a team of three support reps and ran their weekly coaching.
+REQUIREMENTS
+1. "Enterprise onboarding" [responsibility] weight 5 — Owns onboarding for large B2B customers.
+2. "People leadership" [collaboration] weight 3 — Has managed a team of 5 or more.
+Result:
+[{"label":"Enterprise onboarding","score":90,"evidence_module_ids":["e1"],"why":"You've run onboarding for dozens of enterprise accounts."},
+ {"label":"People leadership","score":50,"evidence_module_ids":["e2"],"why":"You've led a team, but smaller than they're asking for."}]`
 
   const userPrompt = `JOB: ${jobLabel}
 
+EVIDENCE
+${evidenceBlock}
+
+REQUIREMENTS
 ${criteriaBlock}
 
-Score every criterion listed above and return one entry per criterion, using its exact label.`
+Score every requirement above and return one entry per requirement, using its exact label.`
 
-  const aiResult = await aiCompleteJson<{ criteria: CriterionResult[] }>(
+  const call = (temperature?: number) => aiCompleteJson<{ criteria: CriterionResult[] }>(
     [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ],
     RESULT_SCHEMA,
-    4096,
-    { tier: 'quality', userId: opts.userId, action: opts.action }
+    2400,
+    { tier: 'quality', userId: opts.userId, action: opts.action, ...(temperature !== undefined ? { temperature } : {}) }
   )
+  // One retry at temperature 0 when any requirement comes back unscored; then take what we have.
+  const scoredAll = (r: { criteria?: CriterionResult[] }) => {
+    const labels = new Set((r.criteria ?? []).filter(c => typeof c?.score === 'number').map(c => c.label))
+    return criteria.every(c => labels.has(c.label))
+  }
+  let aiResult = await call()
+  if (!scoredAll(aiResult)) {
+    try {
+      const retry = await call(0)
+      if ((retry.criteria?.length ?? 0) >= (aiResult.criteria?.length ?? 0)) aiResult = retry
+    } catch (e) {
+      console.error('[criteria-score] retry failed:', e)
+    }
+  }
+  aiResult = { criteria: Array.isArray(aiResult.criteria) ? aiResult.criteria : [] }
 
   const moduleMap = new Map((modules ?? []).map(m => [m.id, m]))
   const resultByLabel = new Map(aiResult.criteria.map(c => [c.label, c]))

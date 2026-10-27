@@ -269,7 +269,7 @@ JSON:`
 
 // ─── Outline pass ───────────────────────────────────────────────────────────
 
-export type OutlineRole = { index: number; company: string; title: string | null; date_start: string | null; date_end: string | null }
+export type OutlineRole = { index: number; company: string; title: string | null; date_start: string | null; date_end: string | null; start_anchor?: string | null }
 
 const OUTLINE_SYSTEM_PROMPT = `Identify every distinct job or role in this resume, in the order they appear (most recent first, matching the resume's own order). For each, give its 0-based index, company, title, and dates.
 
@@ -295,8 +295,9 @@ const OUTLINE_SCHEMA = {
           title: { type: 'string' },
           date_start: { type: 'string', description: 'YYYY-MM, or empty string if not stated' },
           date_end: { type: 'string', description: 'YYYY-MM, "present", or empty string if not stated' },
+          start_anchor: { type: 'string', description: 'The first 8 words of this role\'s section, copied exactly as written in the resume (usually its company or title line)' },
         },
-        required: ['index', 'company', 'title', 'date_start', 'date_end'],
+        required: ['index', 'company', 'title', 'date_start', 'date_end', 'start_anchor'],
       },
     },
     has_extras: { type: 'boolean' },
@@ -320,7 +321,7 @@ function mergeSplitRoles(roles: OutlineRole[]): OutlineRole[] {
   return merged.map((r, i) => ({ ...r, index: i }))
 }
 
-async function extractOutline(rawText: string, userId: string): Promise<{ roles: OutlineRole[]; hasExtras: boolean }> {
+export async function extractOutline(rawText: string, userId: string): Promise<{ roles: OutlineRole[]; hasExtras: boolean }> {
   try {
     const result = await aiCompleteJson<{ roles: Array<Record<string, unknown>>; has_extras: boolean }>(
       [
@@ -328,7 +329,7 @@ async function extractOutline(rawText: string, userId: string): Promise<{ roles:
         { role: 'user', content: `Resume:\n${rawText}` },
       ],
       OUTLINE_SCHEMA,
-      1024,
+      1600,
       { tier: 'fast', userId, action: 'parse_modules' }
     )
     const roles = (result.roles ?? [])
@@ -341,6 +342,7 @@ async function extractOutline(rawText: string, userId: string): Promise<{ roles:
           title: String(r.title ?? '').trim() || null,
           date_start: normalizeDate(r.date_start),
           date_end: normalizeDate(r.date_end),
+          start_anchor: String(r.start_anchor ?? '').trim() || null,
         }
       })
       .filter((r): r is OutlineRole => r !== null)
@@ -424,13 +426,61 @@ community-building, community-marketing, community-programs, community-ops, comm
 ROLE TYPES — pick only from this exact list (omit any that don't apply):
 vp-community, head-of-community, director-community, senior-manager-community, community-manager, developer-relations, developer-advocacy, developer-community-manager, community-marketing, community-ops, community-enablement, content-strategy, ic-community
 
-themes: values from the THEMES list above. role_types: values from the ROLE TYPES list above.`
+themes: values from the THEMES list above. role_types: values from the ROLE TYPES list above.
+
+WORKED EXAMPLE
+Resume section:
+  Lumen Health — Community Manager, Mar 2019 – Jun 2022
+  • Grew the patient community from 2,000 to 11,000 members in 18 months
+  • Launched a 40-person ambassador program that ran monthly local meetups
+  • Wrote the moderation playbook adopted by the support team
+Modules:
+[{"type":"experience","title":"Community Growth","content":"Grew the Lumen Health patient community from 2,000 to 11,000 members in 18 months.","source_company":"Lumen Health","source_role_title":"Community Manager","date_start":"2019-03","date_end":"2022-06","employment_type":"full-time","weight":"anchor","role_types":["community-manager"],"themes":["community-building","growth"],"company_stage":["growth"],"dimensions":["responsibility"]},
+ {"type":"story","title":"Ambassador Program","content":"Launched a 40-person ambassador program that ran monthly local meetups.","source_company":"Lumen Health","source_role_title":"Community Manager","date_start":"2019-03","date_end":"2022-06","employment_type":"full-time","weight":"strong","role_types":["community-manager"],"themes":["ambassador-programs","events"],"company_stage":["growth"],"dimensions":["responsibility","collaboration"]},
+ {"type":"experience","title":"Moderation Playbook","content":"Wrote the moderation playbook adopted by the support team.","source_company":"Lumen Health","source_role_title":"Community Manager","date_start":"2019-03","date_end":"2022-06","employment_type":"full-time","weight":"supporting","role_types":["community-manager"],"themes":["community-ops"],"company_stage":["growth"],"dimensions":["skill"]}]
+Every number is copied exactly; nothing is added that the section doesn't say.`
 
 const EXTRAS_FOCUS_INSTRUCTION = 'Extract modules only from content that is NOT part of a specific role — standalone skills, side projects, open-source contributions, awards, certifications. Do NOT create a module for the Summary/Profile/Objective/About section.'
 
-function roleFocusInstruction(role: OutlineRole): string {
+export function roleFocusInstruction(role: OutlineRole): string {
   const dates = role.date_start ? ` (${role.date_start} to ${role.date_end ?? 'present'})` : ''
   return `Extract modules only for this role: #${role.index} — ${role.title ?? 'this role'} at ${role.company}${dates}. Only emit modules whose source_company and source_role_title match this role.`
+}
+
+// Where a role's section starts: its start_anchor found in the text, exactly or ignoring
+// whitespace and case. -1 when the anchor isn't there.
+function anchorPosition(rawText: string, anchor: string | null | undefined): number {
+  if (!anchor) return -1
+  const exact = rawText.indexOf(anchor)
+  if (exact >= 0) return exact
+  // Whitespace/case-insensitive: compare on a collapsed copy, mapping back to original offsets.
+  const map: number[] = []
+  let collapsed = ''
+  for (let i = 0; i < rawText.length; i++) {
+    const ch = rawText[i]
+    if (/\s/.test(ch)) { if (collapsed.endsWith(' ')) continue; collapsed += ' ' } else collapsed += ch.toLowerCase()
+    map.push(i)
+  }
+  const needle = anchor.replace(/\s+/g, ' ').trim().toLowerCase()
+  const at = collapsed.indexOf(needle)
+  return at >= 0 ? map[at] : -1
+}
+
+/**
+ * Just this role's part of the resume: from its anchor to the next role's anchor. Per-role
+ * calls used to re-send the whole resume (~4-5k tokens each); on Haiku the prompt is under the
+ * caching minimum, so slicing saves more than caching did. null → use the full text.
+ */
+export function roleSlice(rawText: string, roles: OutlineRole[], role: OutlineRole): string | null {
+  const start = anchorPosition(rawText, role.start_anchor)
+  if (start < 0) return null
+  const later = roles
+    .filter(r => r !== role)
+    .map(r => anchorPosition(rawText, r.start_anchor))
+    .filter(p => p > start)
+  const end = later.length > 0 ? Math.min(...later) : rawText.length
+  const slice = rawText.slice(start, end).trim()
+  return slice.length >= 40 ? slice : null
 }
 
 // Shared extraction call. `focusInstruction` narrows the call to one role (or the "extras"
@@ -438,10 +488,15 @@ function roleFocusInstruction(role: OutlineRole): string {
 // cached leading block so parallel per-role calls reuse the same prompt-cache entry instead
 // of re-billing the whole resume on every call. `focusInstruction: null` is the fallback
 // single-call path — same shape as the original whole-resume extraction.
-async function extractModulesWithFocus(rawText: string, focusInstruction: string | null, userId: string): Promise<Record<string, unknown>[]> {
-  const content: Array<{ text: string; cache?: boolean }> = [
-    { text: `${PARSE_MODULES_SYSTEM_PROMPT}\n\nResume:\n${rawText}`, cache: true },
-  ]
+export async function extractModulesWithFocus(
+  rawText: string,
+  focusInstruction: string | null,
+  userId: string,
+  opts: { slice?: string | null; temperature?: number } = {},
+): Promise<Record<string, unknown>[]> {
+  const content: Array<{ text: string; cache?: boolean }> = opts.slice
+    ? [{ text: `${PARSE_MODULES_SYSTEM_PROMPT}\n\nResume section for this role:\n${opts.slice}` }]
+    : [{ text: `${PARSE_MODULES_SYSTEM_PROMPT}\n\nResume:\n${rawText}`, cache: true }]
   if (focusInstruction) content.push({ text: focusInstruction })
 
   const { modules } = await aiCompleteJson<{ modules: Record<string, unknown>[] }>(
@@ -450,8 +505,10 @@ async function extractModulesWithFocus(rawText: string, focusInstruction: string
       { role: 'user', content },
     ],
     PARSE_MODULES_SCHEMA,
-    focusInstruction ? 2048 : 8192,
-    { tier: 'quality', userId, action: 'parse_modules' }
+    // Per-role: Haiku writes more modules per role than Sonnet did and overran 2048 on long
+    // roles (the call is cut off and retried), so the cap went up rather than down.
+    focusInstruction ? 3200 : 8192,
+    { tier: 'quality', userId, action: 'parse_modules', ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}) }
   )
   // Forced tool-use is reliable but not airtight — on thin/sparse content the model has
   // returned `modules` as something other than an array (null, a single object). Never
@@ -615,9 +672,13 @@ export async function parseModules(
       // coming back with zero modules is a quality failure just as much as an exception
       // (seen in practice: forced tool-use occasionally returns an empty/malformed array
       // for one role in a multi-role batch even though its content is clearly there).
+      const slice = task.kind === 'role' ? roleSlice(rawText, outlineRoles, task.role) : null
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          const result = await extractModulesWithFocus(rawText, focusInstruction, userId)
+          // The retry runs at temperature 0, on the full text if the slice came back empty.
+          const result = await extractModulesWithFocus(rawText, focusInstruction, userId, attempt === 1
+            ? { slice }
+            : { slice: null, temperature: 0 })
           if (result.length > 0) { rawModulesData = result; break }
           console.error(`[parseModules] task ${taskLabel} attempt ${attempt} returned no modules, retrying`)
         } catch (err) {

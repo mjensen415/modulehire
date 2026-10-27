@@ -17,6 +17,8 @@ type AiOpts = {
   /** When set together with `action`, usage is logged fire-and-forget to usage_events.metadata. */
   userId?: string
   action?: string
+  /** Sampling temperature. Retries after a validation failure pass 0. */
+  temperature?: number
 }
 
 function flattenContent(content: string | ContentBlock[]): string {
@@ -55,11 +57,32 @@ function getAdminClient() {
 }
 
 // Fire-and-forget — a logging failure must never fail the AI call that triggered it.
-function logUsage(opts: AiOpts | undefined, model: string, usage: { input_tokens: number; output_tokens: number; duration_ms: number }) {
+type UsageNumbers = {
+  input_tokens: number
+  output_tokens: number
+  duration_ms: number
+  cache_read_input_tokens?: number | null
+  cache_creation_input_tokens?: number | null
+}
+
+function logUsage(opts: AiOpts | undefined, model: string, usage: UsageNumbers) {
   if (!opts?.userId || !opts?.action) return
   getAdminClient()
     .from('usage_events')
-    .insert({ user_id: opts.userId, action: opts.action, metadata: { model, input_tokens: usage.input_tokens, output_tokens: usage.output_tokens, duration_ms: usage.duration_ms } })
+    .insert({
+      user_id: opts.userId,
+      action: opts.action,
+      metadata: {
+        model,
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        // Cached prompt prefixes don't count in input_tokens; log them so totals are honest.
+        cache_read_input_tokens: usage.cache_read_input_tokens ?? 0,
+        cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
+        duration_ms: usage.duration_ms,
+        ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+      },
+    })
     .then(({ error }) => { if (error) console.error('[ai] usage log failed:', error) })
 }
 
@@ -92,6 +115,7 @@ export async function aiComplete(messages: Message[], maxTokens = 4096, opts?: A
           model,
           messages: messages.map(m => ({ role: m.role, content: flattenContent(m.content) })),
           max_tokens: maxTokens,
+          ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
         },
         { signal: controller.signal }
       )
@@ -114,6 +138,7 @@ export async function aiComplete(messages: Message[], maxTokens = 4096, opts?: A
   const res = await client.messages.create({
     model,
     max_tokens: maxTokens,
+    ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
     messages: messages.filter(m => m.role !== 'system').map(m => ({
       role: m.role as 'user' | 'assistant',
       content: typeof m.content === 'string'
@@ -133,7 +158,7 @@ export async function aiComplete(messages: Message[], maxTokens = 4096, opts?: A
   const textBlock = res.content.find((b): b is Anthropic.TextBlock => b.type === 'text')
   if (!textBlock) throw new Error('AI response contained no text block')
 
-  logUsage(opts, model, { input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens, duration_ms: durationMs })
+  logUsage(opts, model, { ...res.usage, duration_ms: durationMs })
   return textBlock.text
 }
 
@@ -165,6 +190,7 @@ export async function aiCompleteJson<T>(
   const res = await client.messages.create({
     model,
     max_tokens: maxTokens,
+    ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
     tools: [{ name: toolName, description: 'Emit the structured result for this request.', input_schema: schema as Anthropic.Tool.InputSchema }],
     tool_choice: { type: 'tool', name: toolName },
     messages: messages.filter(m => m.role !== 'system').map(m => ({
@@ -188,7 +214,7 @@ export async function aiCompleteJson<T>(
     throw new Error(`AI structured output was cut off at max_tokens (${maxTokens})`)
   }
 
-  logUsage(opts, model, { input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens, duration_ms: durationMs })
+  logUsage(opts, model, { ...res.usage, duration_ms: durationMs })
   return toolUse.input as T
 }
 
@@ -211,6 +237,7 @@ export async function* aiStream(messages: Message[], maxTokens = 1024, opts?: Ai
   const stream = client.messages.stream({
     model,
     max_tokens: maxTokens,
+    ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
     messages: messages.filter(m => m.role !== 'system').map(m => ({
       role: m.role as 'user' | 'assistant',
       content: typeof m.content === 'string'
@@ -227,5 +254,5 @@ export async function* aiStream(messages: Message[], maxTokens = 1024, opts?: Ai
     if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') yield event.delta.text
   }
   const final = await stream.finalMessage()
-  logUsage(opts, model, { input_tokens: final.usage.input_tokens, output_tokens: final.usage.output_tokens, duration_ms: Date.now() - startedAt })
+  logUsage(opts, model, { ...final.usage, duration_ms: Date.now() - startedAt })
 }

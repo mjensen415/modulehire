@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
 import { DIMENSIONS, sanitizeCriteria } from '@/lib/dimensions'
-import { FLUFF_PROMPT, DEGREE_PROMPT, FLUFF_SCHEMA_PROP, DEGREE_SCHEMA_PROP, CRITERIA_REPETITION_PROMPT, CRITERIA_REPETITION_SCHEMA_PROPS, sanitizeFluff, sanitizeDegree, applyMentionWeightRule } from '@/lib/jd-signal'
+import { FLUFF_PROMPT, DEGREE_PROMPT, FLUFF_SCHEMA_PROP, DEGREE_SCHEMA_PROP, CRITERIA_REPETITION_PROMPT, CRITERIA_REPETITION_SCHEMA_PROPS, CRITERIA_WORKED_EXAMPLE, sanitizeFluff, sanitizeDegree, applyMentionWeightRule } from '@/lib/jd-signal'
 import { createHash } from 'crypto'
 
 export const maxDuration = 120
@@ -65,7 +65,9 @@ skill, domain, collaboration) based on what this specific JD actually emphasizes
 criterion for a dimension the JD barely touches. weight 5 = clearly a must-have, stated repeatedly
 or up front; weight 1 = nice-to-have. Order the array by weight descending.
 
-${CRITERIA_REPETITION_PROMPT}`
+${CRITERIA_REPETITION_PROMPT}
+
+${CRITERIA_WORKED_EXAMPLE}`
 
 const CRITERIA_SCHEMA = {
   type: 'object',
@@ -235,17 +237,19 @@ export async function POST(req: Request) {
           controller.enqueue(ndjsonLine({ type: 'error', stage: 'basics' }))
         })
 
-      const criteriaPromise = aiCompleteJson<{ extracted_criteria: unknown }>(
+      const extractCriteria = (temperature?: number) => aiCompleteJson<{ extracted_criteria: unknown }>(
         [
           { role: 'system', content: SYSTEM_PROMPT_CRITERIA },
           { role: 'user', content: `Job Description:\n${raw_text}` },
         ],
         CRITERIA_SCHEMA,
-        2400,
-        { tier: 'quality', userId: user!.id, action: 'analyze_jd' }
-      )
-        .then(async (raw) => {
-          const criteria = applyMentionWeightRule(sanitizeCriteria(raw.extracted_criteria))
+        1600,
+        { tier: 'quality', userId: user!.id, action: 'analyze_jd', ...(temperature !== undefined ? { temperature } : {}) }
+      ).then(raw => applyMentionWeightRule(sanitizeCriteria(raw.extracted_criteria)))
+      // Fewer than 3 usable criteria is a bad extraction: retry once at temperature 0, keep the better.
+      const criteriaPromise = extractCriteria()
+        .then(async first => (first.length >= 3 ? first : extractCriteria(0).then(second => (second.length > first.length ? second : first)).catch(() => first)))
+        .then(async (criteria) => {
           await supabase.from('job_descriptions').update({ extracted_criteria: criteria }).eq('id', jdRow.id)
           controller.enqueue(ndjsonLine({ type: 'criteria', extracted_criteria: criteria }))
         })

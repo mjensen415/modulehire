@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { aiCompleteJson, resolveModel } from '@/lib/ai'
 import { requireAdmin } from '@/lib/admin-guard'
 import { DIMENSIONS, sanitizeCriteria } from '@/lib/dimensions'
-import { FLUFF_PROMPT, DEGREE_PROMPT, FLUFF_SCHEMA_PROP, DEGREE_SCHEMA_PROP, CRITERIA_REPETITION_PROMPT, CRITERIA_REPETITION_SCHEMA_PROPS, sanitizeFluff, sanitizeDegree, applyMentionWeightRule } from '@/lib/jd-signal'
+import { FLUFF_PROMPT, DEGREE_PROMPT, FLUFF_SCHEMA_PROP, DEGREE_SCHEMA_PROP, CRITERIA_REPETITION_PROMPT, CRITERIA_REPETITION_SCHEMA_PROPS, CRITERIA_WORKED_EXAMPLE, sanitizeFluff, sanitizeDegree, applyMentionWeightRule } from '@/lib/jd-signal'
 
 export const maxDuration = 120
 
@@ -50,7 +50,9 @@ the other four dimensions based on what this specific JD actually emphasizes —
 criterion for a dimension the JD barely touches. weight 5 = clearly a must-have, stated repeatedly
 or up front; weight 1 = nice-to-have. Order the array by weight descending.
 
-${CRITERIA_REPETITION_PROMPT}`
+${CRITERIA_REPETITION_PROMPT}
+
+${CRITERIA_WORKED_EXAMPLE}`
 
 const BASICS_SCHEMA = {
   type: 'object',
