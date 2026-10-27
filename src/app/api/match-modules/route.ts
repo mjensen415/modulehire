@@ -4,13 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
-import { getActiveProfileId } from '@/lib/profile'
-import { getUserPreferences, buildPreferenceContext } from '@/lib/preferences'
-import { shortlistScores } from '@/lib/shortlist'
+import { finishMatch, loadMatchInputs, localShortlist, MatchError, rescoreShortlist, topOf, withPrior, type MatchInputs, type MatchModule, type RankedModule } from '@/lib/match'
 
 export const maxDuration = 120
-
-type RankedModule = { module_id: string; match_score: number; include_reason: string }
 
 const RANK_ITEM_SCHEMA = {
   type: 'object',
@@ -33,26 +29,6 @@ const PASS1_SCHEMA = {
 // Pass 1 scores the library in parallel batches. One call over a large library (150+ modules)
 // ran past the output limit, the structured result came back empty, and the route crashed.
 const PASS1_BATCH_SIZE = 40
-
-// Pass 2 returns scores only. Writing an 8-word reason per module cost ~15s of output on
-// Haiku and the v2 flow never shows reasons.
-const PASS2_SCHEMA = {
-  type: 'object',
-  properties: {
-    ranked_modules: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          module_id: { type: 'string', description: 'Exact id from the module list above' },
-          match_score: { type: 'number', description: '0-100' },
-        },
-        required: ['module_id', 'match_score'],
-      },
-    },
-  },
-  required: ['ranked_modules'],
-}
 
 export async function POST(req: Request) {
   try {
@@ -89,131 +65,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid jd_id' }, { status: 400 })
     }
 
-    // Scope JD lookup to this user — RLS should also enforce this, but be explicit
-    const { data: jd, error: jdError } = await supabase
-      .from('job_descriptions')
-      .select('*')
-      .eq('id', jd_id)
-      .eq('user_id', user.id)
-      .single()
-    if (jdError || !jd) return NextResponse.json({ error: 'Job description not found' }, { status: 404 })
-
-    const profileId = await getActiveProfileId(supabase, user.id)
-    const { data: modules, error: modError } = await supabase
-      .from('modules')
-      .select('id, title, themes, weight, pinned, type, content, source_company, source_role_title, date_start, date_end, dimensions')
-      .eq('user_id', user.id)
-      .eq('profile_id', profileId)
-      .is('deleted_at', null)
-    if (modError) throw modError
-    if (!modules || modules.length === 0) {
-      return NextResponse.json(
-        { error: 'Your module library is empty for this profile. Upload a resume or switch profiles, then try matching again.' },
-        { status: 400 }
-      )
+    let inputs: MatchInputs
+    try {
+      inputs = await loadMatchInputs(supabase, user.id, jd_id)
+    } catch (e) {
+      if (e instanceof MatchError) return NextResponse.json({ error: e.message }, { status: e.status })
+      throw e
     }
-
-    const prefs = await getUserPreferences(supabase, user.id)
-    const prefContext = buildPreferenceContext(prefs)
-
-    // If a Match Report already scored this JD against this profile, surface its per-criterion
-    // scores so ranking agrees with the report instead of re-deriving an independent judgment.
-    type StoredReport = { criteria: Array<{ label: string; weight: number; score: number; evidence: Array<{ id: string; title: string }> }> }
-    const storedReport = jd.match_report_profile_id === profileId ? (jd.match_report as StoredReport | null) : null
-    const reportContext = storedReport && storedReport.criteria?.length
-      ? `\n\nMATCH REPORT CONTEXT (this candidate was already scored against this JD's criteria — use it to calibrate, don't just copy it):\n${storedReport.criteria.map(c =>
-          `- "${c.label}" (weight ${c.weight}/5): ${c.score}% match${c.evidence?.length ? ` — strongest evidence: ${c.evidence.map(e => e.title).join(', ')}` : ''}`
-        ).join('\n')}`
-      : ''
-
-    // Dynamic suffix: everything specific to this JD/request.
-    const taskBlock = `Score every module above against the job description below.
-
-JOB DESCRIPTION:
-Company: ${jd.extracted_company}
-Role: ${jd.extracted_role_type}
-Seniority: ${jd.extracted_seniority}
-Key themes: ${(jd.extracted_themes || []).join(', ')}
-Key phrases: ${(jd.extracted_phrases || []).join(', ')}
-
-${prefContext ? prefContext + '\n\n' : ''}SCORING RULES:
-- match_score is 0-100 based on how well the module's actual relevance matches the job description themes
-- score every module honestly on fit to this specific job — do not give any module an automatic high score
-- return an entry for every module in the list${reportContext}`
+    const { jd, modules, moduleMap } = inputs
 
     // Pass 1: local term-overlap shortlist (milliseconds). The old batched AI pass 1 took
     // 25-30s on large libraries; it's kept behind ?ai_pass1=1 for Prompt Lab comparisons.
-    const useAiPass1 = new URL(req.url).searchParams.get('ai_pass1') === '1'
-    let pass1Raw: RankedModule[]
-    if (!useAiPass1) {
-      const local = shortlistScores(jd, modules)
-      pass1Raw = modules.map(m => ({ module_id: m.id, match_score: local.get(m.id) ?? 0, include_reason: '' }))
+    let pass1: RankedModule[]
+    let shortlist: MatchModule[]
+    if (new URL(req.url).searchParams.get('ai_pass1') !== '1') {
+      ({ pass1, shortlist } = localShortlist(jd, inputs))
     } else {
-    const batches: typeof modules[] = []
-    for (let i = 0; i < modules.length; i += PASS1_BATCH_SIZE) batches.push(modules.slice(i, i + PASS1_BATCH_SIZE))
-
-    const scoreBatch = async (batch: typeof modules): Promise<RankedModule[]> => {
-      const list = batch.map(m =>
-        `- id: ${m.id} | title: ${m.title} | themes: ${(m.themes || []).join(', ')} | weight: ${m.weight}`
-      ).join('\n')
-      const call = () => aiCompleteJson<{ ranked_modules?: RankedModule[] }>(
-        [
-          { role: 'system', content: 'You are a resume reviewer.' },
-          { role: 'user', content: `Here are some of the candidate's resume modules:\n\nRESUME MODULES:\n${list}\n\n${taskBlock}` },
-        ],
-        PASS1_SCHEMA,
-        4096,
-        { tier: 'fast' }
-      )
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const r = await call()
-          if (Array.isArray(r?.ranked_modules) && r.ranked_modules.length > 0) return r.ranked_modules
-        } catch (e) {
-          console.error('[match-modules] pass 1 batch failed:', e)
-        }
-      }
-      return []
-    }
-
-    const batchResults = await Promise.all(batches.map(scoreBatch))
-    const knownIds = new Set(modules.map(m => m.id))
-    pass1Raw = batchResults.flat().filter(rm => rm && knownIds.has(rm.module_id) && typeof rm.match_score === 'number')
-    if (pass1Raw.length === 0) {
-      return NextResponse.json({ error: 'We couldn\'t score your modules against this job right now. Please try again in a minute.' }, { status: 502 })
-    }
-    }
-    const result = { ranked_modules: pass1Raw }
-
-    // Weight is a minor, code-applied nudge — never an override. This is deliberately not part
-    // of the prompt: trusting the model to self-limit an "always score 100" rule is exactly what
-    // broke this before (over-tagged anchor modules auto-maxed regardless of JD fit).
-    const WEIGHT_PRIOR: Record<string, number> = { anchor: 8, strong: 3, supporting: 0 }
-    const moduleMap = new Map(modules.map(m => [m.id, m]))
-
-    const pass1Ranked = result.ranked_modules.map(rm => {
-      const m = moduleMap.get(rm.module_id)
-      const prior = m ? (WEIGHT_PRIOR[m.weight] ?? 0) : 0
-      return { ...rm, match_score: Math.min(100, Math.round(rm.match_score) + prior) }
-    })
-
-    // Pass 2: pass 1 only ever saw title/themes/weight — it can't tell a strong module from a
-    // vague one with a good title. Re-score the top of the list with full content, so the score
-    // that actually decides recommended_stack reflects what the module says, not just its label.
-    const PASS2_SHORTLIST_SIZE = 20
-    const shortlist = [...pass1Ranked]
-      .sort((a, b) => b.match_score - a.match_score)
-      .slice(0, PASS2_SHORTLIST_SIZE)
-      .map(rm => moduleMap.get(rm.module_id))
-      .filter((m): m is NonNullable<typeof m> => m !== undefined)
-
-    let adjustedRanked = pass1Ranked
-    if (shortlist.length > 0) {
-      const shortlistBlock = shortlist.map(m =>
-        `- id: ${m.id} | title: ${m.title} | themes: ${(m.themes || []).join(', ')} | weight: ${m.weight}\n  content: ${String(m.content ?? '').slice(0, 900)}`
-      ).join('\n')
-
-      const pass2Prompt = `Re-score these shortlisted resume modules against the job description below, now that you can see their full content — not just title and themes.
+      const taskBlock = `Score every module above against the job description below.
 
 JOB DESCRIPTION:
 Company: ${jd.extracted_company}
@@ -222,83 +90,47 @@ Seniority: ${jd.extracted_seniority}
 Key themes: ${(jd.extracted_themes || []).join(', ')}
 Key phrases: ${(jd.extracted_phrases || []).join(', ')}
 
-SHORTLISTED MODULES:
-${shortlistBlock}
+${inputs.prefContext ? inputs.prefContext + '\n\n' : ''}SCORING RULES:
+- match_score is 0-100 based on how well the module's actual relevance matches the job description themes
+- score every module honestly on fit to this specific job — do not give any module an automatic high score
+- return an entry for every module in the list${inputs.reportContext}`
 
-${prefContext ? prefContext + '\n\n' : ''}SCORING RULES:
-- match_score is 0-100 based on how well the module's actual content matches the job description — a good title with weak or unrelated content should score lower than pass 1 suggested
-- score every module honestly on fit to this specific job — do not give any module an automatic high score${reportContext}`
-
-      try {
-        const pass2Result = await aiCompleteJson<{ ranked_modules: RankedModule[] }>(
-          [
-            { role: 'system', content: 'You are a resume reviewer.' },
-            { role: 'user', content: pass2Prompt },
-          ],
-          PASS2_SCHEMA,
-          900,
-          { tier: 'quality', userId: user.id, action: 'match_job_pass2' }
-        )
-        {
-          const pass2Scores = new Map(pass2Result.ranked_modules.map(rm => {
-            const m = moduleMap.get(rm.module_id)
-            const prior = m ? (WEIGHT_PRIOR[m.weight] ?? 0) : 0
-            return [rm.module_id, { match_score: Math.min(100, Math.round(rm.match_score) + prior), include_reason: rm.include_reason }]
-          }))
-          // Pass 2 refines the shortlist; everything else keeps its pass-1 score.
-          // Modules outside the shortlist only have a rough local score; keep them below the
-          // AI-verified ones so the recommended stack is always drawn from the re-scored list.
-          adjustedRanked = pass1Ranked.map(rm => pass2Scores.get(rm.module_id)
-            ? { ...rm, ...pass2Scores.get(rm.module_id), include_reason: rm.include_reason ?? '' }
-            : { ...rm, match_score: Math.min(rm.match_score, 35) })
+      const batches: MatchModule[][] = []
+      for (let i = 0; i < modules.length; i += PASS1_BATCH_SIZE) batches.push(modules.slice(i, i + PASS1_BATCH_SIZE))
+      const scoreBatch = async (batch: MatchModule[]): Promise<RankedModule[]> => {
+        const list = batch.map(m =>
+          `- id: ${m.id} | title: ${m.title} | themes: ${(m.themes || []).join(', ')} | weight: ${m.weight}`
+        ).join('\n')
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const r = await aiCompleteJson<{ ranked_modules?: RankedModule[] }>(
+              [
+                { role: 'system', content: 'You are a resume reviewer.' },
+                { role: 'user', content: `Here are some of the candidate's resume modules:\n\nRESUME MODULES:\n${list}\n\n${taskBlock}` },
+              ],
+              PASS1_SCHEMA,
+              4096,
+              { tier: 'fast' }
+            )
+            if (Array.isArray(r?.ranked_modules) && r.ranked_modules.length > 0) return r.ranked_modules
+          } catch (e) {
+            console.error('[match-modules] pass 1 batch failed:', e)
+          }
         }
-      } catch (pass2Error) {
-        // Pass 2 is a refinement, not a requirement — fall back to pass 1 scores rather than
-        // failing the whole match if the second call errors.
-        console.error('[match-modules] pass 2 failed, using pass 1 scores:', pass2Error)
+        return []
       }
+      const knownIds = new Set(modules.map(m => m.id))
+      const raw = (await Promise.all(batches.map(scoreBatch))).flat()
+        .filter(rm => rm && knownIds.has(rm.module_id) && typeof rm.match_score === 'number')
+      if (raw.length === 0) {
+        return NextResponse.json({ error: 'We couldn\'t score your modules against this job right now. Please try again in a minute.' }, { status: 502 })
+      }
+      pass1 = withPrior(raw, moduleMap)
+      shortlist = topOf(pass1, moduleMap)
     }
 
-    // Enrich with full module data
-    const enrichedModules = adjustedRanked
-      .map(rm => {
-        const m = moduleMap.get(rm.module_id)
-        if (!m) return null
-        return { ...rm, ...m, module_id: rm.module_id }
-      })
-      .filter((m): m is NonNullable<typeof m> => m !== null)
-
-    // recommended_stack: pinned modules always included (their real score still shows honestly),
-    // then fill the remaining 4-8 slots with the next highest-scoring non-pinned modules.
-    const pinnedIds = enrichedModules.filter(m => m.pinned).map(m => m.module_id)
-    const nonPinnedRanked = [...enrichedModules]
-      .filter(m => !m.pinned)
-      .sort((a, b) => b.match_score - a.match_score)
-    const targetSize = Math.max(4, Math.min(8, pinnedIds.length + 6))
-    const fillCount = Math.max(0, targetSize - pinnedIds.length)
-    const recommendedStack = [...pinnedIds, ...nonPinnedRanked.slice(0, fillCount).map(m => m.module_id)]
-
-    // Also return all modules so the UI can show unmatched ones
-    const rankedIds = new Set(result.ranked_modules.map(r => r.module_id))
-    const unmatchedModules = modules.filter(m => !rankedIds.has(m.id))
-
-    await supabase.from('usage_events').insert({ user_id: user.id, action: 'match_job' })
-
-    // Log what the matcher decided, for later validation against real usage — fire-and-forget,
-    // a logging failure must never fail the match itself.
-    const { error: logError } = await supabase.from('match_runs').insert({
-      user_id: user.id,
-      jd_id,
-      ranked_modules: enrichedModules.map(m => ({ module_id: m.module_id, match_score: m.match_score, include_reason: m.include_reason })),
-      recommended_stack: recommendedStack,
-    })
-    if (logError) console.error('[match-modules] match_runs insert failed:', logError)
-
-    return NextResponse.json({
-      ranked_modules: enrichedModules,
-      recommended_stack: recommendedStack,
-      unmatched_modules: unmatchedModules,
-    })
+    const ranked = await rescoreShortlist(jd, inputs, pass1, shortlist, user.id)
+    return NextResponse.json(await finishMatch(supabase, user.id, inputs, ranked))
   } catch (error) {
     console.error(error)
     return NextResponse.json({ error: 'Request failed' }, { status: 500 })
