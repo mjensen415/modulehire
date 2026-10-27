@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { uploadLimit, isProTier } from '@/lib/plan'
+import { extractResumeText, isUnreadable, UNREADABLE_TEXT_MESSAGE } from '@/lib/resume-text'
 
 export const maxDuration = 60
 
@@ -10,27 +11,6 @@ const ALLOWED_TYPES = new Set([
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ])
-
-async function extractText(file: File): Promise<string> {
-  if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
-    const { getDocumentProxy, extractText: unpdfExtract } = await import('unpdf')
-    const buffer = Buffer.from(await file.arrayBuffer())
-    const pdf = await getDocumentProxy(new Uint8Array(buffer))
-    const { text } = await unpdfExtract(pdf, { mergePages: true })
-    return text
-  }
-
-  const buffer = Buffer.from(await file.arrayBuffer())
-
-  if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-    return buffer.toString('utf-8')
-  }
-
-  // DOCX
-  const mammoth = await import('mammoth')
-  const result = await mammoth.extractRawText({ buffer })
-  return result.value
-}
 
 export async function POST(req: Request) {
   try {
@@ -108,9 +88,9 @@ export async function POST(req: Request) {
     }
 
     // Extract raw text
-    const rawText = await extractText(file)
-    if (!rawText.trim()) {
-      return NextResponse.json({ error: 'Could not extract text from file' }, { status: 400 })
+    const rawText = await extractResumeText(Buffer.from(await file.arrayBuffer()), file.name, file.type)
+    if (isUnreadable(rawText)) {
+      return NextResponse.json({ error: UNREADABLE_TEXT_MESSAGE, code: 'unreadable_file' }, { status: 400 })
     }
 
     // Upload original file to storage using admin client (bypasses RLS for storage)

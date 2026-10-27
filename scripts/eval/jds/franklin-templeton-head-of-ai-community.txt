@@ -1,0 +1,71 @@
+About the job
+At Franklin Templeton, we believe success is built through powerful partnerships. As a forward thinking asset manager, we build dynamic relationships with clients, understand their goals, and navigate complex markets together. We leverage cutting edge strategies and deep insights to unlock opportunities for long term wealth creation. Our talented, global teams bring expertise that is both broad and unique.
+
+From our welcoming, inclusive, and supportive culture to our globally diverse business, we offer opportunities not only to help you reach your potential, but also to contribute to our clients’ success.
+
+About The Department
+
+We are looking for a senior leader to build and grow the internal AI community and open source-style reuse ecosystem. This person will specify the platform, governance, contribution model, community rituals, and incentive structures that allow teams to share and co-leverage AI software components, agent skills, reusable patterns, sandboxes, and practical know-how. The ideal candidate combines AI and engineering fluency, developer platform product judgment, community-building excellence, and the organizational influence needed to turn sharing into a celebrated craft.
+
+How You Will Add Value
+
+Specify and build the internal open-source mechanism for AI assets, including source code control, contribution workflows, documentation standards, ownership models, quality tiers, and release practices.
+Create a searchable and trusted repository of AI software components, agent skills, prompts, workflows, reference architectures, evaluation patterns, reusable data-access patterns, and implementation examples.
+Establish a sandbox environment where practitioners can safely explore, test, adapt, and demonstrate reusable AI components before adopting them in production contexts.
+Design and operate an AI-driven intake or “inbox” that translates business needs into relevant assets, patterns, maintainers, contributors, and candidate reuse paths.
+Build and manage the community forum, communication channels, office hours, showcases, working groups, and contributor onboarding pathways.
+Kindle early adoption through targeted pilots, executive sponsorship, internal storytelling, contributor recognition, and practical demonstrations of reuse value.
+Curate and maintain the quality of contributions so the platform remains useful, navigable, current, and trusted.
+Work with leaders and HR to create incentives, recognition systems, and career signals for contribution, maintenance, mentorship, and community co-support.
+Develop a durable “society of craft” around AI by connecting practitioners across teams and making shared learning, peer review, and co-development part of the operating culture.
+Measure adoption, reuse, contributor health, asset quality, time saved, duplication avoided, and community engagement.
+
+What Will Help You Be Successful In This Role
+
+Senior experience in one or more of the following: InnerSource, open-source program leadership, developer relations, developer platform product management, AI platform strategy, engineering enablement, or technical community leadership.
+Strong understanding of software engineering workflows, source code control, contribution models, code review, documentation, release practices, and component ownership.
+Working knowledge of modern AI application patterns, including agents, reusable skills, prompt assets, evaluation patterns, retrieval, workflow automation, and production risk considerations.
+Demonstrated ability to drive adoption of a new platform, practice, or community across teams that may not initially see sharing as part of their job.
+Experience creating governance models that improve quality and trust without creating excessive bureaucracy.
+Ability to influence senior leaders, HR partners, platform teams, security/risk partners, and individual contributors.
+
+Preferred Attributes
+
+Charismatic community builder who can make contributions feel prestigious, practical, and safe.
+Strong product instincts for making reuse easy: discoverability, documentation, onboarding, trust signals, and sandboxing.
+Credibility with engineers and AI practitioners, combined with communication skills to mobilize executives and HR partners.
+Comfort operating in ambiguous cultural terrain where incentives, ownership, and local team priorities may conflict with enterprise reuse.
+Bias toward lightweight governance, visible wins, and momentum-building rituals.
+Deep belief in craft, mentorship, open collaboration, and shared technical excellence.
+
+Measures of Success
+
+Teams increasingly search for and reuse existing AI assets before building from scratch.
+The repository contains high-quality, discoverable, well-owned, and actively maintained AI components and patterns.
+The AI-driven inbox successfully maps business needs to reusable assets, maintainers, and implementation pathways.
+Community participation grows across business units, with visible contributors, maintainers, mentors, and champions.
+Leaders and HR recognize meaningful community contribution as a valued form of technical impact.
+The organization reduces duplicated AI work, accelerates delivery, and develops a stronger shared sense of AI craft.
+
+Work Schedule & Location
+
+This role will work a hybrid schedule, 3 days/week in the San Ramon or New York City office.
+
+Franklin Templeton offers employees a competitive and valuable range of total rewards – monetary and non-monetary – designed to support their well-being and recognize their time, talents, and results. Along with base compensation, employees are eligible for an annual discretionary bonus, a 401(k) plan with a generous match, and recognition rewards. We also offer a comprehensive benefits package, which includes a range of competitive healthcare options, insurance, and disability benefits, employee stock investment program, learning resources, career development programs, reimbursement for certain education expenses, paid time off (vacation / holidays / sick / leave / parental & caregiving leave / bereavement / volunteering / floating holidays) and a motivational wellbeing program. We expect the annual salary for this position to range between $208,600 – $245,500, depending on location and level of relevant experience, plus discretionary bonus.
+
+#MID_SENIOR_LEVEL
+
+At Franklin Templeton, we believe your benefits should support your life, your goals, and your future. That’s why we offer a comprehensive Total Rewards package designed to help you thrive both personally and professionally.
+
+Highlights Of Our Benefits Include
+
+ Paid Time Off: Three weeks of PTO in your first year
+ Health Coverage: Competitive medical, dental, and vision insurance to support your well-being
+ Retirement Savings: 401(k) plan with an 85% company match on pre-tax and/or Roth contributions, up to IRS limits
+ Equity & Investing: Employee Stock Investment Plan (ESIP) with discounted share purchase opportunities
+ Learning Education Assistance Program (LEAP): To support your ongoing growth and career advancement
+ Employee Investment Benefits: Opportunity to purchase company funds with no sales charge
+
+Franklin Templeton is an Equal Opportunity Employer. We are committed to providing equal employment opportunities to all applicants and employees, and we evaluate qualified applicants without regard to ancestry, age, color, disability, genetic information, gender, gender identity, or gender expression, marital status, medical condition, military or veteran status, national origin, race, religion, sex, sexual orientation, and any other basis protected by federal, state, or local law, ordinance, or regulation.
+
+Artificial intelligence or automated tools may be used to assist in the screening, assessment, or selection of applicants for this position.
