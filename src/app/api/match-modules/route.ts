@@ -6,6 +6,7 @@ import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
 import { getUserPreferences, buildPreferenceContext } from '@/lib/preferences'
+import { shortlistScores } from '@/lib/shortlist'
 
 export const maxDuration = 120
 
@@ -33,10 +34,22 @@ const PASS1_SCHEMA = {
 // ran past the output limit, the structured result came back empty, and the route crashed.
 const PASS1_BATCH_SIZE = 40
 
+// Pass 2 returns scores only. Writing an 8-word reason per module cost ~15s of output on
+// Haiku and the v2 flow never shows reasons.
 const PASS2_SCHEMA = {
   type: 'object',
   properties: {
-    ranked_modules: { type: 'array', items: RANK_ITEM_SCHEMA },
+    ranked_modules: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          module_id: { type: 'string', description: 'Exact id from the module list above' },
+          match_score: { type: 'number', description: '0-100' },
+        },
+        required: ['module_id', 'match_score'],
+      },
+    },
   },
   required: ['ranked_modules'],
 }
@@ -128,6 +141,14 @@ ${prefContext ? prefContext + '\n\n' : ''}SCORING RULES:
 - score every module honestly on fit to this specific job — do not give any module an automatic high score
 - return an entry for every module in the list${reportContext}`
 
+    // Pass 1: local term-overlap shortlist (milliseconds). The old batched AI pass 1 took
+    // 25-30s on large libraries; it's kept behind ?ai_pass1=1 for Prompt Lab comparisons.
+    const useAiPass1 = new URL(req.url).searchParams.get('ai_pass1') === '1'
+    let pass1Raw: RankedModule[]
+    if (!useAiPass1) {
+      const local = shortlistScores(jd, modules)
+      pass1Raw = modules.map(m => ({ module_id: m.id, match_score: local.get(m.id) ?? 0, include_reason: '' }))
+    } else {
     const batches: typeof modules[] = []
     for (let i = 0; i < modules.length; i += PASS1_BATCH_SIZE) batches.push(modules.slice(i, i + PASS1_BATCH_SIZE))
 
@@ -157,9 +178,10 @@ ${prefContext ? prefContext + '\n\n' : ''}SCORING RULES:
 
     const batchResults = await Promise.all(batches.map(scoreBatch))
     const knownIds = new Set(modules.map(m => m.id))
-    const pass1Raw = batchResults.flat().filter(rm => rm && knownIds.has(rm.module_id) && typeof rm.match_score === 'number')
+    pass1Raw = batchResults.flat().filter(rm => rm && knownIds.has(rm.module_id) && typeof rm.match_score === 'number')
     if (pass1Raw.length === 0) {
       return NextResponse.json({ error: 'We couldn\'t score your modules against this job right now. Please try again in a minute.' }, { status: 502 })
+    }
     }
     const result = { ranked_modules: pass1Raw }
 
@@ -178,7 +200,7 @@ ${prefContext ? prefContext + '\n\n' : ''}SCORING RULES:
     // Pass 2: pass 1 only ever saw title/themes/weight — it can't tell a strong module from a
     // vague one with a good title. Re-score the top of the list with full content, so the score
     // that actually decides recommended_stack reflects what the module says, not just its label.
-    const PASS2_SHORTLIST_SIZE = 24
+    const PASS2_SHORTLIST_SIZE = 20
     const shortlist = [...pass1Ranked]
       .sort((a, b) => b.match_score - a.match_score)
       .slice(0, PASS2_SHORTLIST_SIZE)
@@ -188,7 +210,7 @@ ${prefContext ? prefContext + '\n\n' : ''}SCORING RULES:
     let adjustedRanked = pass1Ranked
     if (shortlist.length > 0) {
       const shortlistBlock = shortlist.map(m =>
-        `- id: ${m.id} | title: ${m.title} | themes: ${(m.themes || []).join(', ')} | weight: ${m.weight}\n  content: ${String(m.content ?? '').slice(0, 1500)}`
+        `- id: ${m.id} | title: ${m.title} | themes: ${(m.themes || []).join(', ')} | weight: ${m.weight}\n  content: ${String(m.content ?? '').slice(0, 900)}`
       ).join('\n')
 
       const pass2Prompt = `Re-score these shortlisted resume modules against the job description below, now that you can see their full content — not just title and themes.
@@ -214,7 +236,7 @@ ${prefContext ? prefContext + '\n\n' : ''}SCORING RULES:
             { role: 'user', content: pass2Prompt },
           ],
           PASS2_SCHEMA,
-          2048,
+          900,
           { tier: 'quality', userId: user.id, action: 'match_job_pass2' }
         )
         {
@@ -224,7 +246,11 @@ ${prefContext ? prefContext + '\n\n' : ''}SCORING RULES:
             return [rm.module_id, { match_score: Math.min(100, Math.round(rm.match_score) + prior), include_reason: rm.include_reason }]
           }))
           // Pass 2 refines the shortlist; everything else keeps its pass-1 score.
-          adjustedRanked = pass1Ranked.map(rm => pass2Scores.get(rm.module_id) ? { ...rm, ...pass2Scores.get(rm.module_id) } : rm)
+          // Modules outside the shortlist only have a rough local score; keep them below the
+          // AI-verified ones so the recommended stack is always drawn from the re-scored list.
+          adjustedRanked = pass1Ranked.map(rm => pass2Scores.get(rm.module_id)
+            ? { ...rm, ...pass2Scores.get(rm.module_id), include_reason: rm.include_reason ?? '' }
+            : { ...rm, match_score: Math.min(rm.match_score, 35) })
         }
       } catch (pass2Error) {
         // Pass 2 is a refinement, not a requirement — fall back to pass 1 scores rather than

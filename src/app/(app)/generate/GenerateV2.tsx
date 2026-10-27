@@ -14,9 +14,36 @@ const STAGES: { key: Stage; label: string }[] = [
   { key: 'document', label: 'Writing your resume' },
 ]
 
+// Light status lines that rotate under the real stages while the draft builds. No time
+// promises anywhere on this screen: big libraries take longer, and that's fine.
+const STATUS_LINES = [
+  'Ironing your bullet points',
+  'Translating "synergy" into English',
+  'Finding a verb that isn\'t "leveraged"',
+  'Removing the word "passionate"',
+  'Skipping "fast-paced environment"',
+  'Putting the good stuff up top',
+  'Lining up your jobs, newest first',
+  'Checking every number against your library',
+  'Not making anything up',
+  'Asking your modules who wants to go first',
+  'Counting your wins (all of them)',
+  'Teaching the robot what a QBR is',
+  'Trimming to one page, gently',
+  'Reading the posting so you don\'t have to',
+  'Matching what you did to what they asked for',
+  'Bolding nothing, on purpose',
+]
+
+function shuffled<T>(arr: T[]): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]] }
+  return a
+}
+
 const looksLikeUrl = (text: string) => /^https?:\/\/\S+$/i.test(text.trim())
 
-// v2: paste a posting → Building (~20s) → the resume, open for editing on /resumes/[id].
+// v2: paste a posting → Building → the resume, open for editing on /resumes/[id].
 // No wizard: modules are picked for you, and everything the old Match step did lives in the
 // editor's rail. /generate?classic=1 still serves the old flow for one release.
 export default function GenerateV2({ initialJdId }: { initialJdId: string | null }) {
@@ -31,7 +58,19 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
   const [titleInput, setTitleInput] = useState('')
   const [companyInput, setCompanyInput] = useState('')
   const [elapsed, setElapsed] = useState(0)
+  const [lineOrder, setLineOrder] = useState<string[]>(STATUS_LINES)
+  const [lineIdx, setLineIdx] = useState(0)
   const startedRef = useRef(false)
+
+  // Rotate the status line while building (slower and without the fade for reduced motion).
+  useEffect(() => {
+    if (phase !== 'building') return
+    setLineOrder(shuffled(STATUS_LINES))
+    setLineIdx(0)
+    const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const t = setInterval(() => setLineIdx(i => i + 1), reduced ? 5000 : 3200)
+    return () => clearInterval(t)
+  }, [phase])
 
   // Seconds since Building started — shown as plain elapsed time, never as fake progress.
   useEffect(() => {
@@ -158,7 +197,7 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
               Make my resume
             </button>
             <span style={{ fontSize: 12, color: 'var(--text3)' }}>
-              {text.trim() && !canSubmit ? 'Paste a bit more of the posting' : 'About 20 seconds'}
+              {text.trim() && !canSubmit ? 'Paste a bit more of the posting' : 'Usually under a minute'}
             </span>
           </div>
         </>
@@ -191,7 +230,13 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
           <div className="gv2-bar" aria-hidden>
             <div style={{ transform: `scaleX(${done.size / STAGES.length})` }} />
           </div>
-          <div className="gv2-elapsed">{elapsed}s · usually about 20 seconds</div>
+          <div className="gv2-status" key={elapsed >= 75 ? 'late2' : elapsed >= 40 ? 'late1' : lineIdx}>
+            {elapsed >= 75
+              ? 'Almost there. Thanks for hanging in.'
+              : elapsed >= 40
+                ? 'Big libraries take a little longer. Still going.'
+                : lineOrder[lineIdx % lineOrder.length]}
+          </div>
         </div>
       )}
 
@@ -255,7 +300,9 @@ const GEN_CSS = `
 .gv2-note { font-size: 12px; color: var(--text3); font-weight: 400; }
 .gv2-bar { height: 3px; background: var(--bg3); border-radius: 999px; overflow: hidden; }
 .gv2-bar div { height: 100%; width: 100%; background: var(--teal); border-radius: 999px; transform-origin: left center; transition: transform 0.4s ease; }
-.gv2-elapsed { font-size: 12px; color: var(--text3); margin-top: 10px; font-variant-numeric: tabular-nums; }
+.gv2-status { font-size: 13px; color: var(--text3); margin-top: 12px; min-height: 18px; animation: gv2-fade .45s ease; }
+@keyframes gv2-fade { from { opacity: 0; transform: translateY(3px) } to { opacity: 1; transform: none } }
+@media (prefers-reduced-motion: reduce) { .gv2-status { animation: none } }
 .gv2-card { background: var(--surface); border: 1px solid var(--border2); border-radius: 12px; padding: 22px 24px; }
 @keyframes gv2-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(29,158,117,0.35); } 50% { box-shadow: 0 0 0 5px rgba(29,158,117,0); } }
 @media (prefers-reduced-motion: reduce) { .gv2-stage.current .gv2-dot { animation: none; } }
