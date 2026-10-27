@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
+import { isInternalCall } from '@/lib/internal-call'
 import { getActiveProfileId } from '@/lib/profile'
 import { compareResumeRanges, formatResumeRange, normalizeCompany } from '@/lib/resume-dates'
 import { jobResolver, type JobRow } from '@/lib/job-grouping'
@@ -46,7 +47,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const limit = await checkAndLog(supabase, user.id, 'rl_generate_resume', 20, 3600)
+    // Doc-only mode (POST /api/resume-docs/from-generated): build the editable document for an
+    // existing resume. Honored only for this server's own in-process calls — it skips the
+    // generation limits because it isn't a new resume.
+    const docOnlyHeader = req.headers.get('x-doc-only-for')
+    const docOnlyFor = isInternalCall(req) && isUuid(docOnlyHeader) ? docOnlyHeader : null
+
+    const limit = docOnlyFor ? { ok: true as const } : await checkAndLog(supabase, user.id, 'rl_generate_resume', 20, 3600)
     if (!limit.ok) {
       return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } })
     }
@@ -88,7 +95,7 @@ export async function POST(req: Request) {
     void usageRow
 
     // Free-tier monthly generation cap (Pro / beta_pro: unlimited).
-    if (!isProTier(tier)) {
+    if (!isProTier(tier) && !docOnlyFor) {
       const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString()
       const { count: monthlyCount } = await supabase
         .from('generated_resumes')
@@ -380,7 +387,7 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
     // final doc is still built from the complete response.
     let emit: (obj: Record<string, unknown>) => void = () => {}
     const writeResume = async (prompt: string, arrayKey: string): Promise<string> => {
-      const opts = { tier: 'quality' as const, action: 'ai_generate_resume', userId: user.id }
+      const opts = { tier: 'quality' as const, action: docOnlyFor ? 'ai_doc_from_legacy' : 'ai_generate_resume', userId: user.id }
       if (!stream) return aiComplete([{ role: 'user', content: prompt }], 4096, opts)
       const read = createResumeStreamReader(arrayKey)
       let text = ''
@@ -547,6 +554,20 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
           format: format as Exclude<ResumeFormat, 'combination'>,
           bullet_style,
         }
+      }
+
+      // Doc-only: the same document, attached to the existing resume — no new files, no new
+      // resume row, nothing counted against limits.
+      if (docOnlyFor) {
+        const { data: docRow, error: docError } = await supabase
+          .from('resume_documents')
+          .insert({ user_id: user.id, job_description_id: jd_id, generated_resume_id: docOnlyFor, doc: resumeDoc })
+          .select('id')
+          .single()
+        if (docError) throw docError
+        // Fill the old row's fact-check log only if it never had one.
+        await supabase.from('generated_resumes').update({ generation_flags: generationFlags }).eq('id', docOnlyFor).is('generation_flags', null)
+        return { resume_id: docOnlyFor, resume_doc_id: docRow.id as string }
       }
 
       const rendered = await renderResume(docToRenderInput(resumeDoc))

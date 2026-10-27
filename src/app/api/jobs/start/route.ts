@@ -5,8 +5,8 @@ import { checkAndLog } from '@/lib/rate-limit'
 import { sanitizeCriteria, type JdCriterion } from '@/lib/dimensions'
 import { autoPickModules, jobResolver, AUTO_PICK, type JobRow, type RankedForPick } from '@/lib/job-grouping'
 import { finishMatch, loadMatchInputs, localShortlist, MatchError, rescoreShortlist } from '@/lib/match'
-import { jobLevelForSeniority, pickPositioningVariant } from '@/lib/resume-options'
-import type { UserPreferences } from '@/lib/preferences'
+import { draftGenerateBody } from '@/lib/draft-request'
+import { internalRequest } from '@/lib/internal-call'
 import { POST as analyzeJd } from '@/app/api/analyze-jd/route'
 import { POST as fetchJdUrl } from '@/app/api/fetch-jd-url/route'
 import { GET as latestMatchRun } from '@/app/api/match-runs/route'
@@ -30,16 +30,6 @@ type Ranked = RankedForPick & { title?: string }
 // the shortlist; when they're slower than this, pass 2 runs on the basics-only shortlist and
 // is never restarted.
 const CRITERIA_GRACE_MS = 4500
-
-// The handlers below are this app's own routes, called in-process: same request, same auth
-// cookies (next/headers reads them from the current request), no HTTP hop.
-function internalRequest(base: string, path: string, body?: unknown, method = 'POST'): Request {
-  return new Request(new URL(path, base), {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  })
-}
 
 async function* ndjson(res: Response): AsyncGenerator<Record<string, unknown>> {
   if (!res.body) return
@@ -251,51 +241,13 @@ export async function POST(req: Request) {
         // ── 3. Write the draft (streamed) ───────────────────────────────────
         stage = 'document'
         const documentStarted = Date.now()
-        const [{ data: profile }, { data: education }, { data: prefsRow }] = await Promise.all([
-          supabase.from('users').select('name, email, phone, linkedin_url, location, summary').eq('id', user.id).single(),
-          supabase.from('education').select('school, degree, field, year').eq('user_id', user.id).order('sort_order'),
-          supabase.from('users').select('preferences').eq('id', user.id).single(),
-        ])
-        const defaults = (prefsRow?.preferences as UserPreferences | null)?.resume_defaults ?? {}
-        const skills = ranked
-          .filter(m => m.type === 'skill' && m.match_score >= 70)
-          .map(m => String(m.title ?? '').trim())
-          .filter(Boolean)
-        const educationRows = (education ?? []).filter(e => e.school || e.degree)
-        const includeSummary = defaults.include_summary ?? true
-        const includeSkills = (defaults.include_skills ?? true) && skills.length > 0
-        const includeEducation = (defaults.include_education ?? true) && educationRows.length > 0
-
-        const genRes = await generateResume(internalRequest(base, '/api/generate-resume', {
-          stream: true,
-          module_ids: picked,
-          module_order: picked,
-          jd_id: basics.jd_id,
-          positioning_variant: pickPositioningVariant(basics),
-          contact: {
-            name: profile?.name || user.email || '',
-            email: profile?.email || user.email || '',
-            phone: profile?.phone ?? '',
-            linkedin: profile?.linkedin_url ?? '',
-            location: profile?.location ?? '',
-          },
-          // Their own saved summary, verbatim, when they have one.
-          summary_override: includeSummary && profile?.summary ? profile.summary : undefined,
-          education: includeEducation ? educationRows : [],
-          skills: includeSkills ? skills : [],
-          awards_text: '',
-          include_skills_section: includeSkills,
-          include_education_section: includeEducation,
-          include_awards_section: false,
-          include_summary: includeSummary,
-          cover_letter: { include: !!defaults.include_cover_letter, tone: defaults.cover_letter_tone ?? 'professional' },
-          job_level: jobLevelForSeniority(basics.extracted_seniority),
-          format: defaults.format ?? 'classic',
-          bullet_style: defaults.bullet_style ?? '•',
-          confirmed_phrases: basics.extracted_phrases,
-          confirmed_themes: basics.extracted_themes,
-          bullets_per_role: { recent: AUTO_PICK.bulletsRecent, older: AUTO_PICK.bulletsOlder },
-        }))
+        // The handlers are this app's own routes, called in-process: same request, same auth
+        // cookies (next/headers reads them from the current request), no HTTP hop.
+        const skillTitles = ranked.filter(m => m.type === 'skill' && m.match_score >= 70).map(m => String(m.title ?? ''))
+        const genRes = await generateResume(internalRequest(base, '/api/generate-resume', await draftGenerateBody(
+          supabase, user, basics, picked, skillTitles,
+          { stream: true, bullets_per_role: { recent: AUTO_PICK.bulletsRecent, older: AUTO_PICK.bulletsOlder } },
+        )))
         if (!genRes.ok) {
           const gen = await genRes.json().catch(() => ({}))
           fail(gen.error ?? 'We couldn\'t write the draft. Try again.', gen.code)

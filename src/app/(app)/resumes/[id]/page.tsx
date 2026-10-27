@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import ScoreGauge from '@/components/ScoreGauge'
 import { OutreachButton } from '@/components/OutreachSheet'
 import UnsupportedPhrases from '@/components/UnsupportedPhrases'
+import MakeEditableCard from '@/components/MakeEditableCard'
 import ResumeEditor, { type EditorModule, type EditorJd } from '@/components/resume-editor/ResumeEditor'
 import { parseResumeDoc } from '@/lib/resume-doc'
 import { sanitizeCriteria } from '@/lib/dimensions'
@@ -154,6 +155,9 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
               </div>
             </>
           ) : (<>
+          {resume.job_description_id && Array.isArray(resume.module_ids_used) && resume.module_ids_used.length > 0 && (
+            <MakeEditableCard resumeId={resume.id} />
+          )}
           {filesMissing ? (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '32px 24px', textAlign: 'center' }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>This file is no longer available</div>
