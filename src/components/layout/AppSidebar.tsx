@@ -406,6 +406,12 @@ export default function AppSidebar({ footer, tier, isAdmin, activeProfileName, a
             JD Pipeline
           </Link>
         )}
+        {isAdmin && (
+          <Link href="/admin/library-health" className={`nav-item${pathname.startsWith('/admin/library-health') ? ' active' : ''}`}>
+            <span className="nav-item-icon"><IconFunnel /></span>
+            Library health
+          </Link>
+        )}
         <Link href="/support" className={`nav-item${pathname.startsWith('/support') ? ' active' : ''}`}>
           <span className="nav-item-icon">?</span>
           Support
