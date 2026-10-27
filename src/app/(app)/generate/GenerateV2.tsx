@@ -5,7 +5,12 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 type Stage = 'basics' | 'criteria' | 'match' | 'document'
-type Phase = 'paste' | 'building' | 'needTitle' | 'error'
+type Phase = 'paste' | 'building' | 'needTitle' | 'error' | 'timeout'
+type DraftJob = { company: string; title: string; dates: string; bullets: string[] }
+
+// After this long the run is treated as stuck: stop waiting and offer a retry that reuses the
+// analyzed posting (jd_id), so it skips the analysis.
+const TIMEOUT_S = 120
 
 const STAGES: { key: Stage; label: string }[] = [
   { key: 'basics', label: 'Reading the posting' },
@@ -60,7 +65,11 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
   const [elapsed, setElapsed] = useState(0)
   const [lineOrder, setLineOrder] = useState<string[]>(STATUS_LINES)
   const [lineIdx, setLineIdx] = useState(0)
+  // The resume as it's written (streamed sections), shown under the stages.
+  const [draft, setDraft] = useState<{ summary: string | null; jobs: DraftJob[] }>({ summary: null, jobs: [] })
   const startedRef = useRef(false)
+  const abortRef = useRef<AbortController | null>(null)
+  const lastBodyRef = useRef<{ raw_text?: string; url?: string; jd_id?: string } | null>(null)
 
   // Rotate the status line while building (slower and without the fade for reduced motion).
   useEffect(() => {
@@ -76,11 +85,25 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
   useEffect(() => {
     if (phase !== 'building') return
     const started = Date.now()
-    const t = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000)
+    const t = setInterval(() => {
+      const seconds = Math.floor((Date.now() - started) / 1000)
+      setElapsed(seconds)
+      // Stuck: abort the run and offer a retry.
+      if (seconds >= TIMEOUT_S) {
+        clearInterval(t)
+        abortRef.current?.abort()
+        setPhase('timeout')
+      }
+    }, 1000)
     return () => clearInterval(t)
   }, [phase])
 
   const start = async (body: { raw_text?: string; url?: string; jd_id?: string }) => {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    lastBodyRef.current = body
+    setDraft({ summary: null, jobs: [] })
     setPhase('building')
     setElapsed(0)
     setError(null)
@@ -96,6 +119,7 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: controller.signal,
       })
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({}))
@@ -123,6 +147,14 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
           } else if (msg.type === 'match') {
             setDetails(d => ({ ...d, picked: msg.picked }))
             mark('match', 'document')
+          } else if (msg.type === 'draft_summary') {
+            setDraft(d => ({ ...d, summary: msg.text }))
+          } else if (msg.type === 'draft_job') {
+            setDraft(d => {
+              const jobs = [...d.jobs]
+              jobs[msg.index] = msg.entry
+              return { ...d, jobs }
+            })
           } else if (msg.type === 'document') {
             mark('document')
             router.push(`/resumes/${msg.resume_id}`)
@@ -139,9 +171,17 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
       }
       throw new Error('The draft didn\'t finish. Try again.')
     } catch (e) {
+      if (controller.signal.aborted) return // timed out or restarted; that phase already shows
       setError({ message: (e as Error).message, code: (e as Error & { code?: string }).code })
       setPhase('error')
     }
+  }
+
+  // Retry after a timeout or error: reuse the analyzed posting when we have it.
+  const retry = () => {
+    if (job?.jd_id) void start({ jd_id: job.jd_id })
+    else if (lastBodyRef.current) void start(lastBodyRef.current)
+    else setPhase('paste')
   }
 
   // "Make another version" / "Regenerate" links arrive as /generate?jd_id=… — start right away.
@@ -237,6 +277,44 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
                 ? 'Big libraries take a little longer. Still going.'
                 : lineOrder[lineIdx % lineOrder.length]}
           </div>
+
+          {(draft.summary || draft.jobs.length > 0) && (
+            <div className="gv2-paper" aria-label="Your resume so far">
+              {draft.summary && (
+                <section>
+                  <div className="gv2-h2">Summary</div>
+                  <p className="gv2-in">{draft.summary}</p>
+                </section>
+              )}
+              {draft.jobs.length > 0 && (
+                <section>
+                  <div className="gv2-h2">Experience</div>
+                  {draft.jobs.filter(Boolean).map((j, i) => (
+                    <div key={i} className="gv2-job gv2-in">
+                      <div className="gv2-job-head">
+                        <span><strong>{j.title}</strong>{j.title && j.company ? ', ' : ''}<em>{j.company}</em></span>
+                        <span className="gv2-dates">{j.dates}</span>
+                      </div>
+                      <ul>{j.bullets.map((b, k) => <li key={k}>{b}</li>)}</ul>
+                    </div>
+                  ))}
+                </section>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {phase === 'timeout' && (
+        <div className="gv2-card">
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>This is taking longer than it should.</div>
+          <div style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 14 }}>
+            {job?.jd_id ? 'We kept the posting we already read, so trying again skips that part.' : 'Nothing was lost. Try again.'}
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button type="button" className="btn-primary" onClick={retry}>Try again</button>
+            <button type="button" className="btn-ghost" onClick={() => { setPhase('paste'); setJob(null) }}>Paste a different posting</button>
+          </div>
         </div>
       )}
 
@@ -277,7 +355,7 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
             {error.code === 'monthly_generation_limit' ? (
               <Link href="/pricing" className="btn-primary" style={{ textDecoration: 'none' }}>See plans</Link>
             ) : (
-              <button type="button" className="btn-primary" onClick={() => (job ? start({ jd_id: job.jd_id }) : setPhase('paste'))}>Try again</button>
+              <button type="button" className="btn-primary" onClick={retry}>Try again</button>
             )}
             <button type="button" className="btn-ghost" onClick={() => { setPhase('paste'); setJob(null) }}>Paste a different posting</button>
           </div>
@@ -303,6 +381,16 @@ const GEN_CSS = `
 .gv2-status { font-size: 13px; color: var(--text3); margin-top: 12px; min-height: 18px; animation: gv2-fade .45s ease; }
 @keyframes gv2-fade { from { opacity: 0; transform: translateY(3px) } to { opacity: 1; transform: none } }
 @media (prefers-reduced-motion: reduce) { .gv2-status { animation: none } }
+.gv2-paper { margin-top: 26px; background: #fff; color: #1a1a1a; font-family: Georgia, 'Times New Roman', serif; font-size: 12.5px; line-height: 1.5; padding: 26px 32px; border-radius: 4px; box-shadow: 0 2px 16px rgba(0,0,0,0.14), 0 0 0 1px rgba(0,0,0,0.05); }
+.gv2-h2 { font-size: 11.5px; font-weight: 700; font-variant: small-caps; letter-spacing: 0.08em; border-bottom: 1px solid #555; padding-bottom: 2px; margin: 0 0 8px; }
+.gv2-paper section + section { margin-top: 14px; }
+.gv2-paper p { margin: 0; }
+.gv2-job + .gv2-job { margin-top: 10px; }
+.gv2-job-head { display: flex; justify-content: space-between; gap: 12px; }
+.gv2-dates { font-size: 11.5px; color: #666; white-space: nowrap; }
+.gv2-job ul { margin: 3px 0 0; padding-left: 16px; }
+.gv2-in { animation: gv2-fade .45s ease; }
+@media (prefers-reduced-motion: reduce) { .gv2-in { animation: none } }
 .gv2-card { background: var(--surface); border: 1px solid var(--border2); border-radius: 12px; padding: 22px 24px; }
 @keyframes gv2-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(29,158,117,0.35); } 50% { box-shadow: 0 0 0 5px rgba(29,158,117,0); } }
 @media (prefers-reduced-motion: reduce) { .gv2-stage.current .gv2-dot { animation: none; } }
