@@ -136,8 +136,14 @@ function isMultiCompany(company: string, knownCompanies: Set<string>): boolean {
 // positioning module with no company — never a clone under each job (that duplicated content
 // and produced combined "Skipify, Plex, Twitter" entries on generated resumes). The title is
 // kept whole: "SENIOR VICE PRESIDENT, People" is one title, not two.
+// "<UNKNOWN>", "N/A", "Unnamed": the model's way of saying there's no employer. Never a company.
+export function isPlaceholderCompany(name: string): boolean {
+  return /^[<[(]?\s*(unknown|n\/?a|none|not (?:specified|stated|listed)|unnamed|undisclosed|confidential)\s*(company|employer)?\s*[>\])]?$/i.test(name.trim())
+}
+
 function attributeModule(m: Record<string, unknown>, knownCompanies: Set<string>): Record<string, unknown> {
-  const company = cleanCompany(m.source_company)
+  const rawCompany = cleanCompany(m.source_company)
+  const company = isPlaceholderCompany(rawCompany) ? '' : rawCompany
   if (company && isMultiCompany(company, knownCompanies)) {
     return { ...m, source_company: null, source_role_title: null, date_start: null, date_end: null, type: 'positioning' }
   }
@@ -278,7 +284,9 @@ A role is one company plus one date range.
 - Two roles may not share the same company and the same date range. Promotions at one company are separate roles only when they have their own dates.
 - "company" is exactly one employer, never a list.
 
-Do NOT include the resume's top-level Summary, Profile, Objective, Skills, or About section as a role, even when it names several past employers.
+Board seats, advisory roles, and volunteer leadership roles are roles too (one per organization, with their own dates), even when they run at the same time as a job and sit in their own section.
+
+Do NOT include the resume's top-level Summary, Profile, Objective, Skills, or About section as a role, even when it names several past employers. If a role names no employer, set company to an empty string — never "Unknown".
 
 has_extras: true if the resume has non-role content worth extracting as its own modules — standalone skills, side projects, open-source contributions, awards, certifications. False if everything of substance belongs to a specific role.`
 
@@ -334,8 +342,11 @@ export async function extractOutline(rawText: string, userId: string): Promise<{
     )
     const roles = (result.roles ?? [])
       .map((r, i): OutlineRole | null => {
-        const company = String(r.company ?? '').trim()
-        if (!company) return null
+        const rawCompany = String(r.company ?? '').trim()
+        // An unnamed employer (an internship listed without a company) is still a role to
+        // extract from, but never a company name.
+        const company = isPlaceholderCompany(rawCompany) ? '' : rawCompany
+        if (!company && !String(r.title ?? '').trim()) return null
         return {
           index: typeof r.index === 'number' ? r.index : i,
           company,
@@ -444,7 +455,7 @@ const EXTRAS_FOCUS_INSTRUCTION = 'Extract modules only from content that is NOT 
 
 export function roleFocusInstruction(role: OutlineRole): string {
   const dates = role.date_start ? ` (${role.date_start} to ${role.date_end ?? 'present'})` : ''
-  return `Extract modules only for this role: #${role.index} — ${role.title ?? 'this role'} at ${role.company}${dates}. Only emit modules whose source_company and source_role_title match this role.`
+  return `Extract modules only for this role: #${role.index} — ${role.title ?? 'this role'} at ${role.company || 'an unnamed employer'}${dates}. Only emit modules whose source_company and source_role_title match this role.`
 }
 
 // Where a role's section starts: its start_anchor found in the text, exactly or ignoring
@@ -551,6 +562,7 @@ function sanitizeModule(m: Record<string, unknown>, userId: string, profileId: s
 }
 
 type BatchContext = {
+  dryRun?: boolean
   knownCompanies: Set<string>
   dedupe: DedupeState
   // The outline role this batch was extracted for. Its company, title and dates win over the
@@ -579,13 +591,14 @@ async function insertModulesBatch(
     .map(m => {
       const role = ctx.role
       if (!role || !m.source_company || m.type === 'positioning') return m
-      return { ...m, source_company: role.company, source_role_title: role.title, date_start: role.date_start, date_end: role.date_end }
+      return { ...m, source_company: role.company || null, source_role_title: role.title, date_start: role.date_start, date_end: role.date_end }
     })
     // Runs synchronously between awaits, so parallel role batches can't both take one duplicate.
     .filter(m => takeIfNew(m, ctx.dedupe))
   if (attributed.length === 0) return []
 
   const toInsert = attributed.map(m => sanitizeModule(m, userId, profileId, resumeId))
+  if (ctx.dryRun) return toInsert.map(m => ({ ...m, id: `dry-${Math.random().toString(36).slice(2, 10)}` }))
   const { data, error } = await supabase.from('modules').insert(toInsert).select()
   if (error) throw error
   return data ?? []
@@ -603,8 +616,11 @@ export async function parseModules(
   resumeId: string,
   rawText: string,
   profileId: string,
-  onEvent?: (event: ParseProgressEvent) => void
+  onEvent?: (event: ParseProgressEvent) => void,
+  /** dryRun: parse exactly as for real but write nothing (the eval suite, scripts/eval). */
+  options: { dryRun?: boolean } = {},
 ) {
+  const dryRun = !!options.dryRun
   // Contact/summary/education extraction only needs rawText — start it now so it runs
   // concurrently with module parsing and the DB work that follows.
   const contactPromise = extractContactInfo(rawText).then(contact => {
@@ -616,16 +632,19 @@ export async function parseModules(
     extractOutline(rawText, userId),
     // Modules already in this profile from earlier uploads — a second resume for the same
     // person shouldn't re-add the same accomplishments.
-    supabase
-      .from('modules')
-      .select('source_company, content')
-      .eq('user_id', userId)
-      .eq('profile_id', profileId)
-      .is('deleted_at', null),
+    dryRun
+      ? Promise.resolve({ data: [] as Array<{ source_company: string | null; content: string | null }> })
+      : supabase
+        .from('modules')
+        .select('source_company, content')
+        .eq('user_id', userId)
+        .eq('profile_id', profileId)
+        .is('deleted_at', null),
   ])
   onEvent?.({ type: 'outline', roles: outlineRoles, extras: hasExtras })
 
   const knownCompanies = new Set(outlineRoles.map(r => normalizeCompany(r.company)))
+  const batchBase = { dryRun, knownCompanies }
   const dedupe: DedupeState = {
     existing: (existingModules ?? []).map(m => ({ company: normalizeCompany(m.source_company), tokens: contentTokens(m.content) })),
     accepted: [],
@@ -644,8 +663,8 @@ export async function parseModules(
       : []
     const others = rawModulesData.filter(m => !forRole.includes(m))
     const inserted = [
-      ...await insertModulesBatch(supabase, userId, profileId, resumeId, forRole, { knownCompanies, dedupe, role: onlyRole }),
-      ...await insertModulesBatch(supabase, userId, profileId, resumeId, others, { knownCompanies, dedupe }),
+      ...await insertModulesBatch(supabase, userId, profileId, resumeId, forRole, { ...batchBase, dedupe, role: onlyRole }),
+      ...await insertModulesBatch(supabase, userId, profileId, resumeId, others, { ...batchBase, dedupe }),
     ]
     allInsertedModules = inserted
     if (outlineRoles.length === 1) {
@@ -680,6 +699,8 @@ export async function parseModules(
             ? { slice }
             : { slice: null, temperature: 0 })
           if (result.length > 0) { rawModulesData = result; break }
+          // A role with no detail (an "Earlier Career" line) has nothing to extract: done, not failed.
+          if (slice && slice.length < 250) { rawModulesData = []; break }
           console.error(`[parseModules] task ${taskLabel} attempt ${attempt} returned no modules, retrying`)
         } catch (err) {
           console.error(`[parseModules] task ${taskLabel} attempt ${attempt} failed:`, err)
@@ -696,7 +717,7 @@ export async function parseModules(
       }
       try {
         const inserted = await insertModulesBatch(supabase, userId, profileId, resumeId, rawModulesData, {
-          knownCompanies,
+          ...batchBase,
           dedupe,
           role: task.kind === 'role' ? task.role : undefined,
         })
@@ -732,6 +753,8 @@ export async function parseModules(
   // RLS). Operates on the already-inserted module rows regardless of which path produced them.
   let jobSyncError: string | undefined
   let jobExperienceIds: string[] = []
+  // Dry run: the job records that would have been written.
+  let dryRunJobs: { company: string; title: string | null; start_date: string | null; end_date: string | null }[] = []
   const jobContentMap = new Map<string, string[]>()
   try {
     const admin = getAdminClient()
@@ -764,7 +787,26 @@ export async function parseModules(
       }
     }
 
-    if (uniqueExperiences.length > 0) {
+    // Roles the outline found that produced no modules (an "Earlier Career" line, a role with
+    // no detail) still get a job record, so the work history stays complete.
+    for (const r of outlineRoles) {
+      if (!r.company) continue
+      const exists = uniqueExperiences.some(e =>
+        normalizeCompany(e.company) === normalizeCompany(r.company) &&
+        (e.title ?? '').trim().toLowerCase() === (r.title ?? '').trim().toLowerCase())
+      if (exists) continue
+      uniqueExperiences.push({
+        company: r.company,
+        title: r.title,
+        start_date: r.date_start ? `${r.date_start}-01` : null,
+        end_date: r.date_end ? `${r.date_end}-01` : null,
+        employment_type: 'full-time',
+      })
+    }
+
+    if (dryRun) {
+      dryRunJobs = uniqueExperiences
+    } else if (uniqueExperiences.length > 0) {
       const { error: jeError } = await admin
         .from('job_experiences')
         .upsert(
@@ -825,7 +867,7 @@ export async function parseModules(
 
   // Auto-populate skills per job from its module content. Best-effort: a failure
   // here must never break the parse, so the whole block is guarded.
-  try {
+  if (!dryRun) try {
     const admin = getAdminClient()
     for (const [jobId, contents] of jobContentMap) {
       try {
@@ -862,5 +904,5 @@ export async function parseModules(
   // calls and all the DB work above, not after them.
   const contact = await contactPromise
 
-  return { modules: allInsertedModules, contact, jobSyncError, jobExperienceIds }
+  return { modules: allInsertedModules, contact, jobSyncError, jobExperienceIds, outlineRoles, dryRunJobs }
 }

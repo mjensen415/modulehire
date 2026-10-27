@@ -90,6 +90,8 @@ Scoring guide:
 - 30-59: adjacent or partial evidence
 - 0-29: nothing relevant in the evidence
 
+Seniority runs both ways: for a seniority requirement, a candidate far above the level asked for (a CTO or Chief Customer Officer applying to a Head of Community role) is a mismatch too. Score that requirement 40-60 and say they may be overqualified.
+
 For each requirement, pick up to 3 evidence ids that best prove it (fewer or none if the evidence is weak). "why" is max 15 words, plain English, second person.
 
 Example:
