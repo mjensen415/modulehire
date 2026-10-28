@@ -33,7 +33,22 @@ async function loadResumeDoc(env: ToolEnv, resumeId: string) {
     .eq('user_id', env.userId)
     .maybeSingle()
   if (error) throw error
-  if (!row) throw new ToolError('No editable resume found with that id. Use list_resumes to see the ones available.')
+  if (!row) {
+    // Resumes generated before the live editor have a file but no document.
+    const { data: legacy } = await env.supabase
+      .from('generated_resumes')
+      .select('id')
+      .eq('id', resumeId)
+      .eq('user_id', env.userId)
+      .is('deleted_at', null)
+      .maybeSingle()
+    if (legacy) {
+      throw new ToolError(
+        `This resume was made before live editing, so its lines can't be read here. The user can open ${appUrl(`/resumes/${resumeId}`)} and choose "Make it editable", then try again.`,
+      )
+    }
+    throw new ToolError('No resume found with that id. Use list_resumes to see the ones available.')
+  }
   const parsed = parseResumeDoc(row.doc)
   if (!parsed.ok) throw new ToolError('This resume document is damaged and cannot be read. Open it on modulehire.com.')
   return { row, doc: parsed.doc }
