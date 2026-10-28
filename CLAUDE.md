@@ -112,6 +112,7 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - Widened `usage_events_action_check` to also allow an `ev_` prefix (generate v2 product events) — tracked in `supabase/migrations/20261024_usage_events_product_events.sql`. **Not yet applied** as of 2026-10-24; until it is, every `ev_` insert fails the CHECK and is only logged to the console.
 - `resume_documents` (+ `fit_report jsonb`) and `resume_document_history`, both with own-rows RLS — applied via MCP, tracked in `supabase/migrations/20261023_resume_documents.sql`. If the `resume_documents` insert ever fails, `generate-resume` logs it and that resume falls back to the file-only view.
 - `generated_resumes.generation_flags jsonb` + `generated_resumes.unsupported_phrases text[]` — applied via MCP, tracked in `supabase/migrations/20261022_generation_flags.sql` (also in `schema.sql`). Written by `generate-resume` after the server-side fact check (`src/lib/fact-check.ts`): bullets rewritten because they named a number or proper noun their source module doesn't contain (`{ module_id, bullet, reason, replacement }`), and posting phrases left off because no module supports them (shown on the done step and `/resumes/[id]` with an Add a module link).
+- **NOT YET APPLIED.** `public.users` column lockdown: revokes table-wide INSERT/UPDATE from `anon`/`authenticated` and grants UPDATE back only on `name, phone, linkedin_url, location, summary, preferences, active_profile_id, skills_onboarded_at`; `increment_resume_credits` executable by `service_role` only — tracked in `supabase/migrations/20261028_lock_users_columns.sql`. Before it, any signed-in user could PATCH their own row through the REST API and set `tier`, `plan`, `is_admin`, `resume_credits` or `stripe_customer_id` (RLS only checks the row), and add credits via the RPC. `checkout`, `checkout/overage` and `generate-resume`'s credit decrement now use the admin client for those writes.
 
 ## AI model tiering (`src/lib/ai.ts`)
 Every AI call site picks a tier explicitly — `ANTHROPIC_MODEL` is NOT flipped globally.
@@ -331,6 +332,7 @@ directly and was never affected — prefer it over the old `/admin` page's plan 
 granting pro access manually.
 
 ## Gotchas
+- **`public.users` columns are not user-writable by default** (`20261028_lock_users_columns.sql`). A new column the user should edit with their own client needs `grant update (col) on public.users to authenticated;`; otherwise the write fails with permission denied. Billing, plan, tier, admin, credits, Stripe ids and `onboarding_complete` are service-role only. Column REVOKEs do nothing while a table-level GRANT exists, so audit other tables with `has_column_privilege` rather than reading the policies alone.
 - `git add` with parentheses in paths trips up zsh — always use `git add -A`
 - Sandbox leaves `.git/index.lock` files; delete from local machine before committing
 - `onConflict` upserts require a real unique constraint in the DB — nullable columns in unique constraints need special handling (use DO $$ block to add constraints safely)

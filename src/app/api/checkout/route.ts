@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 
 const PRICE_MAP: Record<string, string | undefined> = {
   'pro-monthly': process.env.STRIPE_PRICE_PRO_MONTHLY,
@@ -45,7 +45,9 @@ export async function POST(req: Request) {
       })
       customerId = customer.id
 
-      const { error: saveError } = await supabase
+      // Service role: users can't write their own stripe_customer_id (20261028_lock_users_columns).
+      const admin = await createAdminClient()
+      const { error: saveError } = await admin
         .from('users')
         .update({ stripe_customer_id: customerId })
         .eq('id', user.id)

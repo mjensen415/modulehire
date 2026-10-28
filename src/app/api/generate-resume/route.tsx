@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { aiComplete } from '@/lib/ai'
 import { sanitizeCriteria } from '@/lib/dimensions'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
@@ -697,7 +697,9 @@ Rules:
     // Consume one resume credit per generation for non-pro users with credits.
     // Free users with 0 credits still generate within their monthly quota.
     if (!isProTier(tier) && resumeCredits > 0) {
-      const { error: creditError } = await supabase.rpc('increment_resume_credits', {
+      // Service role: the function is no longer executable by users (20261028_lock_users_columns).
+      const admin = await createAdminClient()
+      const { error: creditError } = await admin.rpc('increment_resume_credits', {
         p_user_id: user.id,
         p_amount: -1,
       })
