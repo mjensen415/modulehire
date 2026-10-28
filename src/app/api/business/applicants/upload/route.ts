@@ -126,7 +126,8 @@ export async function POST(req: Request) {
           upsert: true,
         })
       if (!storageError) {
-        await supabase.from('applicants').update({ file_url: storagePath }).eq('id', applicant.id)
+        // Service role: file_url is signed with the service role on read, so users can't set it.
+        await adminClient.from('applicants').update({ file_url: storagePath }).eq('id', applicant.id)
       }
       // Storage failure is non-fatal — applicant is still created
     }
