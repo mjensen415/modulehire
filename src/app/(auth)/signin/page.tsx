@@ -210,6 +210,11 @@ export default function SignIn() {
   // When signing in from business.modulehire.com, we mark that with a short-lived
   // cookie so the callback can redirect back to the business subdomain after auth.
   const oauthRedirectTo = () => {
+    // Carry ?next= (e.g. back to /oauth/consent) through the provider round trip in a
+    // short-lived cookie: the callback URL itself has to match Supabase's allow list exactly.
+    if (signinNext !== '/dashboard') {
+      document.cookie = `__mh_oauth_next=${encodeURIComponent(signinNext)}; path=/; max-age=600; SameSite=Lax${window.location.protocol === 'https:' ? '; Secure' : ''}`
+    }
     const isBusiness = window.location.hostname === 'business.modulehire.com'
     if (isBusiness) {
       // Mark the origin so /auth/callback knows to send the user to business after auth.

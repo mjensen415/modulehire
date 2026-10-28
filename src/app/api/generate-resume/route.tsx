@@ -12,7 +12,8 @@ import { jobResolver, type JobRow } from '@/lib/job-grouping'
 import type { UserPreferences } from '@/lib/preferences'
 import { factCheckBullets, stripUnsupportedSentences, type FactFlag, type SourceModule } from '@/lib/fact-check'
 // canGenerate removed — generation is always allowed; download is gated client-side via canDownload.
-import { FREE_MONTHLY_GENERATIONS, isProTier } from '@/lib/plan'
+import { canGenerateThisMonth, isProTier } from '@/lib/plan'
+import { generationsThisMonth } from '@/lib/usage-limits'
 import { nanoid } from 'nanoid'
 import { jsonrepair } from 'jsonrepair'
 import { createResumeStreamReader } from '@/lib/stream-json'
@@ -97,13 +98,8 @@ export async function POST(req: Request) {
 
     // Free-tier monthly generation cap (Pro / beta_pro: unlimited).
     if (!isProTier(tier) && !docOnlyFor) {
-      const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString()
-      const { count: monthlyCount } = await supabase
-        .from('generated_resumes')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .gte('created_at', startOfMonth)
-      if ((monthlyCount ?? 0) >= FREE_MONTHLY_GENERATIONS) {
+      const monthlyCount = await generationsThisMonth(supabase, user.id)
+      if (!canGenerateThisMonth(tier, monthlyCount)) {
         return NextResponse.json({
           error: "You've used your 25 free resumes this month. Upgrade to Pro for unlimited generations.",
           code: 'monthly_generation_limit',

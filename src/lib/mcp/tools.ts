@@ -12,15 +12,11 @@ import { getActiveProfileId } from '@/lib/profile'
 import { DIMENSIONS, sanitizeCriteria } from '@/lib/dimensions'
 import { allBlocks, docText, parseResumeDoc, visibleDoc, type ResumeDoc } from '@/lib/resume-doc'
 import { scoreLiveFit } from '@/lib/live-fit'
-import { isProTier } from '@/lib/plan'
 import { json, runTool, ToolError, type ToolEnv } from './run-tool'
+import { planUsage } from './quota'
+import { appUrl } from './urls'
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const
-
-export function appUrl(path: string): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL || 'https://modulehire.com').replace(/\/+$/, '')
-  return `${base}${path}`
-}
 
 const jobLabel = (jd: { extracted_job_title?: string | null; extracted_company?: string | null } | null) =>
   `${jd?.extracted_job_title || 'Untitled role'}${jd?.extracted_company ? ` at ${jd.extracted_company}` : ''}`
@@ -89,8 +85,8 @@ export function registerClassicTools(server: McpServer) {
     async (_args, ctx) =>
       runTool('get_career_library', ctx.http?.authInfo, async (env) => {
         const profileId = await getActiveProfileId(env.supabase, env.userId)
-        const [userRes, jobsRes, modulesRes, assignRes] = await Promise.all([
-          env.supabase.from('users').select('name, location, linkedin_url, tier, preferences').eq('id', env.userId).maybeSingle(),
+        const [userRes, jobsRes, modulesRes, assignRes, usage] = await Promise.all([
+          env.supabase.from('users').select('name, location, linkedin_url, preferences').eq('id', env.userId).maybeSingle(),
           env.supabase
             .from('job_experiences')
             .select('id, company, title, start_date, end_date')
@@ -103,6 +99,7 @@ export function registerClassicTools(server: McpServer) {
             .eq('profile_id', profileId)
             .is('deleted_at', null),
           env.supabase.from('module_job_assignments').select('module_id, job_id'),
+          planUsage(env),
         ])
         if (jobsRes.error) throw jobsRes.error
         if (modulesRes.error) throw modulesRes.error
@@ -121,7 +118,7 @@ export function registerClassicTools(server: McpServer) {
         return json({
           name: userRes.data?.name ?? null,
           location: userRes.data?.location ?? null,
-          plan: isProTier(userRes.data?.tier) ? 'pro' : 'free',
+          plan: usage,
           targeting: { roles: prefs.target_roles ?? [], career_level: prefs.career_level ?? null },
           total_modules: modules.length,
           pinned_modules: modules.filter((m) => m.pinned).length,

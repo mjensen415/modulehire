@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requiredString, optionalString, ValidationError } from '@/lib/validate'
 import { moduleLimit, isProTier } from '@/lib/plan'
+import { activeModuleCount } from '@/lib/usage-limits'
 import { getActiveProfileId } from '@/lib/profile'
 
 const VALID_WEIGHTS = new Set(['anchor', 'strong', 'supporting'])
@@ -22,13 +23,9 @@ export async function POST(req: Request) {
       .single()
     const tier = (profileRow?.tier ?? 'free') as string
     if (!isProTier(tier)) {
-      const { count: existingCount } = await supabase
-        .from('modules')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .is('deleted_at', null)
+      const existingCount = await activeModuleCount(supabase, user.id)
       const cap = moduleLimit(tier)
-      if ((existingCount ?? 0) >= cap) {
+      if (existingCount >= cap) {
         return NextResponse.json(
           { error: 'Module limit reached for your plan.', code: 'MODULE_LIMIT_REACHED', limit: cap },
           { status: 403 }

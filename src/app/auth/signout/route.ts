@@ -12,7 +12,12 @@ export async function POST(request: Request) {
     await supabase.auth.signOut()
   }
 
-  return NextResponse.redirect(new URL('/', request.url), {
+  // ?next= lets "Use a different account" on /oauth/consent sign out and land back on sign-in.
+  // Relative paths only, so this can't become an open redirect.
+  const next = new URL(request.url).searchParams.get('next')
+  const dest = next && next.startsWith('/') && !next.startsWith('//') ? next : '/'
+
+  return NextResponse.redirect(new URL(dest, request.url), {
     status: 302,
   })
 }
