@@ -16,7 +16,7 @@ export type ToolEnv = { userId: string; email: string | null; client: string; su
 /** A message meant for the user (not a crash). Shown to the model as-is. */
 export class ToolError extends Error {}
 
-type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean }
+export type ToolResult = { content: { type: 'text'; text: string }[]; structuredContent?: Record<string, unknown>; isError?: boolean }
 
 export function json(value: unknown): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] }

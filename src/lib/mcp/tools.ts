@@ -15,6 +15,8 @@ import { scoreLiveFit } from '@/lib/live-fit'
 import { json, runTool, ToolError, type ToolEnv } from './run-tool'
 import { planUsage } from './quota'
 import { appUrl } from './urls'
+import { RESUME_CARD_URI, resumeCard, withCard } from './card'
+import { registerAppTool } from '@modelcontextprotocol/ext-apps/server'
 
 export const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const
 
@@ -102,6 +104,25 @@ export async function resumeFit(
     requirements: live.criteria.map((c) => ({ label: c.label, weight: c.weight, covered: c.covered, matched: c.matched })),
   }
 }
+
+/** The preview card for a loaded resume: its target job's label and the same fit check_fit returns. */
+export async function cardFor(
+  env: ToolEnv,
+  resumeId: string,
+  row: { version: number; fit_report: unknown; job_description_id: string | null },
+  doc: ResumeDoc,
+) {
+  const [fit, jdRes] = await Promise.all([
+    resumeFit(env, row, doc).catch(() => null),
+    row.job_description_id
+      ? env.supabase.from('job_descriptions').select('extracted_job_title, extracted_company').eq('id', row.job_description_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ])
+  return resumeCard(resumeId, row.version, doc, jdRes.data ? jobLabel(jdRes.data) : null, fit ? { overall: fit.overall, source: fit.source } : null)
+}
+
+/** Tools that show the resume preview card in hosts that support MCP Apps. */
+export const CARD_META = { ui: { resourceUri: RESUME_CARD_URI } }
 
 export function registerClassicTools(server: McpServer) {
   server.registerTool(
@@ -332,7 +353,8 @@ export function registerClassicTools(server: McpServer) {
       }),
   )
 
-  server.registerTool(
+  registerAppTool(
+    server,
     'get_resume',
     {
       title: 'Get resume',
@@ -340,17 +362,19 @@ export function registerClassicTools(server: McpServer) {
         'The full live resume document: every line with its block_id, section, job, and the skill module it was written from. This is the same document the ModuleHire editor shows; version identifies the saved state.',
       inputSchema: z.object({ resume_id: z.uuid() }),
       annotations: READ_ONLY,
+      _meta: CARD_META,
     },
     async ({ resume_id }, ctx) =>
       runTool('get_resume', ctx.http?.authInfo, async (env) => {
         const { row, doc } = await loadResumeDoc(env, resume_id)
-        return json({
+        const result = json({
           resume_id,
           version: row.version,
           last_edited: row.updated_at,
           ...docForModel(doc),
           editor_url: appUrl(`/resumes/${resume_id}`),
         })
+        return withCard(result, await cardFor(env, resume_id, row, doc))
       }),
   )
 

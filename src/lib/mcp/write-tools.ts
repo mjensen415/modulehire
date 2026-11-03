@@ -22,7 +22,9 @@ import { internalRequest } from '@/lib/internal-call'
 import { POST as startJob } from '@/app/api/jobs/start/route'
 import { json, runTool, ToolError, type ToolEnv } from './run-tool'
 import { requireGenerationQuota, requireModuleRoom, requirePro } from './quota'
-import { docForModel, jobLabel, loadResumeDoc, resumeFit } from './tools'
+import { CARD_META, cardFor, docForModel, loadResumeDoc } from './tools'
+import { withCard } from './card'
+import { registerAppTool } from '@modelcontextprotocol/ext-apps/server'
 import { appUrl } from './urls'
 
 // Annotations. destructiveHint is true only where a call overwrites something the user wrote.
@@ -139,7 +141,8 @@ export function registerWriteTools(server: McpServer) {
       }),
   )
 
-  server.registerTool(
+  registerAppTool(
+    server,
     'update_block',
     {
       title: 'Edit resume line',
@@ -152,6 +155,7 @@ export function registerWriteTools(server: McpServer) {
         text: z.string().trim().min(1).max(2000),
       }),
       annotations: OVERWRITES,
+      _meta: CARD_META,
     },
     async ({ resume_id, version, block_id, text }, ctx) =>
       runTool('update_block', ctx.http?.authInfo, async (env) => {
@@ -159,7 +163,8 @@ export function registerWriteTools(server: McpServer) {
         const block = findBlock(doc, block_id)
         if (!block) throw new ToolError('No line with that block_id on this resume. Call get_resume to see the current lines.')
 
-        const saved = await save(env, resume_id, row.id, version, updateBlockText(doc, block_id, text))
+        const nextDoc = updateBlockText(doc, block_id, text)
+        const saved = await save(env, resume_id, row.id, version, nextDoc)
 
         // Same fact guard as the editor: flag, never block.
         let warnings: { kind: string; term: string }[] = []
@@ -179,7 +184,7 @@ export function registerWriteTools(server: McpServer) {
           }
         }
 
-        return json({
+        const result = json({
           resume_id,
           version: saved.version,
           block_id,
@@ -191,6 +196,7 @@ export function registerWriteTools(server: McpServer) {
               }
             : {}),
         })
+        return withCard(result, await cardFor(env, resume_id, { ...row, version: saved.version }, nextDoc))
       }),
   )
 
@@ -253,7 +259,8 @@ export function registerWriteTools(server: McpServer) {
       }),
   )
 
-  server.registerTool(
+  registerAppTool(
+    server,
     'generate_resume',
     {
       title: 'Generate tailored resume',
@@ -266,6 +273,7 @@ export function registerWriteTools(server: McpServer) {
         job_title: z.string().trim().min(2).max(200).optional().describe('Only when a previous call asked for it'),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      _meta: CARD_META,
     },
     async ({ job_id, posting_text, posting_url, job_title }, ctx) =>
       runTool('generate_resume', ctx.http?.authInfo, async (env) => {
@@ -313,19 +321,17 @@ export function registerWriteTools(server: McpServer) {
         if (failure || !resumeId) throw new ToolError(failure ?? 'ModuleHire could not write this resume. Try again.')
 
         const { row, doc } = await loadResumeDoc(env, resumeId)
-        const fit = await resumeFit(env, row, doc).catch(() => null)
-        const { data: jd } = row.job_description_id
-          ? await env.supabase.from('job_descriptions').select('extracted_job_title, extracted_company').eq('id', row.job_description_id).maybeSingle()
-          : { data: null }
-        return json({
+        const card = await cardFor(env, resumeId, row, doc)
+        const result = json({
           resume_id: resumeId,
           job_id: row.job_description_id,
-          for_job: jobLabel(jd),
+          for_job: card.for_job,
           version: row.version,
-          fit: fit ? { overall: fit.overall, source: fit.source } : null,
+          fit: card.fit,
           editor_url: appUrl(`/resumes/${resumeId}`),
           ...docForModel(doc),
         })
+        return withCard(result, card)
       }),
   )
 
