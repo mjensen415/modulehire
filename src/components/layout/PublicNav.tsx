@@ -12,6 +12,7 @@ export default function PublicNav() {
         <li><Link href="/how-it-works">How it works</Link></li>
         <li><Link href="/modules">Modules</Link></li>
         <li><Link href="/pricing">Pricing</Link></li>
+        <li><Link href="/mcp">Use with AI</Link></li>
         <li><Link href="/docs">FAQs/Docs</Link></li>
         <li><Link href="/support">Support</Link></li>
       </ul>

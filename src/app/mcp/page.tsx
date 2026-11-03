@@ -18,7 +18,9 @@ export const metadata: Metadata = {
     'Connect ModuleHire to your AI assistant. Save wins to your career library, tailor resumes to a job, edit them line by line, and track applications, all from chat.',
 }
 
-const SERVER_URL = 'https://modulehire.com/api/mcp'
+// www is the canonical host (the apex redirects there), and OAuth clients check that this
+// URL matches the `resource` in /.well-known/oauth-protected-resource/api/mcp.
+const SERVER_URL = 'https://www.modulehire.com/api/mcp'
 
 const PROMPTS: { group: string; color: string; items: string[] }[] = [
   {
@@ -96,6 +98,10 @@ const FAQS: { q: string; a: string }[] = [
   {
     q: 'Does it cost extra?',
     a: 'No. It uses your ModuleHire plan. Reading, editing, exporting, and tracking are free on every plan. Generating a new resume counts toward your monthly limit, the same as on the website.',
+  },
+  {
+    q: 'Is there a limit on how much the app can do?',
+    a: 'Each account can make up to 60 requests a minute and 600 an hour through connected apps, with lower hourly caps on exports, editor links, and interview prep. Normal use stays well under that; the limits are there so a stuck assistant cannot hammer your account. If you hit one, the assistant will tell you, and it clears after a short wait.',
   },
   {
     q: 'What if I edit in the browser while the AI is editing too?',

@@ -14,12 +14,12 @@ the reviewer account described under "Test account" (it does not exist yet).
 
 | Field | Value |
 | --- | --- |
-| Server URL | `https://modulehire.com/api/mcp` |
+| Server URL | `https://www.modulehire.com/api/mcp` |
 | Transport | Streamable HTTP, stateless |
-| Auth | OAuth 2.1 with PKCE and dynamic client registration (Supabase Auth). Protected resource metadata at `https://modulehire.com/.well-known/oauth-protected-resource/api/mcp`. Consent page: `https://modulehire.com/oauth/consent` |
-| Docs | https://modulehire.com/mcp |
-| Privacy policy | https://modulehire.com/privacy |
-| Terms | https://modulehire.com/terms |
+| Auth | OAuth 2.1 with PKCE and dynamic client registration (Supabase Auth). Protected resource metadata at `https://www.modulehire.com/.well-known/oauth-protected-resource/api/mcp`. Consent page: `https://www.modulehire.com/oauth/consent` |
+| Docs | https://www.modulehire.com/mcp |
+| Privacy policy | https://www.modulehire.com/privacy |
+| Terms | https://www.modulehire.com/terms |
 | Support | info@modulehire.com |
 | Company | ModuleHire Labs |
 | MCP Apps | Yes. `get_resume`, `update_block` and `generate_resume` render a read-only resume preview card (`ui://modulehire/resume-card.html`); text-only clients get the same data as text. |
@@ -135,6 +135,6 @@ the reviewer account described under "Test account" (it does not exist yet).
 
 **MCP server URL, auth, tools, data handling, test account:** same as the Claude section. ChatGPT reads the tool annotations to decide when to ask the user before a write; `update_block` and `update_application_status` are marked destructive, so ChatGPT will confirm before running them.
 
-**Policies:** privacy https://modulehire.com/privacy, terms https://modulehire.com/terms, support info@modulehire.com.
+**Policies:** privacy https://www.modulehire.com/privacy, terms https://www.modulehire.com/terms, support info@modulehire.com.
 
 **Screenshots:** the same four PNGs. ChatGPT renders the card inline from the same `ui://` resource (MCP Apps is supported in ChatGPT).

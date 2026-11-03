@@ -425,6 +425,10 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
     }
 
     const finishGeneration = async () => {
+      // Service role for generated_resumes and the monthly count: users can't insert or edit those
+      // rows themselves (they back the generation cap and the purge cron's file list;
+      // 20261029_lock_quota_tables.sql).
+      const admin = await createAdminClient()
       // ── Generate → resume document ───────────────────────────────────────────
       // The model's JSON is fact-checked, then turned into a ResumeDoc (src/lib/resume-doc.ts):
       // the editable source of truth on /resumes/[id]. Every file — now and on later downloads —
@@ -579,7 +583,7 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
           .single()
         if (docError) throw docError
         // Fill the old row's fact-check log only if it never had one.
-        await supabase.from('generated_resumes').update({ generation_flags: generationFlags }).eq('id', docOnlyFor).is('generation_flags', null)
+        await admin.from('generated_resumes').update({ generation_flags: generationFlags }).eq('id', docOnlyFor).eq('user_id', user.id).is('generation_flags', null)
         return { resume_id: docOnlyFor, resume_doc_id: docRow.id as string }
       }
 
@@ -606,7 +610,7 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
 
       // This route is authenticated-only (401 above if no user), so every resume
       // belongs to a logged-in user and is saved permanently. Never expire it.
-      const { data: savedResume, error: saveError } = await supabase
+      const { data: savedResume, error: saveError } = await admin
         .from('generated_resumes')
         .insert({
           id: resumeId,
@@ -686,7 +690,7 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
       const atsScore = Math.round(kwScore * 0.6 + contactScore * 0.2 + moduleScore * 0.1 + summaryScore * 0.1)
 
       // Save score back to the DB record
-      await supabase
+      await admin
         .from('generated_resumes')
         .update({ ats_score: atsScore })
         .eq('id', resumeId)
@@ -700,7 +704,7 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
         return modelUnsupported.some(u => sameText(u, p)) && !cleanResumeText.includes(lower)
       })
       // Separate update so a missing column (migration not yet applied) can't lose the score.
-      const { error: flagsError } = await supabase
+      const { error: flagsError } = await admin
         .from('generated_resumes')
         .update({ generation_flags: generationFlags, unsupported_phrases: unsupportedPhrases })
         .eq('id', resumeId)
@@ -769,7 +773,6 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
       // Free users with 0 credits still generate within their monthly quota.
       if (!isProTier(tier) && resumeCredits > 0) {
         // Service role: the function is no longer executable by users (20261028_lock_users_columns).
-        const admin = await createAdminClient()
         const { error: creditError } = await admin.rpc('increment_resume_credits', {
           p_user_id: user.id,
           p_amount: -1,
@@ -781,7 +784,7 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
 
       // Increment monthly resume count (atomic via RPC). Generation already succeeded —
       // log on failure but don't fail the request.
-      const { error: incError } = await supabase.rpc('increment_resume_count', {
+      const { error: incError } = await admin.rpc('increment_resume_count', {
         p_user_id: user.id,
         p_month: month,
       })

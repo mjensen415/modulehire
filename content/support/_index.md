@@ -14,6 +14,7 @@ How can we help?
 
 - [Generating a Tailored Resume](/support/generating-a-tailored-resume)
 - [What the ATS Estimator Means](/support/ats-estimator-explained)
+- [Using ModuleHire with Claude, ChatGPT and Cursor](/support/using-modulehire-with-ai-assistants)
 
 ## Account & Billing
 
