@@ -7,7 +7,7 @@ export const metadata = {
   description: 'How ModuleHire collects, uses, and protects your personal information.',
 }
 
-const EFFECTIVE_DATE = 'June 30, 2026'
+const EFFECTIVE_DATE = 'November 2, 2026'
 const CONTACT_EMAIL = 'privacy@modulehire.com'
 
 export default function PrivacyPage() {
@@ -69,6 +69,8 @@ export default function PrivacyPage() {
             <p style={p}>We do not sell or rent your personal information. We share information only in the following circumstances:</p>
             <h3 style={h3}>Service providers</h3>
             <p style={p}>We use third-party services to operate the platform, including Supabase (database and authentication), Vercel (hosting), Stripe (payments), Anthropic (AI processing), and Brevo (email delivery). These providers process data only as necessary to provide their services to us.</p>
+            <h3 style={h3}>AI apps you connect</h3>
+            <p style={p}>If you connect an AI app to your ModuleHire account (see section 4), we send that app the information it asks for when it uses a ModuleHire tool on your behalf. You choose which apps to connect and can disconnect them at any time.</p>
             <h3 style={h3}>Legal requirements</h3>
             <p style={p}>We may disclose information if required to do so by law or in response to valid legal process.</p>
             <h3 style={h3}>Business transfers</h3>
@@ -76,18 +78,35 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 style={h2}>4. Data storage and security</h2>
+            <h2 style={h2}>4. AI apps you connect (MCP)</h2>
+            <p style={p}>You can connect AI apps such as Claude, ChatGPT, and Cursor to your ModuleHire account through our Model Context Protocol (MCP) server. This section explains what that connection allows.</p>
+            <h3 style={h3}>How you connect</h3>
+            <p style={p}>You approve each app on modulehire.com while signed in. The app receives an access token that lets it use ModuleHire tools as you. It never receives your password.</p>
+            <h3 style={h3}>What a connected app can access</h3>
+            <p style={p}>A connected app can read your skill modules, work history, the job descriptions you analyzed and their match results, your resumes (including the contact details on them), your job applications, and your plan and usage. At your request it can also make changes: add modules to your library, edit and generate resumes, create download links, and update your job tracker. Generating a resume counts toward your plan&rsquo;s monthly limit, the same as on the website.</p>
+            <h3 style={h3}>When data is shared</h3>
+            <p style={p}>We send data to a connected app only when it calls a ModuleHire tool, which typically happens when you ask it for something that needs your ModuleHire data. We do not send data to the app at any other time.</p>
+            <h3 style={h3}>What happens to it there</h3>
+            <p style={p}>Once a connected app receives your data, the app&rsquo;s provider (for example Anthropic for Claude or OpenAI for ChatGPT) handles it under its own terms and privacy policy. We do not control how those providers store or use it.</p>
+            <h3 style={h3}>What we record</h3>
+            <p style={p}>For each tool call we record which tool was used, which app made the call, whether it succeeded, and how long it took. This is kept with the rest of your usage data (see section 6). One-click editor links are stored only as a one-way hash and expire after 5 minutes. Files you export through a connected app are stored temporarily so the download link works; the link expires after 10 minutes.</p>
+            <h3 style={h3}>Disconnecting</h3>
+            <p style={p}>To disconnect an app, go to Account, then Connected accounts, and choose Disconnect under AI apps. The app&rsquo;s access ends immediately. You can also remove ModuleHire from the app&rsquo;s own settings. Disconnecting does not delete data the app already received; ask the app&rsquo;s provider if you want that removed.</p>
+          </section>
+
+          <section>
+            <h2 style={h2}>5. Data storage and security</h2>
             <p style={p}>Your data is stored on Supabase infrastructure. We use row-level security to ensure you can only access your own data. Passwords are hashed and never stored in plain text. All data is transmitted over HTTPS.</p>
             <p style={p}>No system is perfectly secure. We take reasonable steps to protect your information but cannot guarantee absolute security.</p>
           </section>
 
           <section>
-            <h2 style={h2}>5. Data retention</h2>
+            <h2 style={h2}>6. Data retention</h2>
             <p style={p}>We retain your account data for as long as your account is active. If you delete your account, we delete your personal information within 30 days, except where we are required to retain it for legal or financial compliance purposes.</p>
           </section>
 
           <section>
-            <h2 style={h2}>6. Your rights</h2>
+            <h2 style={h2}>7. Your rights</h2>
             <p style={p}>Depending on where you are located, you may have the right to:</p>
             <ul style={ul}>
               <li style={li}>Access the personal information we hold about you</li>
@@ -103,22 +122,22 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 style={h2}>7. Cookies</h2>
+            <h2 style={h2}>8. Cookies</h2>
             <p style={p}>We use cookies and similar technologies to maintain your session, remember your preferences, and understand how the service is being used. We do not use third-party advertising cookies.</p>
           </section>
 
           <section>
-            <h2 style={h2}>8. Children</h2>
+            <h2 style={h2}>9. Children</h2>
             <p style={p}>ModuleHire is not directed at children under 13. We do not knowingly collect personal information from children. If you believe we have inadvertently collected such information, contact us and we will delete it promptly.</p>
           </section>
 
           <section>
-            <h2 style={h2}>9. Changes to this policy</h2>
+            <h2 style={h2}>10. Changes to this policy</h2>
             <p style={p}>We may update this policy from time to time. When we make material changes, we will notify you by email or with a notice in the app before the changes take effect. The effective date at the top of this page reflects the most recent revision.</p>
           </section>
 
           <section>
-            <h2 style={h2}>10. Contact</h2>
+            <h2 style={h2}>11. Contact</h2>
             <p style={p}>If you have questions about this policy or how we handle your data, contact us at{' '}
               <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'var(--teal)', textDecoration: 'none' }}>{CONTACT_EMAIL}</a>.
             </p>

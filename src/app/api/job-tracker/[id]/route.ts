@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { optionalString } from '@/lib/validate'
 import { ensureJobDescription } from '@/lib/job-descriptions'
-import { parseSignalFields } from '@/lib/tracker'
+import { APPLICATION_STATUSES, parseSignalFields } from '@/lib/tracker'
 
-const STATUSES = new Set(['saved', 'applied', 'screening', 'interviewing', 'offered', 'rejected', 'withdrawn', 'no_response'])
+const STATUSES = new Set<string>(APPLICATION_STATUSES)
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {

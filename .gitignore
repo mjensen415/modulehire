@@ -47,3 +47,6 @@ test-output/*.pdf
 # Claude Code local settings (contains bash allow-lists with test credentials)
 .claude/settings.local.json
 bobiverse-tracker.html
+
+# Eval suite output (npm run eval)
+scripts/eval/last-run.json

@@ -11,6 +11,7 @@ export default function PublicFooter() {
         <li><Link href="/privacy">Privacy</Link></li>
         <li><Link href="/terms">Terms</Link></li>
         <li><Link href="/docs">Docs</Link></li>
+        <li><Link href="/mcp">Use with AI</Link></li>
         <li><Link href="/support">Support</Link></li>
         <li><Link href="/status">Status</Link></li>
       </ul>

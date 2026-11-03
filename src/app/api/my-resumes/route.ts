@@ -45,10 +45,17 @@ export async function GET(req: Request) {
 
     if (error) throw error
 
+    // Which of these have a live document (open in the editor).
+    const ids = (data ?? []).map(r => r.id)
+    const { data: docs } = ids.length > 0
+      ? await supabase.from('resume_documents').select('generated_resume_id').in('generated_resume_id', ids).eq('user_id', user.id)
+      : { data: [] as Array<{ generated_resume_id: string | null }> }
+    const editable = new Set((docs ?? []).map(d => d.generated_resume_id))
+
     // Generate signed URLs for each resume
     const withUrls = await Promise.all((data ?? []).map(async (r) => {
       const isExpired = r.expires_at && new Date(r.expires_at) < new Date()
-      if (isExpired) return { ...r, docx_signed: null, pdf_signed: null, expired: true }
+      if (isExpired) return { ...r, docx_signed: null, pdf_signed: null, expired: true, editable: editable.has(r.id) }
 
       const bucket = 'temp' // TODO: update to 'resumes' once storage bucket is renamed
       const [docxSigned, pdfSigned] = await Promise.all([
@@ -60,6 +67,7 @@ export async function GET(req: Request) {
         docx_signed: docxSigned.data?.signedUrl ?? null,
         pdf_signed: pdfSigned.data?.signedUrl ?? null,
         expired: false,
+        editable: editable.has(r.id),
       }
     }))
 

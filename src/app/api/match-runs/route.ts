@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { resolveAuth } from '@/lib/supabase/resolve-auth'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
 
@@ -11,8 +11,7 @@ type StoredRank = { module_id: string; match_score: number; include_reason: stri
 // { run: null } when there is no run, or when none of its modules belong to the active profile.
 export async function GET(req: Request) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { user, supabase } = await resolveAuth(req)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const jdId = new URL(req.url).searchParams.get('jd_id')

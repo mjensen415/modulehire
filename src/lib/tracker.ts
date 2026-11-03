@@ -2,6 +2,12 @@
 // user first heard back. Shared by the tracker API routes, /job-tracker, and the "Add to
 // tracker" card on /generate. Everything here is computed on read — no cron.
 
+export const APPLICATION_STATUSES = ['saved', 'applied', 'screening', 'interviewing', 'offered', 'rejected', 'withdrawn', 'no_response'] as const
+export type ApplicationStatus = typeof APPLICATION_STATUSES[number]
+export function isApplicationStatus(v: unknown): v is ApplicationStatus {
+  return typeof v === 'string' && (APPLICATION_STATUSES as readonly string[]).includes(v)
+}
+
 export const APPLICATION_SOURCES = [
   { value: 'company_site', label: 'Company site' },
   { value: 'linkedin_easy_apply', label: 'LinkedIn Easy Apply' },
@@ -53,6 +59,26 @@ export function responseTypeForStatus(status: string, rejectKind: 'auto_reject' 
     case 'rejected': return rejectKind
     default: return null
   }
+}
+
+/**
+ * The extra fields a status change sets, by the same rules as /job-tracker: moving to applied
+ * stamps applied_at, and the first reply after applying stamps first_response_at and
+ * response_type. `today` is YYYY-MM-DD in the user's day.
+ */
+export function statusChangeFields(
+  from: { status: string; applied_at: string | null; first_response_at: string | null },
+  to: ApplicationStatus,
+  today: string,
+  rejectKind: 'auto_reject' | 'human_reject' = 'auto_reject',
+): Record<string, string | null> {
+  const out: Record<string, string | null> = {}
+  if (to === 'applied' && !from.applied_at) out.applied_at = today
+  if (from.status === 'applied' && !from.first_response_at && (RESPONSE_STATUSES as readonly string[]).includes(to)) {
+    out.first_response_at = today
+    out.response_type = responseTypeForStatus(to, rejectKind)
+  }
+  return out
 }
 
 const WORD_NUMBERS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7 }

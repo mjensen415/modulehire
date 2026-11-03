@@ -183,7 +183,7 @@ export default function MatcherTab() {
                   <div style={{ height: 6, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden', marginBottom: 6 }}>
                     <div style={{ height: '100%', width: `${m.match_score}%`, background: 'var(--teal)' }} />
                   </div>
-                  <div style={{ fontSize: 12.5, color: 'var(--text2)', marginBottom: 10, fontStyle: 'italic' }}>&quot;{m.include_reason}&quot;</div>
+                  {m.include_reason && <div style={{ fontSize: 12.5, color: 'var(--text2)', marginBottom: 10, fontStyle: 'italic' }}>&quot;{m.include_reason}&quot;</div>}
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {ratingButtons.map((rb) => (
                       <button

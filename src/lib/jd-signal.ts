@@ -100,6 +100,21 @@ Product" in the responsibilities, and later "You align cross-functional partners
 roadmap" in the requirements. Those are the same ask → one criterion "Stakeholder Alignment",
 mentions: 2, also_called: ["stakeholder management", "align cross-functional partners"].`
 
+// One short worked example for the criteria pass: on Haiku, showing the output beats a paragraph
+// of rules. Appended to the criteria system prompt in analyze-jd and its Prompt Lab mirror.
+export const CRITERIA_WORKED_EXAMPLE = `Worked example.
+Posting: "Customer Education Lead. Build and run our customer training programs and certification
+track. Partner with Product and Support on launches. 5+ years in customer education at a SaaS
+company; you've managed an LMS. Bonus: video production."
+extracted_criteria:
+[{"label":"Customer Training Programs","dimension":"responsibility","weight":5,"description":"Builds and runs customer training and certification.","mentions":2,"also_called":["customer training programs","certification track"]},
+ {"label":"Customer Education Lead","dimension":"role","weight":4,"description":"Leads customer education as its owner.","mentions":1,"also_called":["Customer Education Lead"]},
+ {"label":"Senior Practitioner","dimension":"seniority","weight":3,"description":"5+ years in customer education.","mentions":1,"also_called":["5+ years in customer education"]},
+ {"label":"SaaS Customer Education","dimension":"domain","weight":3,"description":"Has done this at a SaaS company.","mentions":1,"also_called":["at a SaaS company"]},
+ {"label":"LMS Administration","dimension":"skill","weight":3,"description":"Has managed a learning management system.","mentions":1,"also_called":["managed an LMS"]},
+ {"label":"Product and Support Partnership","dimension":"collaboration","weight":2,"description":"Works with Product and Support on launches.","mentions":1,"also_called":["Partner with Product and Support"]},
+ {"label":"Video Production","dimension":"skill","weight":1,"description":"Nice to have: can produce video.","mentions":1,"also_called":["video production"]}]`
+
 export const CRITERIA_REPETITION_SCHEMA_PROPS = {
   mentions: { type: 'integer', description: 'How many separate places in the posting ask for this (paraphrases count), 1-9' },
   also_called: { type: 'array', items: { type: 'string' }, description: 'Up to 3 short (2-8 word) verbatim phrasings from the posting' },
