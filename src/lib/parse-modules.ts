@@ -136,8 +136,14 @@ function isMultiCompany(company: string, knownCompanies: Set<string>): boolean {
 // positioning module with no company — never a clone under each job (that duplicated content
 // and produced combined "Skipify, Plex, Twitter" entries on generated resumes). The title is
 // kept whole: "SENIOR VICE PRESIDENT, People" is one title, not two.
+// "<UNKNOWN>", "N/A", "Unnamed": the model's way of saying there's no employer. Never a company.
+export function isPlaceholderCompany(name: string): boolean {
+  return /^[<[(]?\s*(unknown|n\/?a|none|not (?:specified|stated|listed)|unnamed|undisclosed|confidential)\s*(company|employer)?\s*[>\])]?$/i.test(name.trim())
+}
+
 function attributeModule(m: Record<string, unknown>, knownCompanies: Set<string>): Record<string, unknown> {
-  const company = cleanCompany(m.source_company)
+  const rawCompany = cleanCompany(m.source_company)
+  const company = isPlaceholderCompany(rawCompany) ? '' : rawCompany
   if (company && isMultiCompany(company, knownCompanies)) {
     return { ...m, source_company: null, source_role_title: null, date_start: null, date_end: null, type: 'positioning' }
   }
@@ -269,7 +275,7 @@ JSON:`
 
 // ─── Outline pass ───────────────────────────────────────────────────────────
 
-export type OutlineRole = { index: number; company: string; title: string | null; date_start: string | null; date_end: string | null }
+export type OutlineRole = { index: number; company: string; title: string | null; date_start: string | null; date_end: string | null; start_anchor?: string | null }
 
 const OUTLINE_SYSTEM_PROMPT = `Identify every distinct job or role in this resume, in the order they appear (most recent first, matching the resume's own order). For each, give its 0-based index, company, title, and dates.
 
@@ -278,7 +284,9 @@ A role is one company plus one date range.
 - Two roles may not share the same company and the same date range. Promotions at one company are separate roles only when they have their own dates.
 - "company" is exactly one employer, never a list.
 
-Do NOT include the resume's top-level Summary, Profile, Objective, Skills, or About section as a role, even when it names several past employers.
+Board seats, advisory roles, and volunteer leadership roles are roles too (one per organization, with their own dates), even when they run at the same time as a job and sit in their own section.
+
+Do NOT include the resume's top-level Summary, Profile, Objective, Skills, or About section as a role, even when it names several past employers. If a role names no employer, set company to an empty string — never "Unknown".
 
 has_extras: true if the resume has non-role content worth extracting as its own modules — standalone skills, side projects, open-source contributions, awards, certifications. False if everything of substance belongs to a specific role.`
 
@@ -295,8 +303,9 @@ const OUTLINE_SCHEMA = {
           title: { type: 'string' },
           date_start: { type: 'string', description: 'YYYY-MM, or empty string if not stated' },
           date_end: { type: 'string', description: 'YYYY-MM, "present", or empty string if not stated' },
+          start_anchor: { type: 'string', description: 'The first 8 words of this role\'s section, copied exactly as written in the resume (usually its company or title line)' },
         },
-        required: ['index', 'company', 'title', 'date_start', 'date_end'],
+        required: ['index', 'company', 'title', 'date_start', 'date_end', 'start_anchor'],
       },
     },
     has_extras: { type: 'boolean' },
@@ -320,7 +329,7 @@ function mergeSplitRoles(roles: OutlineRole[]): OutlineRole[] {
   return merged.map((r, i) => ({ ...r, index: i }))
 }
 
-async function extractOutline(rawText: string, userId: string): Promise<{ roles: OutlineRole[]; hasExtras: boolean }> {
+export async function extractOutline(rawText: string, userId: string): Promise<{ roles: OutlineRole[]; hasExtras: boolean }> {
   try {
     const result = await aiCompleteJson<{ roles: Array<Record<string, unknown>>; has_extras: boolean }>(
       [
@@ -328,19 +337,23 @@ async function extractOutline(rawText: string, userId: string): Promise<{ roles:
         { role: 'user', content: `Resume:\n${rawText}` },
       ],
       OUTLINE_SCHEMA,
-      1024,
+      1600,
       { tier: 'fast', userId, action: 'parse_modules' }
     )
     const roles = (result.roles ?? [])
       .map((r, i): OutlineRole | null => {
-        const company = String(r.company ?? '').trim()
-        if (!company) return null
+        const rawCompany = String(r.company ?? '').trim()
+        // An unnamed employer (an internship listed without a company) is still a role to
+        // extract from, but never a company name.
+        const company = isPlaceholderCompany(rawCompany) ? '' : rawCompany
+        if (!company && !String(r.title ?? '').trim()) return null
         return {
           index: typeof r.index === 'number' ? r.index : i,
           company,
           title: String(r.title ?? '').trim() || null,
           date_start: normalizeDate(r.date_start),
           date_end: normalizeDate(r.date_end),
+          start_anchor: String(r.start_anchor ?? '').trim() || null,
         }
       })
       .filter((r): r is OutlineRole => r !== null)
@@ -424,13 +437,61 @@ community-building, community-marketing, community-programs, community-ops, comm
 ROLE TYPES — pick only from this exact list (omit any that don't apply):
 vp-community, head-of-community, director-community, senior-manager-community, community-manager, developer-relations, developer-advocacy, developer-community-manager, community-marketing, community-ops, community-enablement, content-strategy, ic-community
 
-themes: values from the THEMES list above. role_types: values from the ROLE TYPES list above.`
+themes: values from the THEMES list above. role_types: values from the ROLE TYPES list above.
+
+WORKED EXAMPLE
+Resume section:
+  Lumen Health — Community Manager, Mar 2019 – Jun 2022
+  • Grew the patient community from 2,000 to 11,000 members in 18 months
+  • Launched a 40-person ambassador program that ran monthly local meetups
+  • Wrote the moderation playbook adopted by the support team
+Modules:
+[{"type":"experience","title":"Community Growth","content":"Grew the Lumen Health patient community from 2,000 to 11,000 members in 18 months.","source_company":"Lumen Health","source_role_title":"Community Manager","date_start":"2019-03","date_end":"2022-06","employment_type":"full-time","weight":"anchor","role_types":["community-manager"],"themes":["community-building","growth"],"company_stage":["growth"],"dimensions":["responsibility"]},
+ {"type":"story","title":"Ambassador Program","content":"Launched a 40-person ambassador program that ran monthly local meetups.","source_company":"Lumen Health","source_role_title":"Community Manager","date_start":"2019-03","date_end":"2022-06","employment_type":"full-time","weight":"strong","role_types":["community-manager"],"themes":["ambassador-programs","events"],"company_stage":["growth"],"dimensions":["responsibility","collaboration"]},
+ {"type":"experience","title":"Moderation Playbook","content":"Wrote the moderation playbook adopted by the support team.","source_company":"Lumen Health","source_role_title":"Community Manager","date_start":"2019-03","date_end":"2022-06","employment_type":"full-time","weight":"supporting","role_types":["community-manager"],"themes":["community-ops"],"company_stage":["growth"],"dimensions":["skill"]}]
+Every number is copied exactly; nothing is added that the section doesn't say.`
 
 const EXTRAS_FOCUS_INSTRUCTION = 'Extract modules only from content that is NOT part of a specific role — standalone skills, side projects, open-source contributions, awards, certifications. Do NOT create a module for the Summary/Profile/Objective/About section.'
 
-function roleFocusInstruction(role: OutlineRole): string {
+export function roleFocusInstruction(role: OutlineRole): string {
   const dates = role.date_start ? ` (${role.date_start} to ${role.date_end ?? 'present'})` : ''
-  return `Extract modules only for this role: #${role.index} — ${role.title ?? 'this role'} at ${role.company}${dates}. Only emit modules whose source_company and source_role_title match this role.`
+  return `Extract modules only for this role: #${role.index} — ${role.title ?? 'this role'} at ${role.company || 'an unnamed employer'}${dates}. Only emit modules whose source_company and source_role_title match this role.`
+}
+
+// Where a role's section starts: its start_anchor found in the text, exactly or ignoring
+// whitespace and case. -1 when the anchor isn't there.
+function anchorPosition(rawText: string, anchor: string | null | undefined): number {
+  if (!anchor) return -1
+  const exact = rawText.indexOf(anchor)
+  if (exact >= 0) return exact
+  // Whitespace/case-insensitive: compare on a collapsed copy, mapping back to original offsets.
+  const map: number[] = []
+  let collapsed = ''
+  for (let i = 0; i < rawText.length; i++) {
+    const ch = rawText[i]
+    if (/\s/.test(ch)) { if (collapsed.endsWith(' ')) continue; collapsed += ' ' } else collapsed += ch.toLowerCase()
+    map.push(i)
+  }
+  const needle = anchor.replace(/\s+/g, ' ').trim().toLowerCase()
+  const at = collapsed.indexOf(needle)
+  return at >= 0 ? map[at] : -1
+}
+
+/**
+ * Just this role's part of the resume: from its anchor to the next role's anchor. Per-role
+ * calls used to re-send the whole resume (~4-5k tokens each); on Haiku the prompt is under the
+ * caching minimum, so slicing saves more than caching did. null → use the full text.
+ */
+export function roleSlice(rawText: string, roles: OutlineRole[], role: OutlineRole): string | null {
+  const start = anchorPosition(rawText, role.start_anchor)
+  if (start < 0) return null
+  const later = roles
+    .filter(r => r !== role)
+    .map(r => anchorPosition(rawText, r.start_anchor))
+    .filter(p => p > start)
+  const end = later.length > 0 ? Math.min(...later) : rawText.length
+  const slice = rawText.slice(start, end).trim()
+  return slice.length >= 40 ? slice : null
 }
 
 // Shared extraction call. `focusInstruction` narrows the call to one role (or the "extras"
@@ -438,10 +499,15 @@ function roleFocusInstruction(role: OutlineRole): string {
 // cached leading block so parallel per-role calls reuse the same prompt-cache entry instead
 // of re-billing the whole resume on every call. `focusInstruction: null` is the fallback
 // single-call path — same shape as the original whole-resume extraction.
-async function extractModulesWithFocus(rawText: string, focusInstruction: string | null, userId: string): Promise<Record<string, unknown>[]> {
-  const content: Array<{ text: string; cache?: boolean }> = [
-    { text: `${PARSE_MODULES_SYSTEM_PROMPT}\n\nResume:\n${rawText}`, cache: true },
-  ]
+export async function extractModulesWithFocus(
+  rawText: string,
+  focusInstruction: string | null,
+  userId: string,
+  opts: { slice?: string | null; temperature?: number } = {},
+): Promise<Record<string, unknown>[]> {
+  const content: Array<{ text: string; cache?: boolean }> = opts.slice
+    ? [{ text: `${PARSE_MODULES_SYSTEM_PROMPT}\n\nResume section for this role:\n${opts.slice}` }]
+    : [{ text: `${PARSE_MODULES_SYSTEM_PROMPT}\n\nResume:\n${rawText}`, cache: true }]
   if (focusInstruction) content.push({ text: focusInstruction })
 
   const { modules } = await aiCompleteJson<{ modules: Record<string, unknown>[] }>(
@@ -450,8 +516,10 @@ async function extractModulesWithFocus(rawText: string, focusInstruction: string
       { role: 'user', content },
     ],
     PARSE_MODULES_SCHEMA,
-    focusInstruction ? 2048 : 8192,
-    { tier: 'quality', userId, action: 'parse_modules' }
+    // Per-role: Haiku writes more modules per role than Sonnet did and overran 2048 on long
+    // roles (the call is cut off and retried), so the cap went up rather than down.
+    focusInstruction ? 3200 : 8192,
+    { tier: 'quality', userId, action: 'parse_modules', ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}) }
   )
   // Forced tool-use is reliable but not airtight — on thin/sparse content the model has
   // returned `modules` as something other than an array (null, a single object). Never
@@ -494,6 +562,7 @@ function sanitizeModule(m: Record<string, unknown>, userId: string, profileId: s
 }
 
 type BatchContext = {
+  dryRun?: boolean
   knownCompanies: Set<string>
   dedupe: DedupeState
   // The outline role this batch was extracted for. Its company, title and dates win over the
@@ -522,13 +591,14 @@ async function insertModulesBatch(
     .map(m => {
       const role = ctx.role
       if (!role || !m.source_company || m.type === 'positioning') return m
-      return { ...m, source_company: role.company, source_role_title: role.title, date_start: role.date_start, date_end: role.date_end }
+      return { ...m, source_company: role.company || null, source_role_title: role.title, date_start: role.date_start, date_end: role.date_end }
     })
     // Runs synchronously between awaits, so parallel role batches can't both take one duplicate.
     .filter(m => takeIfNew(m, ctx.dedupe))
   if (attributed.length === 0) return []
 
   const toInsert = attributed.map(m => sanitizeModule(m, userId, profileId, resumeId))
+  if (ctx.dryRun) return toInsert.map(m => ({ ...m, id: `dry-${Math.random().toString(36).slice(2, 10)}` }))
   const { data, error } = await supabase.from('modules').insert(toInsert).select()
   if (error) throw error
   return data ?? []
@@ -546,8 +616,11 @@ export async function parseModules(
   resumeId: string,
   rawText: string,
   profileId: string,
-  onEvent?: (event: ParseProgressEvent) => void
+  onEvent?: (event: ParseProgressEvent) => void,
+  /** dryRun: parse exactly as for real but write nothing (the eval suite, scripts/eval). */
+  options: { dryRun?: boolean } = {},
 ) {
+  const dryRun = !!options.dryRun
   // Contact/summary/education extraction only needs rawText — start it now so it runs
   // concurrently with module parsing and the DB work that follows.
   const contactPromise = extractContactInfo(rawText).then(contact => {
@@ -559,16 +632,19 @@ export async function parseModules(
     extractOutline(rawText, userId),
     // Modules already in this profile from earlier uploads — a second resume for the same
     // person shouldn't re-add the same accomplishments.
-    supabase
-      .from('modules')
-      .select('source_company, content')
-      .eq('user_id', userId)
-      .eq('profile_id', profileId)
-      .is('deleted_at', null),
+    dryRun
+      ? Promise.resolve({ data: [] as Array<{ source_company: string | null; content: string | null }> })
+      : supabase
+        .from('modules')
+        .select('source_company, content')
+        .eq('user_id', userId)
+        .eq('profile_id', profileId)
+        .is('deleted_at', null),
   ])
   onEvent?.({ type: 'outline', roles: outlineRoles, extras: hasExtras })
 
   const knownCompanies = new Set(outlineRoles.map(r => normalizeCompany(r.company)))
+  const batchBase = { dryRun, knownCompanies }
   const dedupe: DedupeState = {
     existing: (existingModules ?? []).map(m => ({ company: normalizeCompany(m.source_company), tokens: contentTokens(m.content) })),
     accepted: [],
@@ -587,8 +663,8 @@ export async function parseModules(
       : []
     const others = rawModulesData.filter(m => !forRole.includes(m))
     const inserted = [
-      ...await insertModulesBatch(supabase, userId, profileId, resumeId, forRole, { knownCompanies, dedupe, role: onlyRole }),
-      ...await insertModulesBatch(supabase, userId, profileId, resumeId, others, { knownCompanies, dedupe }),
+      ...await insertModulesBatch(supabase, userId, profileId, resumeId, forRole, { ...batchBase, dedupe, role: onlyRole }),
+      ...await insertModulesBatch(supabase, userId, profileId, resumeId, others, { ...batchBase, dedupe }),
     ]
     allInsertedModules = inserted
     if (outlineRoles.length === 1) {
@@ -615,10 +691,16 @@ export async function parseModules(
       // coming back with zero modules is a quality failure just as much as an exception
       // (seen in practice: forced tool-use occasionally returns an empty/malformed array
       // for one role in a multi-role batch even though its content is clearly there).
+      const slice = task.kind === 'role' ? roleSlice(rawText, outlineRoles, task.role) : null
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          const result = await extractModulesWithFocus(rawText, focusInstruction, userId)
+          // The retry runs at temperature 0, on the full text if the slice came back empty.
+          const result = await extractModulesWithFocus(rawText, focusInstruction, userId, attempt === 1
+            ? { slice }
+            : { slice: null, temperature: 0 })
           if (result.length > 0) { rawModulesData = result; break }
+          // A role with no detail (an "Earlier Career" line) has nothing to extract: done, not failed.
+          if (slice && slice.length < 250) { rawModulesData = []; break }
           console.error(`[parseModules] task ${taskLabel} attempt ${attempt} returned no modules, retrying`)
         } catch (err) {
           console.error(`[parseModules] task ${taskLabel} attempt ${attempt} failed:`, err)
@@ -635,7 +717,7 @@ export async function parseModules(
       }
       try {
         const inserted = await insertModulesBatch(supabase, userId, profileId, resumeId, rawModulesData, {
-          knownCompanies,
+          ...batchBase,
           dedupe,
           role: task.kind === 'role' ? task.role : undefined,
         })
@@ -671,6 +753,8 @@ export async function parseModules(
   // RLS). Operates on the already-inserted module rows regardless of which path produced them.
   let jobSyncError: string | undefined
   let jobExperienceIds: string[] = []
+  // Dry run: the job records that would have been written.
+  let dryRunJobs: { company: string; title: string | null; start_date: string | null; end_date: string | null }[] = []
   const jobContentMap = new Map<string, string[]>()
   try {
     const admin = getAdminClient()
@@ -703,7 +787,26 @@ export async function parseModules(
       }
     }
 
-    if (uniqueExperiences.length > 0) {
+    // Roles the outline found that produced no modules (an "Earlier Career" line, a role with
+    // no detail) still get a job record, so the work history stays complete.
+    for (const r of outlineRoles) {
+      if (!r.company) continue
+      const exists = uniqueExperiences.some(e =>
+        normalizeCompany(e.company) === normalizeCompany(r.company) &&
+        (e.title ?? '').trim().toLowerCase() === (r.title ?? '').trim().toLowerCase())
+      if (exists) continue
+      uniqueExperiences.push({
+        company: r.company,
+        title: r.title,
+        start_date: r.date_start ? `${r.date_start}-01` : null,
+        end_date: r.date_end ? `${r.date_end}-01` : null,
+        employment_type: 'full-time',
+      })
+    }
+
+    if (dryRun) {
+      dryRunJobs = uniqueExperiences
+    } else if (uniqueExperiences.length > 0) {
       const { error: jeError } = await admin
         .from('job_experiences')
         .upsert(
@@ -764,7 +867,7 @@ export async function parseModules(
 
   // Auto-populate skills per job from its module content. Best-effort: a failure
   // here must never break the parse, so the whole block is guarded.
-  try {
+  if (!dryRun) try {
     const admin = getAdminClient()
     for (const [jobId, contents] of jobContentMap) {
       try {
@@ -801,5 +904,5 @@ export async function parseModules(
   // calls and all the DB work above, not after them.
   const contact = await contactPromise
 
-  return { modules: allInsertedModules, contact, jobSyncError, jobExperienceIds }
+  return { modules: allInsertedModules, contact, jobSyncError, jobExperienceIds, outlineRoles, dryRunJobs }
 }

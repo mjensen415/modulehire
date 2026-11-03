@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { ScoreChip } from '@/components/ScoreGauge'
 import { computeStorageUsage, type StorageUsage } from '@/lib/plan'
+import { makeResumeEditable } from '@/components/MakeEditableCard'
+import { useRouter } from 'next/navigation'
 
 type GeneratedResume = {
   id: string
@@ -17,6 +19,8 @@ type GeneratedResume = {
   expired: boolean
   job_description_id: string | null
   ats_score: number | null
+  /** Has a live document (opens in the editor). */
+  editable?: boolean
   job_descriptions: {
     extracted_company: string | null
     extracted_role_type: string | null
@@ -58,6 +62,19 @@ export default function ResumesPage() {
   const [storage, setStorage] = useState<StorageUsage | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [converting, setConverting] = useState<string | null>(null)
+  const router = useRouter()
+
+  async function handleMakeEditable(id: string) {
+    setConverting(id)
+    try {
+      await makeResumeEditable(id)
+      router.push(`/resumes/${id}`)
+    } catch (e) {
+      alert((e as Error).message)
+      setConverting(null)
+    }
+  }
 
   useEffect(() => {
     fetch('/api/my-resumes')
@@ -172,11 +189,24 @@ export default function ResumesPage() {
                         <span style={{ color: 'var(--rose)', opacity: 0.8 }}>{timeUntilExpiry(r.expires_at)}</span>
                       )}
                       <ScoreChip score={r.ats_score} />
+                      {r.editable && (
+                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--teal)', border: '1px solid var(--teal-glow, var(--teal))', borderRadius: 999, padding: '1px 8px' }}>Editable</span>
+                      )}
                     </div>
                   </div>
 
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
+                    {!r.editable && r.job_description_id && (
+                      <button
+                        className="btn-ghost"
+                        style={{ fontSize: 12, padding: '5px 12px', whiteSpace: 'nowrap' }}
+                        onClick={() => handleMakeEditable(r.id)}
+                        disabled={converting === r.id}
+                      >
+                        {converting === r.id ? 'Rebuilding…' : 'Make editable'}
+                      </button>
+                    )}
                     {r.job_description_id && (
                       <Link
                         href={`/generate?jd_id=${r.job_description_id}`}

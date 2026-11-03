@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 
 export async function POST() {
   try {
@@ -40,7 +40,9 @@ export async function POST() {
       })
       customerId = customer.id
 
-      const { error: saveError } = await supabase
+      // Service role: users can't write their own stripe_customer_id (20261028_lock_users_columns).
+      const admin = await createAdminClient()
+      const { error: saveError } = await admin
         .from('users')
         .update({ stripe_customer_id: customerId })
         .eq('id', user.id)

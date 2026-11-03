@@ -21,9 +21,23 @@ export async function GET(request: Request) {
       // If the caller specified ?next=, honour it.
       if (explicitNext) return NextResponse.redirect(`${origin}${explicitNext}`)
 
+      // Google/LinkedIn sign-in started with ?next= (e.g. from /oauth/consent): the signin page
+      // stashed it in a cookie, since the callback URL can't carry it.
+      const cookieStore = await cookies()
+      let stashedNext: string | null = null
+      try {
+        stashedNext = safeNext(decodeURIComponent(cookieStore.get('__mh_oauth_next')?.value ?? ''))
+      } catch {
+        // Malformed cookie: ignore it and route as usual.
+      }
+      if (stashedNext) {
+        const res = NextResponse.redirect(`${origin}${stashedNext}`)
+        res.cookies.set('__mh_oauth_next', '', { path: '/', maxAge: 0 })
+        return res
+      }
+
       // Check if this OAuth flow originated from the business subdomain.
       // The signin page sets __mh_oauth_src=business before triggering OAuth.
-      const cookieStore = await cookies()
       const isBusinessOAuth = cookieStore.get('__mh_oauth_src')?.value === 'business'
 
       if (isBusinessOAuth) {
