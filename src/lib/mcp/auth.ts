@@ -48,8 +48,8 @@ export async function verifyToken(_req: Request, bearerToken?: string): Promise<
 }
 
 /** The verified user behind a tool call. Throws if the request somehow reached a tool unauthenticated. */
-export function mcpUser(authInfo: AuthInfo | undefined): McpUser & { supabase: SupabaseClient } {
+export function mcpUser(authInfo: AuthInfo | undefined): McpUser & { supabase: SupabaseClient; token: string } {
   const extra = authInfo?.extra as { userId?: string; email?: string | null } | undefined
   if (!authInfo || !extra?.userId) throw new Error('Not signed in to ModuleHire.')
-  return { userId: extra.userId, email: extra.email ?? null, client: authInfo.clientId, supabase: userClient(authInfo.token) }
+  return { userId: extra.userId, email: extra.email ?? null, client: authInfo.clientId, supabase: userClient(authInfo.token), token: authInfo.token }
 }

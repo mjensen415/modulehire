@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { bearerHeader, resolveAuth } from '@/lib/supabase/resolve-auth'
 import { isUuid } from '@/lib/validate'
 import { checkAndLog } from '@/lib/rate-limit'
 import { sanitizeCriteria, type JdCriterion } from '@/lib/dimensions'
@@ -66,8 +66,8 @@ const sleep = (ms: number) => new Promise<'timeout'>(resolve => setTimeout(() =>
  * stage's timing is logged to usage_events (ev_stage_*).
  */
 export async function POST(req: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  // Cookie session for the web app; a bearer token when the MCP server calls in-process.
+  const { user, supabase } = await resolveAuth(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json().catch(() => ({}))
@@ -79,6 +79,8 @@ export async function POST(req: Request) {
   }
   const startedAt = Date.now()
   const base = req.url
+  // Forwarded so the handlers below resolve the same user on a bearer-authenticated request.
+  const auth = bearerHeader(req)
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -136,12 +138,12 @@ export async function POST(req: Request) {
         } else {
           let rawText = rawInput
           if (urlInput && rawText.trim().length < 50) {
-            const res = await fetchJdUrl(internalRequest(base, '/api/fetch-jd-url', { url: urlInput }))
+            const res = await fetchJdUrl(internalRequest(base, '/api/fetch-jd-url', { url: urlInput }, 'POST', auth))
             const data = await res.json().catch(() => ({}))
             if (!res.ok || typeof data.text !== 'string') { fail(data.error ?? 'We couldn\'t read that link. Paste the posting text instead.'); return }
             rawText = data.text
           }
-          const res = await analyzeJd(internalRequest(base, '/api/analyze-jd', { raw_text: rawText }))
+          const res = await analyzeJd(internalRequest(base, '/api/analyze-jd', { raw_text: rawText }, 'POST', auth))
           if (!res.ok || !res.body) {
             const data = await res.json().catch(() => ({}))
             fail(data.error ?? 'We couldn\'t read this posting.')
@@ -198,7 +200,7 @@ export async function POST(req: Request) {
 
         // A known JD with a logged run (Make another version): reuse it, no AI.
         if (jdIdInput) {
-          const runRes = await latestMatchRun(internalRequest(base, `/api/match-runs?jd_id=${basics.jd_id}`, undefined, 'GET'))
+          const runRes = await latestMatchRun(internalRequest(base, `/api/match-runs?jd_id=${basics.jd_id}`, undefined, 'GET', auth))
           const run = (await runRes.json().catch(() => ({})))?.run
           if (run?.ranked_modules?.length) {
             ranked = run.ranked_modules as Ranked[]
@@ -242,12 +244,12 @@ export async function POST(req: Request) {
         stage = 'document'
         const documentStarted = Date.now()
         // The handlers are this app's own routes, called in-process: same request, same auth
-        // cookies (next/headers reads them from the current request), no HTTP hop.
+        // cookies (next/headers reads them from the current request) or forwarded bearer, no HTTP hop.
         const skillTitles = ranked.filter(m => m.type === 'skill' && m.match_score >= 70).map(m => String(m.title ?? ''))
         const genRes = await generateResume(internalRequest(base, '/api/generate-resume', await draftGenerateBody(
           supabase, user, basics, picked, skillTitles,
           { stream: true, bullets_per_role: { recent: AUTO_PICK.bulletsRecent, older: AUTO_PICK.bulletsOlder } },
-        )))
+        ), 'POST', auth))
         if (!genRes.ok) {
           const gen = await genRes.json().catch(() => ({}))
           fail(gen.error ?? 'We couldn\'t write the draft. Try again.', gen.code)

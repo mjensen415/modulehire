@@ -1,4 +1,4 @@
-// ModuleHire (classic) MCP tools, Phase 1: read-only.
+// ModuleHire (classic) MCP tools: the read-only ones. Write tools are in write-tools.ts.
 //
 // Design rule: the host model does the writing; these tools hand it the user's real data
 // (library, jobs, live resume documents, fit). No tool here calls our own AI, so MCP reads
@@ -16,12 +16,12 @@ import { json, runTool, ToolError, type ToolEnv } from './run-tool'
 import { planUsage } from './quota'
 import { appUrl } from './urls'
 
-const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const
+export const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const
 
-const jobLabel = (jd: { extracted_job_title?: string | null; extracted_company?: string | null } | null) =>
+export const jobLabel = (jd: { extracted_job_title?: string | null; extracted_company?: string | null } | null) =>
   `${jd?.extracted_job_title || 'Untitled role'}${jd?.extracted_company ? ` at ${jd.extracted_company}` : ''}`
 
-async function loadResumeDoc(env: ToolEnv, resumeId: string) {
+export async function loadResumeDoc(env: ToolEnv, resumeId: string) {
   const { data: row, error } = await env.supabase
     .from('resume_documents')
     .select('id, doc, version, fit_report, job_description_id, updated_at')
@@ -52,7 +52,7 @@ async function loadResumeDoc(env: ToolEnv, resumeId: string) {
 
 // The document as the model should see it: every editable line with its block id, so later
 // edit tools can target lines precisely.
-function docForModel(doc: ResumeDoc) {
+export function docForModel(doc: ResumeDoc) {
   const shown = visibleDoc(doc)
   return {
     header: { name: shown.header.name, title: shown.header.title, contact: shown.header.contact },
@@ -69,6 +69,37 @@ function docForModel(doc: ResumeDoc) {
     })),
     skills: shown.skills,
     awards: shown.awards || null,
+  }
+}
+
+/**
+ * Fit of a resume against its target job: the stored server score when it matches the current
+ * version, otherwise the live estimate (src/lib/live-fit.ts). Never calls our AI.
+ */
+export async function resumeFit(
+  env: ToolEnv,
+  row: { version: number; fit_report: unknown; job_description_id: string | null },
+  doc: ResumeDoc,
+) {
+  const stored = row.fit_report as { overall: number; doc_version: number; criteria: Array<{ label: string; score: number; bucket: string; why: string }> } | null
+  if (stored && stored.doc_version === row.version) {
+    return { source: 'scored' as const, overall: stored.overall, requirements: stored.criteria }
+  }
+  if (!row.job_description_id) throw new ToolError('This resume has no target job to score against.')
+  const { data: jd } = await env.supabase
+    .from('job_descriptions')
+    .select('extracted_criteria')
+    .eq('id', row.job_description_id)
+    .eq('user_id', env.userId)
+    .maybeSingle()
+  const criteria = sanitizeCriteria(jd?.extracted_criteria)
+  if (criteria.length === 0) throw new ToolError("This resume's job has no requirements to score against.")
+  const live = scoreLiveFit(docText(doc), criteria)
+  return {
+    source: 'estimate' as const,
+    note: 'Estimate on the same scale as the stored score; it can differ by a few points. Opening the resume in the editor refreshes the full score.',
+    overall: live.score,
+    requirements: live.criteria.map((c) => ({ label: c.label, weight: c.weight, covered: c.covered, matched: c.matched })),
   }
 }
 
@@ -335,27 +366,7 @@ export function registerClassicTools(server: McpServer) {
     async ({ resume_id }, ctx) =>
       runTool('check_fit', ctx.http?.authInfo, async (env) => {
         const { row, doc } = await loadResumeDoc(env, resume_id)
-        const stored = row.fit_report as { overall: number; doc_version: number; criteria: Array<{ label: string; score: number; bucket: string; why: string }> } | null
-        if (stored && stored.doc_version === row.version) {
-          return json({ resume_id, source: 'scored', overall: stored.overall, requirements: stored.criteria })
-        }
-        if (!row.job_description_id) throw new ToolError('This resume has no target job to score against.')
-        const { data: jd } = await env.supabase
-          .from('job_descriptions')
-          .select('extracted_criteria')
-          .eq('id', row.job_description_id)
-          .eq('user_id', env.userId)
-          .maybeSingle()
-        const criteria = sanitizeCriteria(jd?.extracted_criteria)
-        if (criteria.length === 0) throw new ToolError("This resume's job has no requirements to score against.")
-        const live = scoreLiveFit(docText(doc), criteria)
-        return json({
-          resume_id,
-          source: 'estimate',
-          note: 'Estimate on the same scale as the stored score; it can differ by a few points. Opening the resume in the editor refreshes the full score.',
-          overall: live.score,
-          requirements: live.criteria.map((c) => ({ label: c.label, weight: c.weight, covered: c.covered, matched: c.matched })),
-        })
+        return json({ resume_id, ...(await resumeFit(env, row, doc)) })
       }),
   )
 

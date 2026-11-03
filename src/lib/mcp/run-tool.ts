@@ -9,7 +9,9 @@ import type { AuthInfo } from '@modelcontextprotocol/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { mcpUser } from './auth'
 
-export type ToolEnv = { userId: string; email: string | null; client: string; supabase: SupabaseClient }
+// `token` is the caller's bearer token, forwarded only on in-process calls into this app's own
+// route handlers (generate_resume → /api/jobs/start); never returned to the model.
+export type ToolEnv = { userId: string; email: string | null; client: string; supabase: SupabaseClient; token: string }
 
 /** A message meant for the user (not a crash). Shown to the model as-is. */
 export class ToolError extends Error {}
