@@ -53,8 +53,25 @@ function applySecurityHeaders(res: NextResponse) {
   }
 }
 
+// The MCP endpoint is open to any origin so browser-based MCP clients (MCP Inspector, web agents)
+// can connect. Safe because /api/mcp authenticates only by bearer token (verifyToken never reads
+// cookies) and there is no Allow-Credentials, so a browser never sends cookies cross-origin.
+// WWW-Authenticate is exposed so clients can find the OAuth metadata after a 401.
+const MCP_PATH = '/api/mcp'
+const MCP_CORS: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID',
+  'Access-Control-Expose-Headers': 'Mcp-Session-Id, Mcp-Protocol-Version, WWW-Authenticate',
+  'Access-Control-Max-Age': '86400',
+}
+
 // Set CORS headers only when an allowed origin hits /api/*; omit otherwise.
-function applyCors(res: NextResponse, origin: string | null) {
+function applyCors(res: NextResponse, origin: string | null, pathname: string) {
+  if (pathname === MCP_PATH) {
+    for (const [key, value] of Object.entries(MCP_CORS)) res.headers.set(key, value)
+    return
+  }
   if (origin && ALLOWED_ORIGINS.has(origin)) {
     res.headers.set('Access-Control-Allow-Origin', origin)
     res.headers.set('Access-Control-Allow-Methods', CORS_METHODS)
@@ -70,7 +87,7 @@ export async function proxy(request: NextRequest) {
   if (isApi && request.method === 'OPTIONS') {
     const res = new NextResponse(null, { status: 200 })
     applySecurityHeaders(res)
-    applyCors(res, origin)
+    applyCors(res, origin, request.nextUrl.pathname)
     return res
   }
 
@@ -83,7 +100,7 @@ export async function proxy(request: NextRequest) {
   const res = await updateSession(request, nonce, csp)
   applySecurityHeaders(res)
   res.headers.set('Content-Security-Policy', csp)
-  if (isApi) applyCors(res, origin)
+  if (isApi) applyCors(res, origin, request.nextUrl.pathname)
   return res
 }
 

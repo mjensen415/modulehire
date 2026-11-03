@@ -1,5 +1,6 @@
-// Shared wrapper for every MCP tool: resolves the signed-in user, times the call, logs it to
-// usage_events, and turns thrown errors into tool errors the model can read.
+// Shared wrapper for every MCP tool: resolves the signed-in user, applies the per-user rate limit
+// (src/lib/mcp/limits.ts), times the call, logs it to usage_events, and turns thrown errors into
+// tool errors the model can read.
 //
 // Logged as `ev_mcp_<tool>` because usage_events_action_check already allows the `ev_` prefix
 // (20261024 migration). metadata: { client, ok, ms }. Usage by client:
@@ -8,6 +9,7 @@
 import type { AuthInfo } from '@modelcontextprotocol/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { mcpUser } from './auth'
+import { checkMcpLimit } from './limits'
 
 // `token` is the caller's bearer token, forwarded only on in-process calls into this app's own
 // route handlers (generate_resume → /api/jobs/start); never returned to the model.
@@ -33,6 +35,16 @@ export async function runTool(
     env = mcpUser(authInfo)
   } catch (e) {
     return { content: [{ type: 'text', text: (e as Error).message }], isError: true }
+  }
+
+  // Refused calls log ev_limit_mcp, not ev_mcp_<tool>, so they don't count toward the limit.
+  const limit = await checkMcpLimit(env.supabase, env.userId, name)
+  if (!limit.ok) {
+    const { error } = await env.supabase
+      .from('usage_events')
+      .insert({ user_id: env.userId, action: 'ev_limit_mcp', metadata: { tool: name, client: env.client.slice(0, 100) } })
+    if (error) console.error(`[mcp ${name}] limit log failed:`, error)
+    return { content: [{ type: 'text', text: limit.message }], isError: true }
   }
 
   let ok = true

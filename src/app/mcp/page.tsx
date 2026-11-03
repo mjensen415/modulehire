@@ -100,6 +100,10 @@ const FAQS: { q: string; a: string }[] = [
     a: 'No. It uses your ModuleHire plan. Reading, editing, exporting, and tracking are free on every plan. Generating a new resume counts toward your monthly limit, the same as on the website.',
   },
   {
+    q: 'Is there a limit on how much the app can do?',
+    a: 'Each account can make up to 60 requests a minute and 600 an hour through connected apps, with lower hourly caps on exports, editor links, and interview prep. Normal use stays well under that; the limits are there so a stuck assistant cannot hammer your account. If you hit one, the assistant will tell you, and it clears after a short wait.',
+  },
+  {
     q: 'What if I edit in the browser while the AI is editing too?',
     a: 'Every edit is checked against the version the AI last read. If you changed the resume in the browser since then, the AI\'s edit is refused, it reads the latest version, and tries again. Your browser edits are never overwritten.',
   },

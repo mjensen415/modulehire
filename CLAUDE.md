@@ -430,6 +430,13 @@ Public docs page: `/mcp`; listing copy and screenshots: `docs/mcp-listing/`.
   ui://modulehire/resume-card.html`) and return the card data as `structuredContent` next to
   unchanged text. The card is one self-contained HTML file (no external resources, default CSP)
   that speaks the postMessage protocol directly rather than inlining the 540 KB SDK bundle.
+- **Rate limit:** `runTool` calls `checkMcpLimit` (`src/lib/mcp/limits.ts`) first: 60 calls a minute and
+  600 an hour per user across all tools, plus hourly caps on `interview_prep` (10), `export_resume` (30)
+  and `get_editor_link` (20). It counts the user's `ev_mcp_*` rows; refused calls log `ev_limit_mcp`
+  instead so they don't count. Fails open. Only holds once `20261029_lock_usage_events.sql` stops
+  users deleting their own rows.
+- **CORS:** `proxy.ts` answers `/api/mcp` for any origin (no credentials; auth is bearer-only) so
+  browser clients like MCP Inspector work; every other `/api` route keeps the origin allowlist.
 - **Usage:** each call logs `ev_mcp_<tool>` with `metadata { client, ok, ms }` (client is the
   OAuth `client_id`, or `session` for a plain session token):
   `select metadata->>'client', action, count(*) from usage_events where action like 'ev_mcp_%' group by 1, 2 order by 3 desc;`
