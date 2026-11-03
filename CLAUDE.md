@@ -430,6 +430,10 @@ Public docs page: `/mcp`; listing copy and screenshots: `docs/mcp-listing/`.
 - **Gotchas hit building it:**
   - The OAuth metadata `resource` must match the URL the client called; a rewrite from
     `mcp.modulehire.com` to `/api/mcp` breaks that check, so the server lives at `/api/mcp` only.
+  - The canonical host is `www.modulehire.com` (the apex 307s there), and `resource` is built
+    from the request host, so the connector URL everywhere is `https://www.modulehire.com/api/mcp`
+    (`/mcp` page, `SUBMISSION.md`, `appUrl()` fallback). Giving clients the apex URL would fail
+    that check.
   - Supabase OAuth scopes (openid, email, profile, phone) do not limit database access; the
     token can do anything the user can. RLS and the column lockdown are the real boundary.
   - An MCP App host must connect its bridge before the iframe loads; the card sends

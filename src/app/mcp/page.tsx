@@ -18,7 +18,9 @@ export const metadata: Metadata = {
     'Connect ModuleHire to your AI assistant. Save wins to your career library, tailor resumes to a job, edit them line by line, and track applications, all from chat.',
 }
 
-const SERVER_URL = 'https://modulehire.com/api/mcp'
+// www is the canonical host (the apex redirects there), and OAuth clients check that this
+// URL matches the `resource` in /.well-known/oauth-protected-resource/api/mcp.
+const SERVER_URL = 'https://www.modulehire.com/api/mcp'
 
 const PROMPTS: { group: string; color: string; items: string[] }[] = [
   {
