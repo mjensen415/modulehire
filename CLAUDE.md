@@ -382,6 +382,62 @@ current `tier` is `beta_pro`; `starter` doesn't map to any tier so it's left alo
 directly and was never affected — prefer it over the old `/admin` page's plan dropdown when
 granting pro access manually.
 
+## MCP server (`/api/mcp`)
+A remote MCP server so Claude, ChatGPT, Cursor and Claude Code can use a ModuleHire account.
+Public docs page: `/mcp`; listing copy and screenshots: `docs/mcp-listing/`.
+- **Stack:** `mcp-handler` (`createMcpHandler` + `withMcpAuth`, stateless Streamable HTTP) on
+  `@modelcontextprotocol/server` 2.x; route `src/app/api/mcp/route.ts` (`maxDuration` 300 for
+  `generate_resume`). Read tools in `src/lib/mcp/tools.ts`, write tools in
+  `src/lib/mcp/write-tools.ts`, preview card in `src/lib/mcp/card.ts` + `card-html.ts`.
+- **Auth:** Supabase Auth's OAuth 2.1 server (dashboard: Authorization Path `/oauth/consent`,
+  dynamic client registration on). `/.well-known/oauth-protected-resource/api/mcp` names
+  `<SUPABASE_URL>/auth/v1` as the authorization server. `verifyToken` (`src/lib/mcp/auth.ts`)
+  checks every bearer token with `auth.getUser`, and each tool runs on a user-scoped client
+  (`userClient(token)`) so RLS applies. Consent UI: `src/app/oauth/consent/` (a server action
+  returns the redirect URL and the client navigates, because CSP `form-action 'self'` blocks a
+  form POST that redirects off-site). Signed-out users go through `/signin?next=` (Google keeps
+  `next` in the `__mh_oauth_next` cookie). Users see and revoke grants under Account, Connected
+  accounts, AI apps (`/api/connected-apps`, `listGrants`/`revokeGrant`; revoking ends sessions,
+  so the next `getUser` fails).
+- **Rules:** the host model writes; only `generate_resume` and `interview_prep` call our AI.
+  Every tool goes through `runTool()` (`src/lib/mcp/run-tool.ts`), has a `title` and read-only
+  or destructive annotations. Plan limits come from the same code as the web app
+  (`src/lib/mcp/quota.ts` over `src/lib/plan.ts` + `src/lib/usage-limits.ts`).
+- **Shared code paths:** resume saves use `saveResumeDoc` (`src/lib/resume-doc-save.ts`, also the
+  editor's PATCH; stale version = conflict, never overwrite). `generate_resume` calls
+  `/api/jobs/start` in-process with the caller's bearer token; `jobs/start`, `fetch-jd-url` and
+  `match-runs` resolve the user with `resolveAuth` (`src/lib/supabase/resolve-auth.ts`, cookie
+  first) and `jobs/start` forwards the `Authorization` header to the handlers it calls.
+  Interview prep: `src/lib/interview-prep.ts`. Tracker statuses and status-change stamps:
+  `APPLICATION_STATUSES` / `statusChangeFields` in `src/lib/tracker.ts`.
+- **Tools:** read: `get_career_library`, `search_modules`, `list_jobs`, `get_job`,
+  `list_resumes`, `get_resume`, `check_fit` (stored fit if current, else `live-fit` estimate),
+  `list_applications`. Write: `add_module`, `update_block` (returns fact-check warnings from
+  `unsupportedTerms`), `reorder_blocks`, `set_section_visibility`, `generate_resume` (handles
+  `need_title` by asking for `job_title`), `track_application`, `update_application_status`,
+  `interview_prep` (Pro), `export_resume` (temp bucket `<user>/exports/`, 10-minute signed URL,
+  logs `ev_export` with `via: 'mcp'`), `get_editor_link` (`mcp_link_tokens`, sha256 only,
+  5 minutes, single use; `/go/[token]` verifies a magic link's hashed token server-side so no
+  session token is ever in a URL; unconfirmed emails go to `/signin` instead).
+- **Preview card (MCP Apps, protocol 2026-01-26):** `get_resume`, `update_block` and
+  `generate_resume` are registered with `registerAppTool` (`_meta.ui.resourceUri =
+  ui://modulehire/resume-card.html`) and return the card data as `structuredContent` next to
+  unchanged text. The card is one self-contained HTML file (no external resources, default CSP)
+  that speaks the postMessage protocol directly rather than inlining the 540 KB SDK bundle.
+- **Usage:** each call logs `ev_mcp_<tool>` with `metadata { client, ok, ms }` (client is the
+  OAuth `client_id`, or `session` for a plain session token):
+  `select metadata->>'client', action, count(*) from usage_events where action like 'ev_mcp_%' group by 1, 2 order by 3 desc;`
+- **Gotchas hit building it:**
+  - The OAuth metadata `resource` must match the URL the client called; a rewrite from
+    `mcp.modulehire.com` to `/api/mcp` breaks that check, so the server lives at `/api/mcp` only.
+  - Supabase OAuth scopes (openid, email, profile, phone) do not limit database access; the
+    token can do anything the user can. RLS and the column lockdown are the real boundary.
+  - An MCP App host must connect its bridge before the iframe loads; the card sends
+    `ui/initialize` immediately.
+  - Testing writes against production data needs care: smoke tests run as the owner account and
+    clean up after themselves; the auto-mode classifier blocks modifying SQL on production and
+    local servers that hold a token.
+
 ## Gotchas
 - **`public.users` columns are not user-writable by default** (`20261028_lock_users_columns.sql`). A new column the user should edit with their own client needs `grant update (col) on public.users to authenticated;`; otherwise the write fails with permission denied. Billing, plan, tier, admin, credits, Stripe ids and `onboarding_complete` are service-role only. Column REVOKEs do nothing while a table-level GRANT exists, so audit other tables with `has_column_privilege` rather than reading the policies alone.
 - `git add` with parentheses in paths trips up zsh — always use `git add -A`

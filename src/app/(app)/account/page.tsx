@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import ConnectedAiApps from './ConnectedAiApps'
 
 type Section = 'account' | 'billing' | 'connected' | 'profiles' | 'danger'
 
@@ -361,6 +362,7 @@ export default function Settings() {
                   </div>
                   <button className="btn-connect">Connect</button>
                 </div>
+                <ConnectedAiApps />
               </div>
             )}
 

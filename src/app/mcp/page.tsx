@@ -103,7 +103,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: 'How do I disconnect?',
-    a: 'Remove ModuleHire from your AI app\'s connector or MCP settings. The app stops calling ModuleHire right away. Questions? Email info@modulehire.com.',
+    a: 'Go to Account, then Connected accounts, and choose Disconnect next to the app under AI apps. Its access ends right away, even if the app still lists ModuleHire. You can also remove ModuleHire from the app\'s own connector settings. Questions? Email info@modulehire.com.',
   },
 ]
 

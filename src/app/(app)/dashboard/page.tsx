@@ -6,6 +6,7 @@ import { getActiveProfileId } from '@/lib/profile';
 import { DIMENSIONS, DIMENSION_LABELS, type Dimension } from '@/lib/dimensions';
 import MatchReport, { type MatchReportData } from '@/components/MatchReport';
 import DashboardProfileSwitch from './DashboardProfileSwitch';
+import McpPromoCard from './McpPromoCard';
 import DashboardBreakdownRow from './DashboardBreakdownRow';
 
 // ─── ICONS ───
@@ -433,6 +434,8 @@ export default async function Dashboard() {
                   </div>
                 </div>
               </div>
+
+              <McpPromoCard />
             </div>
 
             {/* ── RIGHT COLUMN ── */}
