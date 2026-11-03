@@ -171,9 +171,9 @@
 
 .moduleCard {
   margin-top: 10px;
-  border-left: 3px solid var(--teal);
+  border: 1px solid oklch(0.65 0.20 195 / 0.3);
   background: var(--teal-dim);
-  border-radius: 6px 8px 8px 6px;
+  border-radius: 8px;
   padding: 10px 12px;
 }
 .moduleTags { display: flex; gap: 6px; margin-bottom: 6px; }
