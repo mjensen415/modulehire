@@ -1,20 +1,23 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800"],
+// Bundled, not next/font/google: fetching from Google at build time intermittently failed Vercel builds.
+const jakarta = localFont({
+  src: "./fonts/plus-jakarta-sans-variable.woff2",
+  weight: "200 800",
   variable: "--font",
 });
 
-const mono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
+const mono = localFont({
+  src: "./fonts/jetbrains-mono-variable.woff2",
+  weight: "100 800",
   variable: "--mono",
+  fallback: ["ui-monospace", "monospace"],
+  adjustFontFallback: false,
 });
 
 export const metadata: Metadata = {
