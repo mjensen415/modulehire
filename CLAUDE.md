@@ -388,6 +388,9 @@ current `tier` is `beta_pro`; `starter` doesn't map to any tier so it's left alo
 directly and was never affected — prefer it over the old `/admin` page's plan dropdown when
 granting pro access manually.
 
+## Press kit (`/press`)
+Public page in `src/app/press/`; files in `public/press/` (how to rebuild the logos and zip: that folder's `README.md`). Copy, facts and the founder bio are approved text, so don't change claims without Matt's sign-off, and keep `modulehire-press-kit.txt` and the zip in step with the page.
+
 ## MCP server (`/api/mcp`)
 A remote MCP server so Claude, ChatGPT, Cursor and Claude Code can use a ModuleHire account.
 Public docs page: `/mcp`; listing copy and screenshots: `docs/mcp-listing/`.
