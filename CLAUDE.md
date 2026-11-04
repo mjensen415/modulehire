@@ -456,6 +456,7 @@ Public docs page: `/mcp`; listing copy and screenshots: `docs/mcp-listing/`.
     local servers that hold a token.
 
 ## Gotchas
+- **Fonts are bundled** (`src/app/fonts/`, `next/font/local` in `layout.tsx`, how they were built in that folder's README). `next/font/google` intermittently failed Vercel builds with `Can't resolve '@vercel/turbopack-next/internal/font/google/font'`. `--font` and `--mono` come only from the font classes on `<html>`; don't define them in `globals.css`, whose `:root` rule comes later in the CSS and would override them.
 - **`public.users` columns are not user-writable by default** (`20261028_lock_users_columns.sql`). A new column the user should edit with their own client needs `grant update (col) on public.users to authenticated;`; otherwise the write fails with permission denied. Billing, plan, tier, admin, credits, Stripe ids and `onboarding_complete` are service-role only. Column REVOKEs do nothing while a table-level GRANT exists, so audit other tables with `has_column_privilege` rather than reading the policies alone.
 - `git add` with parentheses in paths trips up zsh — always use `git add -A`
 - Sandbox leaves `.git/index.lock` files; delete from local machine before committing
