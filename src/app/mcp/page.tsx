@@ -1,5 +1,5 @@
 // Public page for the ModuleHire MCP server (/api/mcp): what it does, how to connect it in
-// Claude, ChatGPT, Cursor and Claude Code, what to ask, the tools, plan limits, and FAQs.
+// Claude, ChatGPT, Cursor, Claude Code and Codex, what to ask, the tools, plan limits, and FAQs.
 // The demo at the top is an animated mock chat (McpDemo), not a video file.
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -81,7 +81,7 @@ const KIND_LABEL = { read: 'Reads', write: 'Changes', ai: 'Uses AI' } as const
 const FAQS: { q: string; a: string }[] = [
   {
     q: 'Which AI apps does this work with?',
-    a: 'Any app that supports remote MCP servers with sign-in: Claude (web and desktop), ChatGPT, Cursor, Claude Code, and others. Use the server URL above and follow the steps for your app.',
+    a: 'Any app that supports remote MCP servers with sign-in: Claude (web and desktop), ChatGPT, Cursor, Claude Code, Codex, and others. Use the server URL above and follow the steps for your app.',
   },
   {
     q: 'Does the AI app see my ModuleHire password?',

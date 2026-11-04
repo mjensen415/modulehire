@@ -7,7 +7,7 @@ The full guide, with example prompts and the list of tools, is at [modulehire.co
 ## What you need
 
 - A ModuleHire account with at least one resume uploaded
-- An AI app that supports remote MCP connectors, such as Claude, ChatGPT (developer mode), Cursor or Claude Code
+- An AI app that supports remote MCP connectors, such as Claude, ChatGPT (developer mode), Cursor, Claude Code or Codex
 
 ## How to connect
 
