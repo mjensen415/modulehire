@@ -120,7 +120,7 @@ export default function FitPanel({ live, score, checking, serverChecked, selecte
 
       {keywords.total > 0 && (
         <div className="rd-fit-sub" style={{ marginTop: 12 }}>
-          {keywords.found} of {keywords.total} of the posting&apos;s key phrases are on the page.
+          {keywords.found} of {keywords.total}{' '}of the posting&apos;s key phrases are on the page.
         </div>
       )}
       <div className="rd-fit-foot">

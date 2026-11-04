@@ -443,7 +443,7 @@ export default function JobTrackerPage() {
                 <div className="section-card" style={{ padding: '16px 20px', marginBottom: 20 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>What&apos;s working for you</div>
                   <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>
-                    Reply rate across {patterns.eligible} applications sent 10+ days ago. A reply is any response that wasn&apos;t an automated rejection.
+                    Reply rate across {patterns.eligible}{' '}applications sent 10+ days ago. A reply is any response that wasn&apos;t an automated rejection.
                   </div>
                   <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
                     <PatternTable title="By where you applied" rows={patterns.bySource} />

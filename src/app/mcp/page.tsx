@@ -176,7 +176,8 @@ export default function McpPage() {
           <h2 className={s.h2}>Connect your app.</h2>
           <p className={s.lede}>
             You need a ModuleHire account with a resume uploaded.{' '}
-            <Link href="/signin?signup=1">Start free</Link> if you don&apos;t have one yet.
+            <Link href="/signin?signup=1">Start free</Link>{' '}
+            if you don&apos;t have one yet.
           </p>
         </div>
         <SetupTabs serverUrl={SERVER_URL} cursorDeeplink={cursorDeeplink} />
