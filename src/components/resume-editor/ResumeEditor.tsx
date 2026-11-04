@@ -544,7 +544,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
       return (
         <span>
           Not in your library.{' '}
-          <Link href={`/library/new?title=${encodeURIComponent(label)}`}>Add a module</Link> if you&apos;ve done this.
+          <Link href={`/library/new?title=${encodeURIComponent(label)}`}>Add a module</Link>{' '}if you&apos;ve done this.
         </span>
       )
     }

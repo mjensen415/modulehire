@@ -62,6 +62,17 @@ export default function SetupTabs({ serverUrl, cursorDeeplink }: { serverUrl: st
       ],
       snippet: { label: 'Terminal', code: `claude mcp add --transport http modulehire ${serverUrl}` },
     },
+    {
+      id: 'codex',
+      label: 'Codex',
+      steps: [
+        <>Run these in your terminal.</>,
+        <>Your browser opens ModuleHire. Sign in and choose <b>Allow</b>.</>,
+        <>Ask Codex about your resume in any thread.</>,
+      ],
+      snippet: { label: 'Terminal', code: `codex mcp add modulehire --url ${serverUrl}\ncodex mcp login modulehire` },
+      note: 'Already added it in your app\'s MCP settings? Leave the bearer token and header fields blank, then run the login command with the name you gave it. Run codex mcp list to see the name.',
+    },
   ]
   const [active, setActive] = useState(tabs[0].id)
   const tab = tabs.find((t) => t.id === active) ?? tabs[0]

@@ -3273,7 +3273,7 @@ export default function ClassicGenerate() {
                 Ready to build your resume for {jdData?.extracted_job_title || 'this role'}{jdData?.extracted_company ? ` at ${jdData.extracted_company}` : ''}
               </div>
               <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.5, marginBottom: 16 }}>
-                {selectedIds.length} module{selectedIds.length === 1 ? '' : 's'} selected. We&apos;ll turn them into a resume using only what your modules say, newest job first.
+                {selectedIds.length} module{selectedIds.length === 1 ? '' : 's'}{' '}selected. We&apos;ll turn them into a resume using only what your modules say, newest job first.
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 12.5, color: 'var(--text3)', marginBottom: 18 }}>
                 <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
