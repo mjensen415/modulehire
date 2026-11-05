@@ -6,7 +6,7 @@ import Link from 'next/link'
 import PublicNav from '@/components/layout/PublicNav'
 import PublicFooter from '@/components/layout/PublicFooter'
 import FaqItem from '@/components/ui/FaqItem'
-import { FREE_MONTHLY_GENERATIONS, moduleLimit } from '@/lib/plan'
+import { moduleLimit } from '@/lib/plan'
 import McpDemo from './McpDemo'
 import SetupTabs from './SetupTabs'
 import CopyButton from './CopyButton'
@@ -72,7 +72,7 @@ const TOOLS: { name: string; does: string; kind: 'read' | 'write' | 'ai' }[] = [
   { name: 'update_application_status', does: 'Move an application to applied, interviewing, offered, and so on', kind: 'write' },
   { name: 'export_resume', does: 'A PDF or Word download link, good for 10 minutes', kind: 'write' },
   { name: 'get_editor_link', does: 'A one-time link that opens the resume in the editor, signed in', kind: 'write' },
-  { name: 'generate_resume', does: 'Build a tailored resume for a job (counts toward your monthly limit)', kind: 'ai' },
+  { name: 'generate_resume', does: 'Build a tailored resume for a job (uses your plan)', kind: 'ai' },
   { name: 'interview_prep', does: 'Talking points, questions to ask, and gaps to prepare for (Pro)', kind: 'ai' },
 ]
 
@@ -97,7 +97,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: 'Does it cost extra?',
-    a: 'No. It uses your ModuleHire plan. Reading, editing, exporting, and tracking are free on every plan. Generating a new resume counts toward your monthly limit, the same as on the website.',
+    a: 'No. It uses your ModuleHire plan, the same as the website. The free plan lets you build and preview resumes, with downloads from $9 per resume. Pro is $19 a month or $99 a year. See the pricing page for details.',
   },
   {
     q: 'Is there a limit on how much the app can do?',
@@ -212,23 +212,28 @@ export default function McpPage() {
         <div className={s.planGrid}>
           <div className={s.planCard}>
             <div className={s.planName}>Free</div>
+            <div className={s.planPrice}>$0</div>
             <ul className={s.planList}>
-              <li>{FREE_MONTHLY_GENERATIONS} tailored resumes a month</li>
+              <li>Upload 1 resume</li>
               <li>Up to {freeModules} skill modules</li>
-              <li>Unlimited reading, editing, exports, and tracking</li>
+              <li>Full resume builder experience</li>
+              <li>Preview your generated resume</li>
+              <li>Download from $9 per resume</li>
               <li className={s.planNo}>Interview prep</li>
             </ul>
           </div>
           <div className={`${s.planCard} ${s.planPro}`}>
             <div className={s.planName}>Pro</div>
+            <div className={s.planPrice}>$19 a month or $99 a year</div>
             <ul className={s.planList}>
               <li>Unlimited tailored resumes</li>
+              <li>Unlimited resume uploads</li>
               <li>Unlimited skill modules</li>
-              <li>Unlimited reading, editing, exports, and tracking</li>
+              <li>All 6 formats (PDF + DOCX)</li>
               <li>Interview prep</li>
             </ul>
             <Link href="/pricing" className={s.planLink}>
-              See pricing
+              See all pricing
             </Link>
           </div>
         </div>

@@ -30,13 +30,12 @@ export default function SetupTabs({ serverUrl, cursorDeeplink }: { serverUrl: st
       id: 'chatgpt',
       label: 'ChatGPT',
       steps: [
-        <>Open <b>Settings</b>, then <b>Apps &amp; Connectors</b>, then <b>Advanced settings</b>, and turn on <b>Developer mode</b>.</>,
-        <>Back in <b>Apps &amp; Connectors</b>, choose <b>Create</b>.</>,
+        <>In ChatGPT on the web, open <b>Plugins</b>, select <b>+</b>, and choose <b>Add custom MCP server</b>.</>,
         <>Name it <b>ModuleHire</b>, paste the server URL, and pick <b>OAuth</b> for authentication: {url}</>,
-        <>Sign in to ModuleHire and choose <b>Allow</b>.</>,
-        <>In a new chat, add ModuleHire from the <b>+</b> menu.</>,
+        <>Review the warning, create the plugin, sign in to ModuleHire, and choose <b>Allow</b>.</>,
+        <>In a chat, type <b>@</b> and pick ModuleHire.</>,
       ],
-      note: 'ChatGPT moves these menus around now and then. Look for custom apps or connectors under Settings.',
+      note: 'Availability and write access depend on your ChatGPT plan and workspace. Some plans can only read. If you do not see the option, check OpenAI\'s help center.',
     },
     {
       id: 'cursor',

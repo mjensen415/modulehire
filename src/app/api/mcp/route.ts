@@ -19,7 +19,14 @@ const handler = createMcpHandler(
     registerResumeCard(server)
   },
   {
-    serverInfo: { name: 'modulehire', version: '0.3.0' },
+    serverInfo: {
+      name: 'modulehire',
+      title: 'ModuleHire',
+      version: '0.3.0',
+      websiteUrl: 'https://www.modulehire.com',
+      icons: [{ src: 'https://www.modulehire.com/modulehire-icon-512.png', mimeType: 'image/png', sizes: ['512x512'] }],
+      // mcp-handler types serverInfo as name and version only, but passes every field through.
+    } as { name: string; version: string },
     // Stateless and nothing to push: an accepted subscriptions/listen stream (protocol 2026-07-28)
     // stays open until the 300s function limit kills it.
     maxSubscriptions: 0,

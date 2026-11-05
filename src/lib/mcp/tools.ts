@@ -12,11 +12,15 @@ import { getActiveProfileId } from '@/lib/profile'
 import { DIMENSIONS, sanitizeCriteria } from '@/lib/dimensions'
 import { allBlocks, docText, parseResumeDoc, visibleDoc, type ResumeDoc } from '@/lib/resume-doc'
 import { scoreLiveFit } from '@/lib/live-fit'
+import { isPresentDate } from '@/lib/resume-dates'
 import { json, runTool, ToolError, type ToolEnv } from './run-tool'
 import { planUsage } from './quota'
 import { appUrl } from './urls'
 import { RESUME_CARD_URI, resumeCard, withCard } from './card'
 import { registerAppTool } from '@modelcontextprotocol/ext-apps/server'
+
+// Older job rows store an open end as "present-01"; the model should only ever see "present".
+const endOrPresent = (end: string | null) => (!end || isPresentDate(end) ? 'present' : end)
 
 export const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const
 
@@ -180,7 +184,7 @@ export function registerClassicTools(server: McpServer) {
             company: j.company,
             title: j.title,
             start: j.start_date,
-            end: j.end_date ?? 'present',
+            end: endOrPresent(j.end_date),
             modules: perJob.get(j.id) ?? 0,
           })),
           library_url: appUrl('/library'),
@@ -227,7 +231,7 @@ export function registerClassicTools(server: McpServer) {
             content: m.content,
             company: m.source_company,
             role: m.source_role_title,
-            dates: [m.date_start, m.date_end ?? 'present'].filter(Boolean).join(' to '),
+            dates: [m.date_start, endOrPresent(m.date_end)].filter(Boolean).join(' to '),
             dimensions: m.dimensions,
             pinned: m.pinned,
           })),
