@@ -20,6 +20,9 @@ const handler = createMcpHandler(
   },
   {
     serverInfo: { name: 'modulehire', version: '0.3.0' },
+    // Stateless and nothing to push: an accepted subscriptions/listen stream (protocol 2026-07-28)
+    // stays open until the 300s function limit kills it.
+    maxSubscriptions: 0,
     instructions:
       "ModuleHire holds the user's career library: skill modules (fact-checked accomplishment blocks), target jobs with weighted requirements, and live tailored resumes. Use these tools for the user's real data. Only state facts a module supports; never invent metrics, employers, or titles. When the user mentions an accomplishment that isn't in their library, offer to save it with add_module. Edit resumes with get_resume first, then update_block, reorder_blocks, or set_section_visibility using the version it returned. Confirm before generate_resume, since it counts toward the user's monthly limit. Use get_editor_link when the user wants to open a resume on modulehire.com.",
   },

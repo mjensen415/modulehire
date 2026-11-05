@@ -144,7 +144,7 @@ per-role module extraction, JD criteria (`CRITERIA_WORKED_EXAMPLE` in `jd-signal
 scoring, and the resume bullet writer; one retry at temperature 0 when output fails validation
 (criteria < 3, an unscored criterion, a role with text returning no modules, unparseable resume JSON).
 `max_tokens` follow logged outputs (criteria 1600, match report 2400, resume 2400, pass 2 600;
-per-role parse 3200 because Haiku overran 2048). Before/after numbers:
+focused parse calls 6400 because Haiku overran 2048 on long roles and 3200 on extras). Before/after numbers:
 `docs/reports/haiku-first-2026-10-27.md`.
 
 `maxDuration` raised to 300 for `parse-resume`, `reparse-my-modules`, `admin/reparse-user`,
@@ -435,6 +435,7 @@ Public docs page: `/mcp`; listing copy and screenshots: `docs/mcp-listing/`.
   and `get_editor_link` (20). It counts the user's `ev_mcp_*` rows; refused calls log `ev_limit_mcp`
   instead so they don't count. Fails open. Holds because `20261029_lock_usage_events.sql` stops users
   deleting their own rows.
+- **Subscriptions:** `maxSubscriptions: 0` on the handler. An accepted `subscriptions/listen` stream never ends on its own, so each one ran until the 300s limit. The server has nothing to push.
 - **CORS:** `proxy.ts` answers `/api/mcp` for any origin (no credentials; auth is bearer-only) so
   browser clients like MCP Inspector work; every other `/api` route keeps the origin allowlist.
 - **Usage:** each call logs `ev_mcp_<tool>` with `metadata { client, ok, ms }` (client is the
