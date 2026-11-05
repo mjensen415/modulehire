@@ -374,6 +374,7 @@
 .planCard { background: var(--surface); border: 1px solid var(--border2); border-radius: 14px; padding: 24px; }
 .planPro { border-color: var(--teal-glow); box-shadow: 0 0 0 1px var(--teal-dim), 0 20px 50px -30px oklch(0.65 0.20 195 / 0.5); }
 .planName { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 14px; }
+.planPrice { margin-bottom: 14px; font-size: 14px; font-weight: 600; color: var(--text); }
 .planList { list-style: none; display: grid; gap: 10px; }
 .planList li { font-size: 14px; color: var(--text2); line-height: 1.5; padding-left: 24px; position: relative; }
 .planList li::before {

@@ -1,6 +1,7 @@
 // Data for the resume preview card (MCP Apps, src/lib/mcp/card-html.ts). get_resume,
 // update_block and generate_resume return it as `structuredContent` next to their usual text
-// result, so hosts that render MCP Apps show the card and text-only hosts lose nothing.
+// result. Some hosts hand the model only structuredContent, so it carries the text result's data
+// too (block ids, fact-check warnings); otherwise the model there can't edit or see warnings.
 import type { McpServer } from '@modelcontextprotocol/server'
 import { registerAppResource, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server'
 import { visibleDoc, type ResumeDoc } from '@/lib/resume-doc'
@@ -51,7 +52,8 @@ export function resumeCard(
 
 /** Adds the card to a tool result without changing its text content. */
 export function withCard(result: ToolResult, card: ResumeCard): ToolResult {
-  return { ...result, structuredContent: card }
+  const details = JSON.parse(result.content[0].text) as Record<string, unknown>
+  return { ...result, structuredContent: { ...details, ...card } }
 }
 
 /** The card's HTML as an MCP Apps UI resource. No network access, so no CSP domains. */

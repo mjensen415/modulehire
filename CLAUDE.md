@@ -430,8 +430,8 @@ Public docs page: `/mcp`; listing copy and screenshots: `docs/mcp-listing/`.
   session token is ever in a URL; unconfirmed emails go to `/signin` instead).
 - **Preview card (MCP Apps, protocol 2026-01-26):** `get_resume`, `update_block` and
   `generate_resume` are registered with `registerAppTool` (`_meta.ui.resourceUri =
-  ui://modulehire/resume-card.html`) and return the card data as `structuredContent` next to
-  unchanged text. The card is one self-contained HTML file (no external resources, default CSP)
+  ui://modulehire/resume-card.html`) and return the card data plus the text result's data as
+  `structuredContent` next to unchanged text, because some hosts give the model only `structuredContent`. The card is one self-contained HTML file (no external resources, default CSP)
   that speaks the postMessage protocol directly rather than inlining the 540 KB SDK bundle.
 - **Rate limit:** `runTool` calls `checkMcpLimit` (`src/lib/mcp/limits.ts`) first: 60 calls a minute and
   600 an hour per user across all tools, plus hourly caps on `interview_prep` (10), `export_resume` (30)

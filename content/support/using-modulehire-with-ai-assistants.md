@@ -7,7 +7,7 @@ The full guide, with example prompts and the list of tools, is at [modulehire.co
 ## What you need
 
 - A ModuleHire account with at least one resume uploaded
-- An AI app that supports remote MCP connectors, such as Claude, ChatGPT (developer mode), Cursor, Claude Code or Codex
+- An AI app that supports remote MCP connectors, such as Claude, ChatGPT (on supported plans), Cursor, Claude Code or Codex
 
 ## How to connect
 
@@ -22,7 +22,7 @@ Step-by-step instructions for each app are on the [setup section of the guide](/
 
 - **Read** your skill modules, work history, analyzed jobs, resumes, fit scores and job tracker
 - **Change** things you ask for: add a module, rewrite or reorder resume lines, hide sections, track an application, or create a PDF or Word download
-- **Use ModuleHire's AI** for two things only: generating a new tailored resume (this counts toward your monthly limit) and interview prep (Pro)
+- **Use ModuleHire's AI** for two things only: generating a new tailored resume and interview prep (Pro)
 
 The AI app never sees your password. It only reads your data when it calls a ModuleHire tool to answer something you asked.
 
@@ -32,7 +32,7 @@ Your modules are the only source of facts. If an edit adds a number or a name th
 
 ## Limits
 
-Connected apps use your normal plan. Reading, editing, exporting and tracking are free on every plan. To keep a runaway assistant from hammering your account, each account can make up to 60 requests a minute and 600 an hour, with lower hourly caps on exports, editor links and interview prep. If you hit one, the assistant will tell you; wait a little and try again.
+Connected apps use your normal plan, the same as the website. See [pricing](/pricing) for what each plan includes. To keep a runaway assistant from hammering your account, each account can make up to 60 requests a minute and 600 an hour, with lower hourly caps on exports, editor links and interview prep. If you hit one, the assistant will tell you; wait a little and try again.
 
 ## Disconnecting
 
