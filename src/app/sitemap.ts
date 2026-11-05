@@ -21,6 +21,7 @@ const PAGES: { path: string; priority: number }[] = [
   { path: '/docs/module-matching', priority: 0.5 },
   { path: '/docs/output-formats', priority: 0.5 },
   { path: '/support', priority: 0.5 },
+  { path: '/press', priority: 0.4 },
   { path: '/privacy', priority: 0.3 },
   { path: '/terms', priority: 0.3 },
 ]

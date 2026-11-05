@@ -1,0 +1,38 @@
+MODULEHIRE PRESS KIT
+Press contact: info@modulehire.com
+Online: https://www.modulehire.com/press
+
+FACT SHEET
+Product: ModuleHire, a modular resume builder
+Company: ModuleHire Labs
+Founded: 2026
+Founder: Matt Jensen
+Stage: Public beta
+For: Job seekers, with a separate version for hiring teams
+Connects to: AI assistants that support remote MCP servers with sign-in, including Claude, ChatGPT and Cursor
+Pricing: Free plan available. Pro is $19 a month or $99 a year. Current pricing: https://www.modulehire.com/pricing
+Website: https://www.modulehire.com
+
+ONE-SENTENCE DESCRIPTION
+ModuleHire turns one resume into a library of reusable modules, then builds a tailored resume for each job from what you've actually done.
+
+SHORT DESCRIPTION
+ModuleHire is a resume builder based on a simple idea: your experience should be reusable. Upload a resume once and ModuleHire breaks it into skill and experience modules. Paste a job posting and it builds a tailored resume from those modules, shows how well it covers the job, and lets you edit it line by line. It also connects to AI assistants such as Claude and ChatGPT, so you can do the same work from a chat.
+
+LONG DESCRIPTION
+ModuleHire is a resume builder from ModuleHire Labs, a company founded in 2026 to help people present themselves better with AI. Instead of rewriting a resume for every application, users upload it once and ModuleHire breaks it into a library of reusable skill and experience modules. Paste a job posting or a link, and ModuleHire picks the relevant modules, writes a tailored draft, and scores how well it covers each requirement. The draft opens as an editable document. Those modules are the source of facts: if an edit adds a number or a name its module doesn't contain, ModuleHire flags it for review. ModuleHire also connects to AI assistants through the Model Context Protocol, so users can save a new win, tailor a resume, or edit a line from a chat. A separate version helps hiring teams rank applicants against a job description. ModuleHire is in public beta, with a free plan available.
+
+FOUNDER QUOTE
+"Most resume tools start with the job and work backward. We start with what you've actually done, and make it easy to tell the right part of that story for each role."
+Matt Jensen, founder of ModuleHire Labs
+
+FOUNDER BIO
+Matt Jensen founded ModuleHire Labs in 2026. Matt's career has focused on developer relations and community leadership, with roles at Docker, GitLab, Fiverr and HashiCorp, where Matt served as VP of Developer Relations.
+
+NAME AND LOGO
+Write the product as ModuleHire: one word, with a capital M and H. The company is ModuleHire Labs. Don't recolor, stretch or add effects to the logo. Use the wordmark made for your background.
+
+COLORS
+Hire Green #1D9E75 (logo). Signal Teal #00B1B5 (links and buttons). Ink #080D1A (dark background). Paper #E8EDF8 (text on dark).
+
+Product images show made-up people, employers and numbers.
