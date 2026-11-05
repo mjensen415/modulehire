@@ -516,9 +516,9 @@ export async function extractModulesWithFocus(
       { role: 'user', content },
     ],
     PARSE_MODULES_SCHEMA,
-    // Per-role: Haiku writes more modules per role than Sonnet did and overran 2048 on long
-    // roles (the call is cut off and retried), so the cap went up rather than down.
-    focusInstruction ? 3200 : 8192,
+    // Focused calls: Haiku overran 2048 on long roles, then 3200 on the extras call, which reads
+    // the whole resume. A cut-off call fails and its retry hits the same cap, so the content is lost.
+    focusInstruction ? 6400 : 8192,
     { tier: 'quality', userId, action: 'parse_modules', ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}) }
   )
   // Forced tool-use is reliable but not airtight — on thin/sparse content the model has

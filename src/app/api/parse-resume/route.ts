@@ -38,6 +38,10 @@ async function applyContactSideEffects(
   const emailPrefix = (existing?.email ?? userEmail ?? '').split('@')[0]
   const profileIsEmpty = !existing?.name || existing.name.trim() === '' || existing.name === emailPrefix
 
+  // Postgres checks NOT NULL before ON CONFLICT, so every users upsert must carry email, even when
+  // the row already exists.
+  let currentEmail = existing?.email ?? userEmail
+
   const profileUpdate: Record<string, string> = {}
   if (contact.full_name)    profileUpdate.name         = contact.full_name
   if (contact.email)        profileUpdate.email        = contact.email
@@ -48,16 +52,19 @@ async function applyContactSideEffects(
   if (profileIsEmpty && Object.keys(profileUpdate).length > 0) {
     const { error: upsertErr } = await adminSb
       .from('users')
-      .upsert({ id: userId, ...profileUpdate })
+      .upsert({ id: userId, email: currentEmail, ...profileUpdate })
     if (upsertErr) console.error('Profile upsert failed:', upsertErr)
-    else profileUpdated = true
+    else {
+      profileUpdated = true
+      currentEmail = profileUpdate.email ?? currentEmail
+    }
   }
 
   // Summary: only auto-populate when the user has none saved.
   if (contact.summary && !existing?.summary) {
     const { error: sumErr } = await adminSb
       .from('users')
-      .upsert({ id: userId, summary: contact.summary })
+      .upsert({ id: userId, email: currentEmail, summary: contact.summary })
     if (sumErr) console.error('Summary upsert failed:', sumErr)
   }
 
