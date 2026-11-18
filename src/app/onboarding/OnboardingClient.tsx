@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ResumeBuildProgress, { type ResumeBuildResult } from '@/components/ResumeBuildProgress'
 import { analyzeJd, fetchJdFromUrl, looksLikeUrl } from '@/lib/analyze-jd-client'
+import ReviewQueue from '@/components/ReviewQueue'
 
 type Step = 1 | 2 | 3 | 4
 type JobPreview = { id: string; company: string; title: string | null; module_count: number }
@@ -66,6 +67,12 @@ export default function OnboardingClient({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [confirmedCount, setConfirmedCount] = useState(0)
+
+  async function refreshConfirmed() {
+    const data = await fetch('/api/my-modules').then(r => r.json()).catch(() => ({}))
+    setConfirmedCount(data.modules?.length ?? 0)
+  }
 
   useEffect(() => {
     if (step === 2 && jobs.length === 0) loadLibraryPreview()
@@ -88,7 +95,8 @@ export default function OnboardingClient({
         id: j.id, company: j.company, title: j.title, module_count: counts[j.id] ?? 0,
       }))
       setJobs(list)
-      setModuleCount(modsData.modules?.length ?? moduleCount)
+      // my-modules lists confirmed modules only; the parse's own count stays in moduleCount.
+      setConfirmedCount(modsData.modules?.length ?? 0)
       setJobsStatus('loaded')
     } catch {
       // Non-fatal — page still works; surface a real "couldn't sync" state.
@@ -310,14 +318,14 @@ export default function OnboardingClient({
     return (
       <div>
         <StepBadge step={2} />
-        <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Your module library is ready.</h1>
+        <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Check what we found.</h1>
         <p style={{ fontSize: 15, color: 'var(--text2)', marginBottom: 24 }}>
           {jobsStatus === 'loading' ? (
             <>Pulling your library together…</>
           ) : jobs.length > 0 ? (
-            <>We found <strong>{jobs.length} job{jobs.length === 1 ? '' : 's'}</strong> and <strong>{moduleCount} modules</strong> from your resume. You can fine-tune everything in your library — but first, let&apos;s put it to work.</>
+            <>We found <strong>{jobs.length} job{jobs.length === 1 ? '' : 's'}</strong> and <strong>{moduleCount} modules</strong> in your resume. Confirm the ones that are true. Only confirmed modules ever go on a resume.</>
           ) : (
-            <>We built <strong>{moduleCount} modules</strong> from your resume. You can fine-tune everything in your library — but first, let&apos;s put it to work.</>
+            <>We built <strong>{moduleCount} modules</strong> from your resume. Confirm the ones that are true. Only confirmed modules ever go on a resume.</>
           )}
         </p>
 
@@ -344,8 +352,16 @@ export default function OnboardingClient({
           )}
         </div>
 
+        <div style={{ margin: '0 -20px 24px' }}>
+          <ReviewQueue onChange={refreshConfirmed} />
+        </div>
+
         {jobsStatus !== 'loading' && (
-          <button className="btn-primary" onClick={() => setStep(3)} style={{ display: 'inline-flex' }}>Generate My First Resume →</button>
+          confirmedCount > 0 ? (
+            <button className="btn-primary" onClick={() => setStep(3)} style={{ display: 'inline-flex' }}>Make my first resume ({confirmedCount} confirmed)</button>
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--text3)' }}>Confirm at least one module to make your first resume.</div>
+          )
         )}
       </div>
     )

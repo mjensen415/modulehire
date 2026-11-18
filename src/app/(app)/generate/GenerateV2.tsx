@@ -349,11 +349,15 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
 
       {phase === 'error' && error && (
         <div className="gv2-card">
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>We couldn&apos;t finish your draft</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
+            {error.code === 'confirm_modules_first' ? 'Confirm a few modules first' : <>We couldn&apos;t finish your draft</>}
+          </div>
           <div style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 14 }}>{error.message}</div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {error.code === 'monthly_generation_limit' ? (
               <Link href="/pricing" className="btn-primary" style={{ textDecoration: 'none' }}>See plans</Link>
+            ) : error.code === 'confirm_modules_first' ? (
+              <Link href="/library#review" className="btn-primary" style={{ textDecoration: 'none' }}>Review your modules</Link>
             ) : (
               <button type="button" className="btn-primary" onClick={retry}>Try again</button>
             )}

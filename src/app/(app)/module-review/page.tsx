@@ -332,7 +332,12 @@ export default function ModuleReview() {
       const res = await fetch('/api/modules/bulk-save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resume_id: resumeId, modules: toSave }),
+        body: JSON.stringify({
+          resume_id: resumeId,
+          modules: toSave,
+          // Parsed drafts the user discarded here are marked "not true" instead of waiting in the queue.
+          discarded_ids: modules.filter(m => m._discarded && !m.id.startsWith('new-')).map(m => m.id),
+        }),
       })
       if (!res.ok) {
         const d = await res.json()
@@ -357,7 +362,7 @@ export default function ModuleReview() {
         </div>
         <div className="top-bar-right">
           <button className="btn-primary" onClick={acceptAll} disabled={saving}>
-            {saving ? 'Saving…' : `Accept all & save →`}
+            {saving ? 'Saving…' : `Confirm ${active.length} and save`}
           </button>
         </div>
       </div>

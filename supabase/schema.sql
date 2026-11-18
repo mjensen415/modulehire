@@ -39,7 +39,7 @@ create table public.modules (
   type text not null check (type in ('experience', 'skill', 'story', 'positioning')),
   weight text not null default 'strong' check (weight in ('anchor', 'strong', 'supporting')),
   pinned boolean not null default false,
-  status text not null default 'needs-review' check (status in ('complete', 'needs-review', 'needs-add')),
+  status text not null default 'draft' check (status in ('draft', 'confirmed', 'rejected')), -- only 'confirmed' is used on resumes
 
   -- Content
   title text not null,
@@ -56,6 +56,9 @@ create table public.modules (
   role_types text[] not null default '{}',
   themes text[] not null default '{}',
   company_stage text[] not null default '{"any"}',
+
+  source_quote text,        -- verbatim span of the source document this came from
+  source_document_id uuid,  -- documents.id
 
   deleted_at timestamptz,
   created_at timestamptz not null default now(),

@@ -6,6 +6,7 @@ import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
 import { stripUnsupportedSentences } from '@/lib/fact-check'
+import { getUsableModules } from '@/lib/usable-modules'
 
 export const maxDuration = 60
 
@@ -44,9 +45,7 @@ export async function POST(req: Request) {
     if (jdError || !jd) return NextResponse.json({ error: 'Job description not found' }, { status: 404 })
 
     const profileId = await getActiveProfileId(supabase, user.id)
-    const { data: modules, error: modError } = await supabase
-      .from('modules')
-      .select('id, title, content, themes')
+    const { data: modules, error: modError } = await getUsableModules(supabase, 'id, title, content, themes')
       .eq('user_id', user.id)
       .eq('profile_id', profileId)
       .in('id', module_ids)

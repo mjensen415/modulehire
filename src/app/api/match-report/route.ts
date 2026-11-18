@@ -5,6 +5,7 @@ import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
 import { type JdCriterion } from '@/lib/dimensions'
 import { scoreCriteria, type Evidence } from '@/lib/criteria-score'
+import { getUsableModules } from '@/lib/usable-modules'
 
 export const maxDuration = 120
 
@@ -39,12 +40,9 @@ export async function POST(req: Request) {
 
     const profileId = await getActiveProfileId(supabase, user.id)
 
-    const { data: modules, error: modError } = await supabase
-      .from('modules')
-      .select('id, title, content, dimensions, weight, source_company, source_role_title, updated_at')
+    const { data: modules, error: modError } = await getUsableModules(supabase, 'id, title, content, dimensions, weight, source_company, source_role_title, updated_at')
       .eq('user_id', user.id)
       .eq('profile_id', profileId)
-      .is('deleted_at', null)
     if (modError) throw modError
 
     // Cache: reuse a saved report when it was generated for this profile, after the JD was

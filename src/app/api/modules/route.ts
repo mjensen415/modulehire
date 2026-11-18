@@ -52,6 +52,8 @@ export async function POST(req: Request) {
         date_end: optionalString(body.date_end, 20, 'date_end'),
         employment_type: VALID_EMP_TYPES.has(body.employment_type) ? body.employment_type : null,
         pinned: body.pinned === true,
+        // Written by the user themselves, so it needs no review.
+        status: 'confirmed',
       }
     } catch (e) {
       if (e instanceof ValidationError) return NextResponse.json({ error: e.message }, { status: 400 })

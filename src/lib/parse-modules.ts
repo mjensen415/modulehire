@@ -382,8 +382,9 @@ const MODULE_ITEM_SCHEMA = {
     themes: { type: 'array', items: { type: 'string' } },
     company_stage: { type: 'array', items: { type: 'string', enum: ['startup', 'growth', 'enterprise', 'any'] } },
     dimensions: { type: 'array', items: { type: 'string', enum: DIMENSIONS as unknown as string[] }, description: '1-3 values — which aspects of a candidate this module is evidence for' },
+    source_quote: { type: 'string', description: 'The shortest span copied character for character from the source text that supports this module' },
   },
-  required: ['type', 'title', 'content', 'source_company', 'source_role_title', 'date_start', 'date_end', 'employment_type', 'weight', 'role_types', 'themes', 'company_stage', 'dimensions'],
+  required: ['type', 'title', 'content', 'source_company', 'source_role_title', 'date_start', 'date_end', 'employment_type', 'weight', 'role_types', 'themes', 'company_stage', 'dimensions', 'source_quote'],
 }
 
 const PARSE_MODULES_SCHEMA = {
@@ -430,6 +431,7 @@ CONTENT RULES:
 - Preserve all specific metrics, percentages, team sizes, revenue figures, and outcomes VERBATIM as they appear in the resume. Do not paraphrase or soften specific claims.
 - Write in third-person past tense (e.g. "Led a team of 12...", "Grew community from 0 to 50k members in 18 months").
 - Each module's content should be 2–4 sentences, self-contained, and read as a standalone accomplishment summary.
+- "source_quote": copy, character for character, the shortest span of the resume text that supports the module (usually one bullet or sentence). Do not fix typos, reword, or join lines from different places. The user checks every module against it.
 
 THEMES — pick only from this exact list (omit any that don't apply):
 community-building, community-marketing, community-programs, community-ops, community-health, ambassador-programs, member-lifecycle, retention, engagement, developer-relations, developer-enablement, feedback-loops, ai, technical-content, hackathons, product-collaboration, product-advisory, cross-functional, data-driven, zero-to-one, scale, growth, brand, content-strategy, events, enablement, partnerships, lifecycle-marketing, leadership, executive, consulting, startup
@@ -446,9 +448,9 @@ Resume section:
   • Launched a 40-person ambassador program that ran monthly local meetups
   • Wrote the moderation playbook adopted by the support team
 Modules:
-[{"type":"experience","title":"Community Growth","content":"Grew the Lumen Health patient community from 2,000 to 11,000 members in 18 months.","source_company":"Lumen Health","source_role_title":"Community Manager","date_start":"2019-03","date_end":"2022-06","employment_type":"full-time","weight":"anchor","role_types":["community-manager"],"themes":["community-building","growth"],"company_stage":["growth"],"dimensions":["responsibility"]},
- {"type":"story","title":"Ambassador Program","content":"Launched a 40-person ambassador program that ran monthly local meetups.","source_company":"Lumen Health","source_role_title":"Community Manager","date_start":"2019-03","date_end":"2022-06","employment_type":"full-time","weight":"strong","role_types":["community-manager"],"themes":["ambassador-programs","events"],"company_stage":["growth"],"dimensions":["responsibility","collaboration"]},
- {"type":"experience","title":"Moderation Playbook","content":"Wrote the moderation playbook adopted by the support team.","source_company":"Lumen Health","source_role_title":"Community Manager","date_start":"2019-03","date_end":"2022-06","employment_type":"full-time","weight":"supporting","role_types":["community-manager"],"themes":["community-ops"],"company_stage":["growth"],"dimensions":["skill"]}]
+[{"type":"experience","title":"Community Growth","content":"Grew the Lumen Health patient community from 2,000 to 11,000 members in 18 months.","source_company":"Lumen Health","source_role_title":"Community Manager","date_start":"2019-03","date_end":"2022-06","employment_type":"full-time","weight":"anchor","role_types":["community-manager"],"themes":["community-building","growth"],"company_stage":["growth"],"dimensions":["responsibility"],"source_quote":"Grew the patient community from 2,000 to 11,000 members in 18 months"},
+ {"type":"story","title":"Ambassador Program","content":"Launched a 40-person ambassador program that ran monthly local meetups.","source_company":"Lumen Health","source_role_title":"Community Manager","date_start":"2019-03","date_end":"2022-06","employment_type":"full-time","weight":"strong","role_types":["community-manager"],"themes":["ambassador-programs","events"],"company_stage":["growth"],"dimensions":["responsibility","collaboration"],"source_quote":"Launched a 40-person ambassador program that ran monthly local meetups"},
+ {"type":"experience","title":"Moderation Playbook","content":"Wrote the moderation playbook adopted by the support team.","source_company":"Lumen Health","source_role_title":"Community Manager","date_start":"2019-03","date_end":"2022-06","employment_type":"full-time","weight":"supporting","role_types":["community-manager"],"themes":["community-ops"],"company_stage":["growth"],"dimensions":["skill"],"source_quote":"Wrote the moderation playbook adopted by the support team"}]
 Every number is copied exactly; nothing is added that the section doesn't say.`
 
 const EXTRAS_FOCUS_INSTRUCTION = 'Extract modules only from content that is NOT part of a specific role — standalone skills, side projects, open-source contributions, awards, certifications. Do NOT create a module for the Summary/Profile/Objective/About section.'
@@ -540,9 +542,40 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: nu
   return results
 }
 
-function sanitizeModule(m: Record<string, unknown>, userId: string, profileId: string, resumeId: string) {
+// Whitespace, quote marks and dashes vary between PDF extraction and model output; nothing else may.
+function quoteKey(text: string): string {
+  return text
+    .replace(/[’‘`]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[–—−]/g, '-')
+    .replace(/[•▪●◦·]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+/** The model's quote, if it really appears in the source text; otherwise null. */
+export function verifiedQuote(quote: unknown, sourceKey: string): string | null {
+  if (typeof quote !== 'string') return null
+  const trimmed = quote.trim().replace(/^["'•\-\s]+|["'\s]+$/g, '')
+  if (trimmed.length < 8 || trimmed.length > 600) return null
+  const key = quoteKey(trimmed)
+  if (sourceKey.includes(key)) return trimmed
+  // A trailing period the source doesn't have.
+  const noStop = key.replace(/[.;,]$/, '')
+  return noStop.length >= 8 && sourceKey.includes(noStop) ? trimmed.replace(/[.;,]$/, '') : null
+}
+
+export function sourceKeyFor(rawText: string): string {
+  return quoteKey(rawText)
+}
+
+function sanitizeModule(m: Record<string, unknown>, userId: string, profileId: string, resumeId: string, sourceKey: string) {
   return {
     ...m,
+    // Parsed modules wait in the review queue until the user confirms them.
+    status: 'draft',
+    source_quote: verifiedQuote(m.source_quote, sourceKey),
     user_id: userId,
     profile_id: profileId,
     source_resume_id: resumeId,
@@ -563,6 +596,10 @@ function sanitizeModule(m: Record<string, unknown>, userId: string, profileId: s
 
 type BatchContext = {
   dryRun?: boolean
+  /** quoteKey() of the full source text, for checking each module's source_quote. */
+  sourceKey: string
+  /** documents.id of the upload, when there is one. */
+  documentId?: string | null
   knownCompanies: Set<string>
   dedupe: DedupeState
   // The outline role this batch was extracted for. Its company, title and dates win over the
@@ -597,7 +634,10 @@ async function insertModulesBatch(
     .filter(m => takeIfNew(m, ctx.dedupe))
   if (attributed.length === 0) return []
 
-  const toInsert = attributed.map(m => sanitizeModule(m, userId, profileId, resumeId))
+  const toInsert = attributed.map(m => ({
+    ...sanitizeModule(m, userId, profileId, resumeId, ctx.sourceKey),
+    ...(ctx.documentId ? { source_document_id: ctx.documentId } : {}),
+  }))
   if (ctx.dryRun) return toInsert.map(m => ({ ...m, id: `dry-${Math.random().toString(36).slice(2, 10)}` }))
   const { data, error } = await supabase.from('modules').insert(toInsert).select()
   if (error) throw error
@@ -618,7 +658,7 @@ export async function parseModules(
   profileId: string,
   onEvent?: (event: ParseProgressEvent) => void,
   /** dryRun: parse exactly as for real but write nothing (the eval suite, scripts/eval). */
-  options: { dryRun?: boolean } = {},
+  options: { dryRun?: boolean; documentId?: string | null } = {},
 ) {
   const dryRun = !!options.dryRun
   // Contact/summary/education extraction only needs rawText — start it now so it runs
@@ -639,12 +679,13 @@ export async function parseModules(
         .select('source_company, content')
         .eq('user_id', userId)
         .eq('profile_id', profileId)
-        .is('deleted_at', null),
+        // Rejected ("Not true") modules are soft-deleted but still block a re-add.
+        .or('deleted_at.is.null,status.eq.rejected'),
   ])
   onEvent?.({ type: 'outline', roles: outlineRoles, extras: hasExtras })
 
   const knownCompanies = new Set(outlineRoles.map(r => normalizeCompany(r.company)))
-  const batchBase = { dryRun, knownCompanies }
+  const batchBase = { dryRun, knownCompanies, sourceKey: sourceKeyFor(rawText), documentId: options.documentId ?? null }
   const dedupe: DedupeState = {
     existing: (existingModules ?? []).map(m => ({ company: normalizeCompany(m.source_company), tokens: contentTokens(m.content) })),
     accepted: [],
