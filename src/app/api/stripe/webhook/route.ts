@@ -169,10 +169,9 @@ export async function POST(req: Request) {
           p_session_id: session.id,
           p_amount_cents: session.amount_total ?? 0,
         });
-        if (error) {
-          console.error('[stripe webhook] apply_sprint_purchase failed', session.id, error);
-          return NextResponse.json({ error: 'Could not apply Sprint' }, { status: 500 });
-        }
+        // Throw (not return 500) so the catch below releases the stripe_events claim;
+        // otherwise Stripe's retry would be acked as a duplicate and the Sprint dropped.
+        if (error) throw new Error(`apply_sprint_purchase failed for ${session.id}: ${error.message}`);
         return NextResponse.json({ ok: true, sprint_ends_at: endsAt });
       }
 
