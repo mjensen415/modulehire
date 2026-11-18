@@ -441,7 +441,7 @@ export default function Home() {
                   background: 'var(--teal-dim)', color: 'var(--teal)',
                   padding: '3px 9px', borderRadius: 20, flexShrink: 0,
                 }}>
-                  Pro
+                  Sprint
                 </div>
               </div>
 
@@ -523,7 +523,7 @@ export default function Home() {
             letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 14, fontWeight: 500,
           }}>Pricing</div>
           <h2 style={{ fontSize: 'clamp(24px,3vw,38px)', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.15 }}>
-            Start free. Upgrade when you&apos;re ready.
+            Sprints, not subscriptions.
           </h2>
         </div>
 
@@ -536,49 +536,49 @@ export default function Home() {
           <div className="pricing-card">
             <div className="pricing-card-name">Free</div>
             <div className="pricing-card-price">$0</div>
-            <div className="pricing-card-desc">Try it out.</div>
+            <div className="pricing-card-desc">Build your library. Try it on real jobs.</div>
             <div className="pricing-features">
-              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>25 tailored resumes / month</div>
-              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Full module library</div>
-              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Estimated ATS Match score</div>
-              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>DOCX + PDF download</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Your module library and confirmations</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>1 resume and 2 other documents imported</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>2 tailored resumes</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Every export format</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>1 practice round</div>
             </div>
             <Link href="/signin?signup=1" className="btn-secondary" style={{ width: '100%', justifyContent: 'center', textDecoration: 'none' }}>Start free →</Link>
           </div>
 
-          {/* Pro Monthly */}
+          {/* 30-day Sprint */}
           <div className="pricing-card" style={{ borderColor: 'var(--teal-glow)' }}>
             <div className="pricing-badge">Most popular</div>
-            <div className="pricing-card-name">Pro Monthly</div>
-            <div className="pricing-card-price">$19<span style={{ fontSize: 14, color: 'var(--text3)', fontWeight: 400 }}>/mo</span></div>
-            <div className="pricing-card-desc">Unlimited everything, billed monthly.</div>
+            <div className="pricing-card-name">30-day Sprint</div>
+            <div className="pricing-card-price">$19<span style={{ fontSize: 14, color: 'var(--text3)', fontWeight: 400 }}> one time</span></div>
+            <div className="pricing-card-desc">Everything you need while you&apos;re applying.</div>
             <div className="pricing-features">
-              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Unlimited tailored resumes</div>
-              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Full ATS Estimator breakdown</div>
-              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Full module editing</div>
-              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Multiple resume uploads</div>
-              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Interview prep document</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Unlimited tailored resumes (fair use)</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Live editing and fit</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Unlimited documents (fair use)</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Interview practice</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Outreach drafts and application insights</div>
             </div>
-            <Link href="/signin?signup=1" className="btn-primary" style={{ width: '100%', justifyContent: 'center', textDecoration: 'none' }}>Start free →</Link>
+            <Link href="/pricing" className="btn-primary" style={{ width: '100%', justifyContent: 'center', textDecoration: 'none' }}>See Sprints →</Link>
           </div>
 
-          {/* Pro Annual */}
+          {/* 90-day Sprint */}
           <div className="pricing-card">
-            <div className="pricing-card-name">Pro Annual</div>
-            <div className="pricing-card-price">$99<span style={{ fontSize: 14, color: 'var(--text3)', fontWeight: 400 }}>/yr</span></div>
-            <div className="pricing-card-desc">Everything in Pro — save two months.</div>
+            <div className="pricing-card-name">90-day Sprint</div>
+            <div className="pricing-card-price">$45<span style={{ fontSize: 14, color: 'var(--text3)', fontWeight: 400 }}> one time</span></div>
+            <div className="pricing-card-desc">For a longer search.</div>
             <div className="pricing-features">
-              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Everything in Pro Monthly</div>
-              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Billed annually</div>
-              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>~ $8.25/month effective</div>
-              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Interview prep document</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Everything in the 30-day Sprint</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>Allowances pool across all 90 days</div>
+              <div className="pricing-feature"><span className="pricing-feature-icon">✓</span>$15 a month, paid once</div>
             </div>
-            <Link href="/signin?signup=1" className="btn-secondary" style={{ width: '100%', justifyContent: 'center', textDecoration: 'none' }}>Start free →</Link>
+            <Link href="/pricing" className="btn-secondary" style={{ width: '100%', justifyContent: 'center', textDecoration: 'none' }}>See Sprints →</Link>
           </div>
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 22, fontSize: 13, color: 'var(--text3)' }}>
-          Just need a one-off? Buy <Link href="/billing" style={{ color: 'var(--teal)' }}>a single resume for $9</Link> or a <Link href="/billing" style={{ color: 'var(--teal)' }}>5-pack for $29</Link>.
+          No auto-renew. One payment, and we never charge you again unless you choose to.
         </div>
       </section>
 
