@@ -1,9 +1,11 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import MergeConfirmModal, { type MergeExperience } from '@/components/MergeConfirmModal'
 import ResumeBuildProgress, { type ResumeBuildResult } from '@/components/ResumeBuildProgress'
+import DocumentImport from '@/components/DocumentImport'
+import { isImportKind, type ImportKind } from '@/lib/documents'
 
 type Stage = 'idle' | 'uploading' | 'extracting' | 'parsing' | 'done' | 'error' | 'duplicates'
 
@@ -300,7 +302,56 @@ const STEPS = ['Reading resume', 'Identifying skill domains…', 'Building your 
 // Page
 // ---------------------------------------------------------------------------
 
-export default function Upload() {
+type UploadKind = 'resume' | ImportKind
+const KIND_OPTIONS: Array<{ kind: UploadKind; label: string }> = [
+  { kind: 'resume', label: 'Resume' },
+  { kind: 'performance_review', label: 'Performance review' },
+  { kind: 'other', label: 'Other (brag doc, LinkedIn export)' },
+]
+
+// /upload?kind=performance_review preselects the review import (the home page links there).
+export default function UploadPage({ searchParams }: { searchParams: Promise<{ kind?: string }> }) {
+  const initial = use(searchParams).kind
+  const [kind, setKind] = useState<UploadKind>(isImportKind(initial) ? initial : 'resume')
+  if (kind === 'resume') return <ResumeUpload kindPicker={<KindPicker kind={kind} onChange={setKind} />} />
+  return (
+    <>
+      <div className="app-topbar">
+        <div>
+          <span className="topbar-title">Upload</span>
+          <span className="topbar-sub">— Add accomplishments to your library</span>
+        </div>
+      </div>
+      <div className="dash-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div className="upload-wrap">
+          <div className="page-title">{kind === 'performance_review' ? 'Import a performance review' : 'Import a document'}</div>
+          <p className="page-sub">Reviews and brag docs hold the wins your resume left out.</p>
+          <KindPicker kind={kind} onChange={setKind} />
+          <DocumentImport key={kind} kind={kind} />
+        </div>
+      </div>
+    </>
+  )
+}
+
+function KindPicker({ kind, onChange }: { kind: UploadKind; onChange: (k: UploadKind) => void }) {
+  return (
+    <div role="tablist" aria-label="What are you uploading?" className="kind-picker">
+      <style>{`
+        .kind-picker { display: flex; gap: 4px; flex-wrap: wrap; margin: 4px 0 18px; padding: 4px; border: 1px solid var(--border2); border-radius: 10px; background: var(--bg2); width: fit-content; max-width: 100%; }
+        .kind-picker button { font: inherit; font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 7px; border: none; background: none; color: var(--text2); cursor: pointer; }
+        .kind-picker button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+      `}</style>
+      {KIND_OPTIONS.map(o => (
+        <button key={o.kind} type="button" role="tab" aria-selected={kind === o.kind} onClick={() => onChange(o.kind)}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ResumeUpload({ kindPicker }: { kindPicker: React.ReactNode }) {
   const [showPaste, setShowPaste] = useState(false)
   const [stage, setStage] = useState<Stage>('idle')
   const [errorMessage, setErrorMessage] = useState('')
@@ -479,7 +530,8 @@ export default function Upload() {
       <div className="dash-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div className="upload-wrap">
           <div className="page-title">Upload your resume</div>
-          <p className="page-sub">We&apos;ll parse it into skill modules. Takes about 15–30 seconds.</p>
+          <p className="page-sub">We&apos;ll parse it into skill modules for you to confirm.</p>
+          {!isParsing && kindPicker}
 
           <input
             ref={fileInputRef}

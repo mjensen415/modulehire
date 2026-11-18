@@ -132,13 +132,16 @@ export async function POST(req: Request) {
   }
 
   const profileId = await getActiveProfileId(supabase, user.id)
+  // The documents row upload-resume wrote for this resume, so its modules point back at it.
+  const { data: docRow } = await supabase.from('documents').select('id').eq('user_id', user.id).eq('source_resume_id', resume_id).maybeSingle()
+  const parseOptions = { documentId: docRow?.id ?? null }
 
   // Kept for callers not yet updated to NDJSON (business reparse, admin reparse) — same
   // single-JSON-response shape as before.
   const jsonMode = new URL(req.url).searchParams.get('mode') === 'json'
   if (jsonMode) {
     try {
-      const { modules: insertedModules, contact, jobSyncError, jobExperienceIds } = await parseModules(supabase, user.id, resume_id, raw_text, profileId)
+      const { modules: insertedModules, contact, jobSyncError, jobExperienceIds } = await parseModules(supabase, user.id, resume_id, raw_text, profileId, undefined, parseOptions)
       const adminSb = await createAdminClient()
       const profileUpdated = await applyContactSideEffects(adminSb, user.id, user.email, contact)
       await supabase.from('usage_events').insert({ user_id: user.id, action: 'upload_resume' })
@@ -155,7 +158,8 @@ export async function POST(req: Request) {
       try {
         const { modules: insertedModules, contact, jobSyncError, jobExperienceIds } = await parseModules(
           supabase, authedUser.id, resume_id, raw_text, profileId,
-          (event: ParseProgressEvent) => controller.enqueue(ndjsonLine(event))
+          (event: ParseProgressEvent) => controller.enqueue(ndjsonLine(event)),
+          parseOptions,
         )
 
         const adminSb = await createAdminClient()
