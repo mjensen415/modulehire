@@ -6,14 +6,13 @@ import { usePathname, useRouter } from 'next/navigation';
 import ModuleHireLogo from '@/components/ModuleHireLogo';
 import FeedbackModal from '@/components/FeedbackModal';
 import ThemeToggle from '@/components/ThemeToggle';
-import { isProTier } from '@/lib/plan';
 
 const SETTINGS_PATHS = ['/account', '/my-info', '/preferences', '/billing', '/settings'];
 const SETTINGS_LINKS = [
   { href: '/account', label: 'Account' },
   { href: '/my-info', label: 'My info' },
   { href: '/preferences', label: 'AI preferences' },
-  { href: '/billing', label: 'Billing' },
+  { href: '/billing', label: 'Your Sprint' },
 ];
 
 type ProfileSummary = { id: string; name: string; module_count: number; is_active: boolean };
@@ -333,7 +332,7 @@ export function IconBuilding() {
     </svg>
   );
 }
-export default function AppSidebar({ footer, tier, isAdmin, activeProfileName, activeProfileId }: { footer?: React.ReactNode; tier?: string; isAdmin?: boolean; activeProfileName?: string; activeProfileId?: string }) {
+export default function AppSidebar({ footer, sprintActive = false, isAdmin, activeProfileName, activeProfileId }: { footer?: React.ReactNode; sprintActive?: boolean; isAdmin?: boolean; activeProfileName?: string; activeProfileId?: string }) {
   const pathname = usePathname();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
@@ -399,10 +398,15 @@ export default function AppSidebar({ footer, tier, isAdmin, activeProfileName, a
 
       <div className="sidebar-section">
         <div className="sidebar-section-label">More</div>
-        {!isProTier(tier) && (
+        {sprintActive ? (
           <Link href="/billing" className={`nav-item${pathname === '/billing' ? ' active' : ''}`}>
             <span className="nav-item-icon"><IconUpgrade /></span>
-            Upgrade
+            Your Sprint
+          </Link>
+        ) : (
+          <Link href="/pricing" className={`nav-item${pathname === '/pricing' ? ' active' : ''}`}>
+            <span className="nav-item-icon"><IconUpgrade /></span>
+            Start a Sprint
           </Link>
         )}
         {isAdmin && (

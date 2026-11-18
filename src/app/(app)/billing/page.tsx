@@ -1,169 +1,137 @@
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { isProTier } from '@/lib/plan';
-import BillingActions, { type Sku } from './BillingActions';
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { entitlements, FREE_LIMITS, loadSprintUser, type Allowance } from '@/lib/entitlements'
+import SprintButton from '@/components/SprintButton'
+import '@/app/warm.css'
+import './billing.css'
 
-type PlanCard = {
-  sku: Sku
-  name: string
-  price: string
-  priceSub?: string
-  desc: string
-  features: string[]
-  cta: string
-  recommended?: boolean
+// "Your Sprint": days left, what's included, Extend. Sprints are one-time and never renew.
+
+const INCLUDED = [
+  'Unlimited tailored resumes (fair use 100 per 30 days)',
+  'Live editing and fit on every resume',
+  'Unlimited documents: reviews, brag docs (fair use 30 a month)',
+  'Interview practice for every round (fair use 60 graded answers a month)',
+  'Outreach drafts',
+  'Application insights',
+]
+const FREE_INCLUDED = [
+  'Your module library and confirmations',
+  `${FREE_LIMITS.resumes} resume and ${FREE_LIMITS.otherDocuments} other documents imported`,
+  `${FREE_LIMITS.tailored} tailored resumes`,
+  'Every export format',
+  `${FREE_LIMITS.practiceRounds} practice round`,
+]
+
+const fmt = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+
+function daysUntil(iso: string): number {
+  return Math.max(0, Math.ceil((new Date(iso).getTime() - new Date().getTime()) / 86_400_000))
 }
 
-const SUBSCRIPTION_PLANS: PlanCard[] = [
-  {
-    sku: 'pro_monthly',
-    name: 'Pro Monthly',
-    price: '$19',
-    priceSub: '/mo',
-    desc: 'Unlimited everything, billed monthly.',
-    features: [
-      'Unlimited tailored resumes',
-      'Full ATS Estimator breakdown',
-      'Full module editing',
-      'Multiple resume uploads',
-      'Priority generation',
-    ],
-    cta: 'Upgrade to Pro Monthly',
-    recommended: true,
-  },
-  {
-    sku: 'pro_annual',
-    name: 'Pro Annual',
-    price: '$99',
-    priceSub: '/yr',
-    desc: 'Everything in Pro — save two months.',
-    features: [
-      'Everything in Pro Monthly',
-      'Billed annually',
-      '~ $8.25/month effective',
-    ],
-    cta: 'Upgrade to Pro Annual',
-  },
-]
+function Usage({ label, a }: { label: string; a: Allowance }) {
+  const pct = a.limit ? Math.min(100, Math.round((a.used / a.limit) * 100)) : 0
+  return (
+    <div className="bl-usage">
+      <div className="bl-usage-row"><span>{label}</span><span className="bl-usage-num">{a.used}{a.limit !== null ? ` of ${a.limit}` : ''}</span></div>
+      {a.limit !== null && <div className="bl-bar"><span style={{ width: `${pct}%` }} /></div>}
+    </div>
+  )
+}
 
-const ONE_TIME_PURCHASES: PlanCard[] = [
-  {
-    sku: 'single',
-    name: 'Single resume',
-    price: '$9',
-    desc: 'One tailored resume. No subscription.',
-    features: ['1 resume credit', 'Never expires', 'DOCX + PDF download'],
-    cta: 'Buy 1 resume — $9',
-  },
-  {
-    sku: 'five_pack',
-    name: '5-pack',
-    price: '$29',
-    desc: 'Five credits. ~ $5.80 each.',
-    features: ['5 resume credits', 'Never expires', 'DOCX + PDF download'],
-    cta: 'Buy 5-pack — $29',
-  },
-]
+export default async function BillingPage({ searchParams }: { searchParams: Promise<{ sprint?: string }> }) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/signin')
+  const { sprint } = await searchParams
 
-export default async function BillingPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/signin');
+  const u = await loadSprintUser(supabase, user.id)
+  const ent = await entitlements(supabase, user.id, new Date(), u)
+  const { data: purchases } = await supabase
+    .from('sprint_purchases')
+    .select('id, sku, amount_cents, starts_at, ends_at, created_at')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(20)
 
-  const { data: profile } = await supabase
-    .from('users')
-    .select('plan, tier, stripe_customer_id')
-    .eq('id', user.id)
-    .single();
-
-  const tier = (profile?.tier ?? 'free') as string;
-  const proCurrent = isProTier(tier);
-  const hasStripe = !!profile?.stripe_customer_id;
+  const daysLeft = ent.endsAt ? daysUntil(ent.endsAt) : null
+  const sourceNote = ent.source === 'beta_pro' ? 'Complimentary beta access' : ent.source === 'legacy_pro' ? 'From your Pro plan' : null
 
   return (
-    <>
-      <div className="app-topbar">
-        <div>
-          <span className="topbar-title">Plans &amp; Billing</span>
-          <span className="topbar-sub">— Choose the plan that fits your search</span>
-        </div>
-      </div>
+    <div className="warm">
+      <div className="warm-inner warm-narrow">
+        <header>
+          <div className="warm-eyebrow">Your Sprint</div>
+          {ent.active ? (
+            <>
+              <h1 className="warm-h1">{daysLeft !== null ? `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left` : 'Your Sprint is active'}</h1>
+              <p className="warm-sub">
+                {ent.endsAt ? `Your Sprint ends ${fmt(ent.endsAt)}. ` : ''}It never renews on its own. When it ends you keep everything and drop to Free limits.
+                {sourceNote ? ` ${sourceNote}.` : ''}
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="warm-h1">You&apos;re on Free</h1>
+              <p className="warm-sub">Start a Sprint when you&apos;re actively applying. One payment, and we never charge you again unless you choose to.</p>
+            </>
+          )}
+        </header>
 
-      <div className="dash-content">
-        <div className="section-card" style={{ marginBottom: 24 }}>
-          <div className="section-head">
-            <div className="section-head-title">Subscriptions</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)' }}>Unlimited resumes + full ATS Estimator</div>
+        {sprint === 'started' && (
+          <div className="warm-card bl-thanks" role="status">
+            Thanks. {ent.active ? 'Your Sprint is active.' : 'Your payment went through; your Sprint will show here in a moment. Refresh if it doesn’t.'}
           </div>
-          <div className="pricing-grid" style={{ padding: '12px 20px 20px' }}>
-            {SUBSCRIPTION_PLANS.map(plan => {
-              const isCurrent = proCurrent && (
-                (plan.sku === 'pro_monthly' && profile?.plan !== 'pro_annual') ||
-                plan.sku === 'pro_annual' && profile?.plan === 'pro_annual'
-              );
-              return (
-                <div key={plan.sku} className={`pricing-card${isCurrent ? ' current' : ''}`}>
-                  {isCurrent && <div className="pricing-badge">Current plan</div>}
-                  {!isCurrent && plan.recommended && <div className="pricing-badge">Most popular</div>}
-                  <div className="pricing-card-name">{plan.name}</div>
-                  <div className="pricing-card-price">
-                    {plan.price}{plan.priceSub && <span style={{ fontSize: 14, fontWeight: 400, color: 'var(--text3)' }}>{plan.priceSub}</span>}
-                  </div>
-                  <div className="pricing-card-desc">{plan.desc}</div>
-                  <div className="pricing-features">
-                    {plan.features.map(f => (
-                      <div key={f} className="pricing-feature">
-                        <span className="pricing-feature-icon">
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                            <path d="M2.5 7l3.5 3.5 5.5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </span>
-                        {f}
-                      </div>
-                    ))}
-                  </div>
-                  <BillingActions
-                    sku={plan.sku}
-                    cta={plan.cta}
-                    isCurrent={isCurrent}
-                    hasStripe={hasStripe}
-                    variant={plan.recommended ? 'primary' : 'secondary'}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        )}
 
-        <div className="section-card">
-          <div className="section-head">
-            <div className="section-head-title">One-time purchases</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)' }}>Pay per resume — credits never expire</div>
+        <section className="warm-card">
+          <h2 className="warm-h2">{ent.active ? 'Included in your Sprint' : 'Included in Free'}</h2>
+          <ul className="bl-list">
+            {(ent.active ? INCLUDED : FREE_INCLUDED).map(f => <li key={f}>{f}</li>)}
+          </ul>
+          <div className="bl-usages">
+            <Usage label="Tailored resumes" a={ent.tailored} />
+            <Usage label={ent.active ? 'Documents imported' : 'Other documents imported'} a={ent.documents} />
+            {ent.active && <Usage label="Graded practice answers" a={ent.graded} />}
           </div>
-          <div className="pricing-grid" style={{ padding: '12px 20px 20px' }}>
-            {ONE_TIME_PURCHASES.map(p => (
-              <div key={p.sku} className="pricing-card">
-                <div className="pricing-card-name">{p.name}</div>
-                <div className="pricing-card-price">{p.price}</div>
-                <div className="pricing-card-desc">{p.desc}</div>
-                <div className="pricing-features">
-                  {p.features.map(f => (
-                    <div key={f} className="pricing-feature">
-                      <span className="pricing-feature-icon">
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                          <path d="M2.5 7l3.5 3.5 5.5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </span>
-                      {f}
-                    </div>
-                  ))}
-                </div>
-                <BillingActions sku={p.sku} cta={p.cta} variant="secondary" />
-              </div>
-            ))}
+          {ent.active && ent.tailored.since && (
+            <p className="warm-sub bl-fine">Fair-use counts since {fmt(ent.tailored.since)}{ent.source === 'sprint' ? '' : ' (last 30 days)'}.</p>
+          )}
+        </section>
+
+        <section className="warm-card">
+          <h2 className="warm-h2">{ent.active ? 'Extend' : 'Start a Sprint'}</h2>
+          {ent.active && ent.endsAt && <p className="warm-sub" style={{ marginBottom: 14 }}>Extending adds days after {fmt(ent.endsAt)}, so you never lose time you paid for.</p>}
+          <div className="bl-skus">
+            <div className="bl-sku">
+              <div className="bl-sku-name">30-day Sprint</div>
+              <div className="bl-sku-price">$19 <span>one time</span></div>
+              <SprintButton sku="sprint_30" label={ent.active ? 'Add 30 days' : 'Start a 30-day Sprint'} className="warm-btn" returnUrl="/billing" />
+            </div>
+            <div className="bl-sku">
+              <div className="bl-sku-name">90-day Sprint</div>
+              <div className="bl-sku-price">$45 <span>one time</span></div>
+              <SprintButton sku="sprint_90" label={ent.active ? 'Add 90 days' : 'Start a 90-day Sprint'} className="warm-btn warm-btn-ghost" returnUrl="/billing" />
+            </div>
           </div>
-        </div>
+          <p className="warm-sub bl-fine">No auto-renew. Your data stays yours: download or delete anything from <Link href="/files" className="warm-link">Files</Link>.</p>
+        </section>
+
+        {(purchases ?? []).length > 0 && (
+          <section className="warm-card">
+            <h2 className="warm-h2">Purchases</h2>
+            <ul className="bl-history">
+              {(purchases ?? []).map(p => (
+                <li key={p.id}>
+                  <span>{p.sku === 'sprint_90' ? '90-day Sprint' : '30-day Sprint'} · ${(p.amount_cents / 100).toFixed(2)}</span>
+                  <span className="warm-muted">{fmt(p.starts_at)} to {fmt(p.ends_at)}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
-    </>
-  );
+    </div>
+  )
 }

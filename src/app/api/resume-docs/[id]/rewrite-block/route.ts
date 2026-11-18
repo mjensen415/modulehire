@@ -7,6 +7,7 @@ import { sanitizeCriteria } from '@/lib/dimensions'
 import { parseResumeDoc, modulesOnResume } from '@/lib/resume-doc'
 import { unsupportedClaims } from '@/lib/fact-check'
 import { getUsableModules } from '@/lib/usable-modules'
+import { sprintRequired } from '@/lib/entitlements'
 
 export const maxDuration = 60
 
@@ -36,6 +37,8 @@ export async function POST(req: Request, { params }: RouteContext) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const gate = await sprintRequired(supabase, user.id)
+  if (gate) return NextResponse.json(gate, { status: 402 })
 
   const limit = await checkAndLog(supabase, user.id, 'rl_block_rewrite', 120, 3600)
   if (!limit.ok) {

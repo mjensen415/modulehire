@@ -1,0 +1,23 @@
+/* /pricing in the warm style. Tokens: src/app/warm.css. */
+.pr-page { padding-top: 110px; }
+.pr-hero { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.pr-title { font-family: var(--h-serif); font-weight: 500; font-size: clamp(36px, 6vw, 58px); line-height: 1.05; letter-spacing: -0.015em; margin: 6px 0 8px; }
+.pr-lede { max-width: 560px; font-size: 16.5px; }
+.pr-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; margin-top: 12px; }
+.pr-card { background: var(--h-card); border: 1px solid var(--h-line); border-radius: 22px; overflow: hidden; display: flex; flex-direction: column; }
+.pr-card-main { border-color: var(--h-accent); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08); }
+.pr-card-top { padding: 22px 22px 18px; }
+.pr-name { font-family: var(--h-serif); font-weight: 500; font-size: 24px; margin: 0 0 8px; }
+.pr-price { font-family: var(--h-serif); font-size: 44px; line-height: 1; }
+.pr-price span { font-family: var(--font); font-size: 13px; color: var(--h-muted); margin-left: 4px; }
+.pr-features { list-style: none; margin: 0; padding: 18px 22px; display: flex; flex-direction: column; gap: 10px; flex: 1; font-size: 14.5px; line-height: 1.45; }
+.pr-features li { padding-left: 22px; position: relative; }
+.pr-features li::before { content: ''; position: absolute; left: 2px; top: 7px; width: 9px; height: 9px; border-radius: 3px; background: var(--h-accent); opacity: 0.75; }
+.pr-cta { padding: 0 22px 22px; }
+.pr-promises { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.pr-promise { background: var(--h-card2); border-radius: 18px; padding: 20px 22px; margin: 0; font-family: var(--h-serif); font-size: 19px; line-height: 1.4; }
+.pr-faq { max-width: 760px; width: 100%; margin: 8px auto 0; }
+@media (max-width: 900px) {
+  .pr-page { padding-top: 90px; }
+  .pr-cards, .pr-promises { grid-template-columns: 1fr; }
+}

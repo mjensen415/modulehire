@@ -22,13 +22,10 @@ export async function POST(req: Request, { params }: Ctx) {
   if (answer.split(/\s+/).length < 15) return NextResponse.json({ error: 'Write a few sentences, the way you would say it out loud.' }, { status: 400 })
   if (answer.length > 8000) return NextResponse.json({ error: 'That answer is too long to grade. Keep it under about 1,000 words.' }, { status: 400 })
 
-  const [{ data: iv }, { data: me }] = await Promise.all([
-    supabase.from('interviews').select('id, round_name, job_applications(company, title)').eq('id', id).eq('user_id', user.id).maybeSingle(),
-    supabase.from('users').select('tier').eq('id', user.id).single(),
-  ])
+  const { data: iv } = await supabase.from('interviews').select('id, round_name, job_applications(company, title)').eq('id', id).eq('user_id', user.id).maybeSingle()
   if (!iv) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const allowed = await practiceAllowed(supabase, user.id, me?.tier, id)
+  const allowed = await practiceAllowed(supabase, user.id, id)
   if (!allowed.ok) return NextResponse.json({ error: allowed.message, code: allowed.code }, { status: allowed.code === 'PRACTICE_FAIR_USE' ? 429 : 403 })
 
   // Confirmed modules only, the most related to this question and answer first.

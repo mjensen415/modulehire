@@ -1,5 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-
 export const DOCUMENT_KINDS = ['resume', 'performance_review', 'brag_doc', 'interview_email', 'generated_resume', 'other'] as const
 export type DocumentKind = typeof DOCUMENT_KINDS[number]
 
@@ -62,16 +60,4 @@ export function jobForYear(jobs: JobRow[], year: number | null): string | null {
   return containing[0]?.id ?? null
 }
 
-// ─── Limits ──────────────────────────────────────────────────────────────────
-// Free: 1 resume (the existing uploadLimit) and 2 other documents, counted over all time
-// including deleted ones (so deleting doesn't reset it). Paid: unlimited, fair use 30 a month.
-
-export const FREE_OTHER_DOCUMENTS = 2
-export const DOCUMENTS_FAIR_USE_MONTHLY = 30
-
-export async function otherDocumentCounts(supabase: SupabaseClient, userId: string) {
-  const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()
-  const base = () => supabase.from('documents').select('id', { count: 'exact', head: true }).eq('user_id', userId).in('kind', [...IMPORT_KINDS])
-  const [all, month] = await Promise.all([base(), base().gte('created_at', monthStart)])
-  return { total: all.count ?? 0, thisMonth: month.count ?? 0 }
-}
+// Limits live in src/lib/entitlements.ts.

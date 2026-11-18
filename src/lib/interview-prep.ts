@@ -1,6 +1,6 @@
 // Interview prep for one job: the user's own experience mapped to the posting's requirements.
 // Shared by POST /api/interview-prep and the MCP interview_prep tool. Results are cached per JD
-// for 7 days in interview_prep_cache; the plan gate (Pro only) stays with each caller.
+// for 7 days in interview_prep_cache; the Sprint gate stays with each caller.
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { jsonrepair } from 'jsonrepair'
 import { aiComplete } from '@/lib/ai'

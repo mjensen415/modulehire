@@ -162,6 +162,7 @@ export function registerWriteTools(server: McpServer) {
     },
     async ({ resume_id, version, block_id, text }, ctx) =>
       runTool('update_block', ctx.http?.authInfo, async (env) => {
+        await requirePro(env, 'Editing a resume')
         const { row, doc } = await loadForEdit(env, resume_id, version)
         const block = findBlock(doc, block_id)
         if (!block) throw new ToolError('No line with that block_id on this resume. Call get_resume to see the current lines.')
@@ -219,6 +220,7 @@ export function registerWriteTools(server: McpServer) {
     },
     async ({ resume_id, version, job_index, block_ids }, ctx) =>
       runTool('reorder_blocks', ctx.http?.authInfo, async (env) => {
+        await requirePro(env, 'Editing a resume')
         const { row, doc } = await loadForEdit(env, resume_id, version)
         const entry = doc.experience[job_index]
         if (!entry) throw new ToolError(`This resume has ${doc.experience.length} jobs; job_index must be 0 to ${doc.experience.length - 1}.`)
@@ -253,6 +255,7 @@ export function registerWriteTools(server: McpServer) {
     },
     async ({ resume_id, version, section, visible }, ctx) =>
       runTool('set_section_visibility', ctx.http?.authInfo, async (env) => {
+        await requirePro(env, 'Editing a resume')
         const { row, doc } = await loadForEdit(env, resume_id, version)
         const hidden = new Set(doc.hidden_sections ?? [])
         if (visible) hidden.delete(section)

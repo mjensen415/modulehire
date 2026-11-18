@@ -64,7 +64,7 @@ export default function Docs() {
         <div className="callout-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M8 2L1 14h14L8 2zM8 7v3M8 12h.01" /></svg>
         </div>
-        <div className="callout-text"><strong>Free plan note:</strong> Generated resume download links expire after 24 hours. Upgrade to Pro for permanent storage.</div>
+        <div className="callout-text"><strong>Free plan note:</strong> Generated resume download links expire after 24 hours. Live editable resumes are stored in your account.</div>
       </div>
 
       <h2>What gets generated</h2>

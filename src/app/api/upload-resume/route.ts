@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createClient as createAnonClient } from '@supabase/supabase-js'
-import { uploadLimit, isProTier } from '@/lib/plan'
+import { allows, entitlements, LIMIT_MESSAGES } from '@/lib/entitlements'
 import { extractResumeText, isUnreadable, UNREADABLE_TEXT_MESSAGE } from '@/lib/resume-text'
 
 export const maxDuration = 60
@@ -51,25 +51,13 @@ export async function POST(req: Request) {
       { onConflict: 'id', ignoreDuplicates: true }
     )
 
-    // Upload-limit gate (skipped for pro/beta_pro)
-    const { data: profileRow } = await supabase
-      .from('users')
-      .select('tier')
-      .eq('id', user.id)
-      .single()
-    const tier = (profileRow?.tier ?? 'free') as string
-    if (!isProTier(tier)) {
-      const { count: existingCount } = await supabase
-        .from('resumes')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-      const cap = uploadLimit(tier)
-      if ((existingCount ?? 0) >= cap) {
-        return NextResponse.json(
-          { error: 'Upload limit reached for your plan.', code: 'UPLOAD_LIMIT_REACHED', limit: cap },
-          { status: 403 }
-        )
-      }
+    // Upload gate: Free 1 resume; a Sprint counts every upload toward its fair use.
+    const ent = await entitlements(supabase, user.id)
+    if (!allows(ent.resumes)) {
+      return NextResponse.json(
+        { error: ent.active ? LIMIT_MESSAGES.fairUse : LIMIT_MESSAGES.resumes, code: 'UPLOAD_LIMIT_REACHED', limit: ent.resumes.limit },
+        { status: 403 }
+      )
     }
 
     const formData = await req.formData()

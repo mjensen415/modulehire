@@ -11,9 +11,8 @@ import { compareResumeRanges, formatResumeRange, normalizeCompany } from '@/lib/
 import { jobResolver, type JobRow } from '@/lib/job-grouping'
 import type { UserPreferences } from '@/lib/preferences'
 import { factCheckBullets, stripUnsupportedSentences, type FactFlag, type SourceModule } from '@/lib/fact-check'
-// canGenerate removed — generation is always allowed; download is gated client-side via canDownload.
-import { canGenerateThisMonth, isProTier } from '@/lib/plan'
-import { generationsThisMonth } from '@/lib/usage-limits'
+// Tailored-resume limits: src/lib/entitlements.ts.
+import { allows, entitlements, LIMIT_MESSAGES, SPRINT_REQUIRED_CODE } from '@/lib/entitlements'
 import { nanoid } from 'nanoid'
 import { jsonrepair } from 'jsonrepair'
 import { createResumeStreamReader } from '@/lib/stream-json'
@@ -72,40 +71,16 @@ export async function POST(req: Request) {
       )
     }
 
-    // ── Plan gate: monthly generation limit ──────────────────────────────────
+    // ── Plan gate: tailored resumes (Free: 2 total; Sprint: fair use) ─────────
     const now = new Date()
     const month = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
-
-    const [usageRes, profileRes] = await Promise.all([
-      supabase
-        .from('resume_generation_counts')
-        .select('count, overage_credits')
-        .eq('user_id', user.id)
-        .eq('month', month)
-        .maybeSingle(),
-      supabase
-        .from('users')
-        .select('resume_credits, tier')
-        .eq('id', user.id)
-        .single(),
-    ])
-
-    const usageRow = usageRes.data as { count?: number; overage_credits?: number } | null
-    const profileRow = profileRes.data as { resume_credits?: number; tier?: string } | null
-
-    const resumeCredits = profileRow?.resume_credits ?? 0
-    const tier = (profileRow?.tier ?? 'free') as string
-    void usageRow
-
-    // Free-tier monthly generation cap (Pro / beta_pro: unlimited).
-    if (!isProTier(tier) && !docOnlyFor) {
-      const monthlyCount = await generationsThisMonth(supabase, user.id)
-      if (!canGenerateThisMonth(tier, monthlyCount)) {
-        return NextResponse.json({
-          error: "You've used your 25 free resumes this month. Upgrade to Pro for unlimited generations.",
-          code: 'monthly_generation_limit',
-        }, { status: 402 })
-      }
+    const ent = await entitlements(supabase, user.id, now)
+    if (!docOnlyFor && !allows(ent.tailored)) {
+      return NextResponse.json({
+        error: ent.active ? LIMIT_MESSAGES.fairUse : LIMIT_MESSAGES.tailored,
+        code: SPRINT_REQUIRED_CODE,
+        limit: 'tailored',
+      }, { status: 402 })
     }
 
     const {
@@ -772,19 +747,6 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
         .eq('id', user.id)
       if (prefsError) console.error('[generate-resume] saving resume_defaults failed:', prefsError)
 
-      // Consume one resume credit per generation for non-pro users with credits.
-      // Free users with 0 credits still generate within their monthly quota.
-      if (!isProTier(tier) && resumeCredits > 0) {
-        // Service role: the function is no longer executable by users (20261028_lock_users_columns).
-        const { error: creditError } = await admin.rpc('increment_resume_credits', {
-          p_user_id: user.id,
-          p_amount: -1,
-        })
-        if (creditError) {
-          console.error('[generate-resume] decrement resume_credits failed:', creditError)
-        }
-      }
-
       // Increment monthly resume count (atomic via RPC). Generation already succeeded —
       // log on failure but don't fail the request.
       const { error: incError } = await admin.rpc('increment_resume_count', {
@@ -795,8 +757,8 @@ The posting's own wording for its most-repeated asks: ${topRepeated.map(c => `${
         console.error('[generate-resume] increment_resume_count failed:', incError)
       }
 
-      // Full keyword breakdown is a Pro-only feature. Free tiers get the score only.
-      const proBreakdown = isProTier(tier)
+      // Full keyword breakdown comes with a Sprint. Free gets the score only.
+      const proBreakdown = ent.active
 
       return {
         resume_id: savedResume.id,

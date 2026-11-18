@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import SprintButton from '@/components/SprintButton'
 
 // Side sheet for drafting outreach about a role. Copy-only — ModuleHire never sends anything,
 // and drafts aren't saved.
@@ -98,6 +99,8 @@ function SheetBody({ onClose, jdId, jobApplicationId, initialPurpose = 'informat
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const [needsSprint, setNeedsSprint] = useState(false)
+
   async function generate() {
     setLoading(true)
     setError('')
@@ -116,7 +119,7 @@ function SheetBody({ onClose, jdId, jobApplicationId, initialPurpose = 'informat
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Could not draft outreach')
+      if (!res.ok) { setNeedsSprint(data.code === 'sprint_required'); throw new Error(data.error ?? 'Could not draft outreach') }
       setDrafts(data.drafts ?? [])
       setDraftChannel(channel)
     } catch (e) {
@@ -192,6 +195,7 @@ function SheetBody({ onClose, jdId, jobApplicationId, initialPurpose = 'informat
         </div>
 
         {error && <div style={{ fontSize: 12.5, color: 'var(--rose)' }}>{error}</div>}
+        {needsSprint && <SprintButton />}
 
         {drafts.length === 0 ? (
           <button type="button" className="btn-primary" onClick={generate} disabled={loading}>

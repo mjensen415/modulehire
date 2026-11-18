@@ -6,7 +6,6 @@ import Link from 'next/link'
 import PublicNav from '@/components/layout/PublicNav'
 import PublicFooter from '@/components/layout/PublicFooter'
 import FaqItem from '@/components/ui/FaqItem'
-import { moduleLimit } from '@/lib/plan'
 import McpDemo from './McpDemo'
 import SetupTabs from './SetupTabs'
 import CopyButton from './CopyButton'
@@ -52,7 +51,7 @@ const PROMPTS: { group: string; color: string; items: string[] }[] = [
     color: 'rose',
     items: [
       'I applied to the Northwind role today. Add it to my tracker.',
-      'Prep me for my interview for the Northwind job. (Pro)',
+      'Prep me for my interview for the Northwind job. (Sprint)',
     ],
   },
 ]
@@ -73,7 +72,7 @@ const TOOLS: { name: string; does: string; kind: 'read' | 'write' | 'ai' }[] = [
   { name: 'export_resume', does: 'A PDF or Word download link, good for 10 minutes', kind: 'write' },
   { name: 'get_editor_link', does: 'A one-time link that opens the resume in the editor, signed in', kind: 'write' },
   { name: 'generate_resume', does: 'Build a tailored resume for a job (uses your plan)', kind: 'ai' },
-  { name: 'interview_prep', does: 'Talking points, questions to ask, and gaps to prepare for (Pro)', kind: 'ai' },
+  { name: 'interview_prep', does: 'Talking points, questions to ask, and gaps to prepare for (Sprint)', kind: 'ai' },
 ]
 
 const KIND_LABEL = { read: 'Reads', write: 'Changes', ai: 'Uses AI' } as const
@@ -97,7 +96,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: 'Does it cost extra?',
-    a: 'No. It uses your ModuleHire plan, the same as the website. The free plan lets you build and preview resumes, with downloads from $9 per resume. Pro is $19 a month or $99 a year. See the pricing page for details.',
+    a: 'No. It uses your ModuleHire plan, the same as the website. Free includes your module library, 2 tailored resumes and every export format. A 30-day Sprint is $19 and a 90-day Sprint is $45, one payment each with no auto-renew. See the pricing page for details.',
   },
   {
     q: 'Is there a limit on how much the app can do?',
@@ -116,7 +115,6 @@ const FAQS: { q: string; a: string }[] = [
 export default function McpPage() {
   const cursorConfig = Buffer.from(JSON.stringify({ url: SERVER_URL })).toString('base64')
   const cursorDeeplink = `cursor://anysphere.cursor-deeplink/mcp/install?name=modulehire&config=${cursorConfig}`
-  const freeModules = moduleLimit('free')
 
   return (
     <>
@@ -214,23 +212,23 @@ export default function McpPage() {
             <div className={s.planName}>Free</div>
             <div className={s.planPrice}>$0</div>
             <ul className={s.planList}>
-              <li>Upload 1 resume</li>
-              <li>Up to {freeModules} skill modules</li>
-              <li>Full resume builder experience</li>
-              <li>Preview your generated resume</li>
-              <li>Download from $9 per resume</li>
-              <li className={s.planNo}>Interview prep</li>
+              <li>Your module library and confirmations</li>
+              <li>1 resume and 2 other documents imported</li>
+              <li>2 tailored resumes</li>
+              <li>Every export format</li>
+              <li>1 practice round</li>
+              <li className={s.planNo}>Editing resumes from chat</li>
             </ul>
           </div>
           <div className={`${s.planCard} ${s.planPro}`}>
-            <div className={s.planName}>Pro</div>
-            <div className={s.planPrice}>$19 a month or $99 a year</div>
+            <div className={s.planName}>Sprint</div>
+            <div className={s.planPrice}>$19 for 30 days or $45 for 90, no auto-renew</div>
             <ul className={s.planList}>
-              <li>Unlimited tailored resumes</li>
-              <li>Unlimited resume uploads</li>
-              <li>Unlimited skill modules</li>
-              <li>All 6 formats (PDF + DOCX)</li>
-              <li>Interview prep</li>
+              <li>Unlimited tailored resumes (fair use)</li>
+              <li>Live editing, from chat or the web</li>
+              <li>Unlimited documents (fair use)</li>
+              <li>Interview prep and practice</li>
+              <li>Outreach drafts</li>
             </ul>
             <Link href="/pricing" className={s.planLink}>
               See all pricing

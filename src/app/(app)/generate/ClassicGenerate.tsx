@@ -12,6 +12,7 @@ import { parsePostingAge, type ApplicationSource, type PostingAge } from '@/lib/
 import MatchReport, { type MatchReportData } from '@/components/MatchReport'
 import UnsupportedPhrases from '@/components/UnsupportedPhrases'
 import { pickPositioningVariant } from '@/lib/resume-options'
+import SprintButton from '@/components/SprintButton'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -311,8 +312,7 @@ export default function ClassicGenerate() {
   const [alignmentError, setAlignmentError] = useState<string | null>(null)
   const [savingToLibrary, setSavingToLibrary] = useState(false)
   const [savedToLibrary, setSavedToLibrary] = useState(false)
-  const [showOveragePrompt, setShowOveragePrompt] = useState(false)
-  const [overageCheckoutLoading, setOverageCheckoutLoading] = useState(false)
+  const [limitMessage, setLimitMessage] = useState('')
   const [showMonthlyLimitModal, setShowMonthlyLimitModal] = useState(false)
   const [userTier, setUserTier] = useState<string>('free')
   const [planLoaded, setPlanLoaded] = useState(false)
@@ -379,7 +379,7 @@ export default function ClassicGenerate() {
     fetch('/api/me')
       .then(r => r.json())
       .then(profile => {
-        if (!profile.error && profile.tier) setUserTier(profile.tier)
+        if (!profile.error) setUserTier(profile.sprint_active ? 'pro' : 'free')
         setPlanLoaded(true)
       })
       .catch(() => {
@@ -875,7 +875,7 @@ export default function ClassicGenerate() {
           setSavedSummary(profile.summary)
           setSummaryOverride(prev => prev || profile.summary)
         }
-        if (profile.tier) setUserTier(profile.tier)
+        setUserTier(profile.sprint_active ? 'pro' : 'free')
       }
       setPlanLoaded(true)
     }).catch(() => { setPlanLoaded(true) })
@@ -1496,23 +1496,6 @@ export default function ClassicGenerate() {
     URL.revokeObjectURL(blobUrl)
   }
 
-  async function handleOverageCheckout() {
-    setOverageCheckoutLoading(true)
-    try {
-      const res = await fetch('/api/checkout/overage', { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
-      if (res.ok && data.url) {
-        window.location.href = data.url as string
-        return
-      }
-      setErrorMessage(data.error ?? 'Could not start checkout.')
-    } catch {
-      setErrorMessage('Could not start checkout.')
-    } finally {
-      setOverageCheckoutLoading(false)
-    }
-  }
-
   async function saveJobTitle() {
     if (!jdData?.jd_id) return
     const trimmed = jobTitle.trim()
@@ -1586,7 +1569,6 @@ export default function ClassicGenerate() {
 
   async function handleGenerate(explicitIds?: string[]) {
     setErrorMessage('')
-    setShowOveragePrompt(false)
 
     // Generation is always allowed — free users get a preview, download is gated separately.
     setStep('generating')
@@ -1643,7 +1625,8 @@ export default function ClassicGenerate() {
       })
       const data = await res.json()
       if (!res.ok) {
-        if (data.code === 'monthly_generation_limit') {
+        if (data.code === 'sprint_required') {
+          setLimitMessage(data.error ?? 'You have used the tailored resumes the Free plan includes.')
           setShowMonthlyLimitModal(true)
           setStep('confirm')
           return
@@ -1746,8 +1729,6 @@ export default function ClassicGenerate() {
     setAlignmentError(null)
     setSavingToLibrary(false)
     setSavedToLibrary(false)
-    setShowOveragePrompt(false)
-    setOverageCheckoutLoading(false)
     setIncludeAwards(false)
     setAwardsText('')
     setModuleContentOverrides({})
@@ -3235,38 +3216,6 @@ export default function ClassicGenerate() {
               </div>
             )}
 
-            {/* Overage prompt — free plan, monthly resume limit reached */}
-            {showOveragePrompt && (
-              <div style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--amber, oklch(0.75 0.16 60))',
-                borderRadius: 10,
-                padding: '18px 20px',
-                marginBottom: 24,
-              }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
-                  You&apos;ve used your 25 free resumes this month.
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 14 }}>
-                  Buy a single resume for $9, a 5-pack for $29, or go unlimited with Pro. Credits never expire.
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={handleOverageCheckout}
-                    disabled={overageCheckoutLoading}
-                    style={overageCheckoutLoading ? { opacity: 0.7, display: 'inline-flex', alignItems: 'center', gap: 6 } : { display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                  >
-                    {overageCheckoutLoading ? <><Spinner /> Starting checkout…</> : 'Buy single — $9 →'}
-                  </button>
-                  <a href="/pricing" style={{ fontSize: 13, color: 'var(--teal)', textDecoration: 'none' }}>
-                    See all options →
-                  </a>
-                </div>
-              </div>
-            )}
-
             {/* Ready card — one decision; every option lives under More options */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 12, padding: '22px 24px' }}>
               <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
@@ -3958,7 +3907,7 @@ export default function ClassicGenerate() {
                         )
                       ) : (
                         <div style={{ fontSize: 13, color: 'var(--text2)', padding: '10px 14px', border: '1px solid var(--border2)', borderRadius: 8, background: 'var(--bg2)' }}>
-                          Cover letter generated. <a href="/billing" style={{ color: 'var(--teal)' }}>Upgrade to Pro to download →</a>
+                          Cover letter generated. <a href="/billing" style={{ color: 'var(--teal)' }}>Start a Sprint to download →</a>
                         </div>
                       )}
                     </div>
@@ -4018,7 +3967,7 @@ export default function ClassicGenerate() {
                       className="btn-primary"
                       style={{ fontSize: 12.5, flexShrink: 0, textDecoration: 'none', whiteSpace: 'nowrap' }}
                     >
-                      Prep for interview →{!(userTier === 'pro' || userTier === 'beta_pro') && ' 🔒 Pro'}
+                      Prep for interview →{!(userTier === 'pro' || userTier === 'beta_pro') && ' (Sprint)'}
                     </a>
                   </div>
                 )}
@@ -4070,9 +4019,9 @@ export default function ClassicGenerate() {
                 {planLoaded && !(userTier === 'pro' || userTier === 'beta_pro') && (matchedKw.length > 0 || missingKw.length > 0) && (
                   <div style={{ background: 'var(--surface)', border: '1px dashed var(--border2)', borderRadius: 10, padding: '16px 18px', textAlign: 'center' }}>
                     <div style={{ fontSize: 22, marginBottom: 6 }}>🔒</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Full ATS breakdown is Pro-only</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>The full ATS breakdown comes with a Sprint</div>
                     <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>Keyword analysis, missing terms, and section scores are unlocked on Pro.</div>
-                    <a href="/billing" className="btn-primary" style={{ fontSize: 12, padding: '6px 14px', display: 'inline-block' }}>Upgrade to Pro to see the full breakdown</a>
+                    <a href="/billing" className="btn-primary" style={{ fontSize: 12, padding: '6px 14px', display: 'inline-block' }}>See Sprints</a>
                   </div>
                 )}
 
@@ -4161,24 +4110,18 @@ export default function ClassicGenerate() {
             style={{
               background: 'var(--surface)', border: '1px solid var(--border2)',
               borderRadius: 12, padding: 28, maxWidth: 440, width: '100%',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', gap: 16,
             }}
           >
-            <div style={{ fontSize: 32, marginBottom: 8 }}>🚀</div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', marginBottom: 10 }}>
-              You&apos;ve used your 25 free resumes this month.
-            </h2>
-            <p style={{ fontSize: 14, color: 'var(--text2)', lineHeight: 1.55, marginBottom: 22 }}>
-              Upgrade to Pro for unlimited resume generations, plus the full ATS Estimator breakdown for every resume you create.
-            </p>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'flex-end' }}>
+            <p style={{ fontSize: 15, color: 'var(--text)', lineHeight: 1.55, margin: 0 }}>{limitMessage}</p>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               <button
                 onClick={() => setShowMonthlyLimitModal(false)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text3)', padding: '8px 12px' }}
               >
-                Remind me next month
+                Not now
               </button>
-              <a href="/billing" className="btn-primary">Upgrade to Pro →</a>
+              <SprintButton />
             </div>
           </div>
         </div>

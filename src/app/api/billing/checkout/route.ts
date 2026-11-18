@@ -2,61 +2,41 @@ import { NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { safeReturnUrl } from '@/lib/safe-return-url'
+import { SPRINT_SKUS, isSprintSku } from '@/lib/sprint'
 
-type SkuKey = 'pro_monthly' | 'pro_annual' | 'single' | 'five_pack'
-
-const SKU_TO_PRICE: Record<SkuKey, string | undefined> = {
-  pro_monthly: process.env.STRIPE_PRICE_PRO_MONTHLY,
-  pro_annual: process.env.STRIPE_PRICE_PRO_ANNUAL,
-  single: process.env.STRIPE_PRICE_SINGLE_RESUME,
-  five_pack: process.env.STRIPE_PRICE_FIVE_PACK,
-}
-
-const SUBSCRIPTION_SKUS: Set<SkuKey> = new Set(['pro_monthly', 'pro_annual'])
-
+// One-time Sprint checkout (mode: payment, never a subscription). The webhook applies it.
 export async function POST(req: Request) {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { sku, returnUrl } = await req.json() as { sku?: string; returnUrl?: string }
-    if (!sku || !(sku in SKU_TO_PRICE)) {
-      return NextResponse.json({ error: 'Invalid sku' }, { status: 400 })
-    }
-    const priceId = SKU_TO_PRICE[sku as SkuKey]
+    const { sku, returnUrl } = await req.json().catch(() => ({})) as { sku?: string; returnUrl?: string }
+    if (!isSprintSku(sku)) return NextResponse.json({ error: 'Choose a 30-day or 90-day Sprint.' }, { status: 400 })
+    const priceId = process.env[SPRINT_SKUS[sku].priceEnv]
     if (!priceId) {
-      return NextResponse.json({ error: 'Price not configured. Set the Stripe env var for this SKU.' }, { status: 503 })
+      console.error(`[api/billing/checkout] ${SPRINT_SKUS[sku].priceEnv} is not set`)
+      return NextResponse.json({ error: 'Checkout is not available right now.' }, { status: 503 })
     }
 
     const safe = safeReturnUrl(req, returnUrl, '/billing')
     const successUrl = new URL(safe)
-    successUrl.searchParams.set('upgraded', '1')
+    successUrl.searchParams.set('sprint', 'started')
 
-    // Use existing customer if we have one; otherwise let Stripe create + we'll
-    // backfill stripe_customer_id from the webhook.
     const admin = await createAdminClient()
-    const { data: profile } = await admin
-      .from('users')
-      .select('stripe_customer_id, email')
-      .eq('id', user.id)
-      .single()
-
-    const mode = SUBSCRIPTION_SKUS.has(sku as SkuKey) ? 'subscription' : 'payment'
+    const { data: profile } = await admin.from('users').select('stripe_customer_id, email').eq('id', user.id).single()
 
     const session = await stripe.checkout.sessions.create({
-      mode,
+      mode: 'payment',
       line_items: [{ price: priceId, quantity: 1 }],
       client_reference_id: user.id,
       ...(profile?.stripe_customer_id
         ? { customer: profile.stripe_customer_id }
-        : { customer_email: profile?.email ?? user.email ?? undefined }),
+        : { customer_email: profile?.email ?? user.email ?? undefined, customer_creation: 'always' as const }),
       success_url: successUrl.toString(),
       cancel_url: safe,
       metadata: { supabase_user_id: user.id, sku },
-      ...(mode === 'subscription'
-        ? { subscription_data: { metadata: { supabase_user_id: user.id, sku } } }
-        : {}),
+      payment_intent_data: { metadata: { supabase_user_id: user.id, sku } },
     })
 
     return NextResponse.json({ url: session.url })

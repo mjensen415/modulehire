@@ -324,9 +324,9 @@ export default function Settings() {
 
                 {tier === 'free' && (
                   <div className="upgrade-card" style={{ marginTop: 16 }}>
-                    <div className="upgrade-card-title">Upgrade to Pro</div>
-                    <div className="upgrade-card-sub">Unlimited tailored resumes, priority generation, and full history. $19/mo or $99/yr.</div>
-                    <a href="/billing" className="btn-upgrade">View plans →</a>
+                    <div className="upgrade-card-title">Start a Sprint</div>
+                    <div className="upgrade-card-sub">Unlimited tailored resumes, live editing, interview practice and more. $19 for 30 days or $45 for 90, one payment, no auto-renew.</div>
+                    <a href="/billing" className="btn-upgrade">Your Sprint →</a>
                   </div>
                 )}
               </div>
