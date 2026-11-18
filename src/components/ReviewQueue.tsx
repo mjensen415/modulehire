@@ -227,5 +227,7 @@ const RQ_CSS = `
 .rq-showall { font: inherit; font-size: 13px; color: var(--teal); background: none; border: none; padding: 8px 0 0; cursor: pointer; }
 .rq-edit { display: flex; flex-direction: column; gap: 6px; }
 .rq-input { width: 100%; font: inherit; font-size: 13px; color: var(--text); background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px; padding: 8px 10px; box-sizing: border-box; }
+.rq-compact .rq-content { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.rq-compact .rq-quote { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .rq-more { font-size: 13px; color: var(--teal); text-decoration: none; display: inline-block; margin-top: 8px; }
 `

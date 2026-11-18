@@ -330,7 +330,7 @@ export default function AppSidebar({ footer, tier, isAdmin, activeProfileName, a
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const navItems = [
-    { href: '/dashboard', label: 'Dashboard', icon: <IconGrid />, exact: true },
+    { href: '/dashboard', label: 'Home', icon: <IconGrid />, exact: true },
     { href: '/library', label: 'My Modules', icon: <IconBlocks />, exact: false },
     { href: '/generate', label: 'Generate', icon: <IconStar />, exact: false },
     { href: '/matches', label: 'Job Matches', icon: <IconTarget />, exact: false },

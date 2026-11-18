@@ -225,6 +225,10 @@ export default function JobTrackerPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Could not load applications')
       setApplications(data.applications ?? [])
+      // The home page's "Follow up with {company}" opens the outreach drafter here.
+      const followId = new URLSearchParams(window.location.search).get('followup')
+      const followApp = followId ? (data.applications ?? []).find((a: JobApplication) => a.id === followId) : null
+      if (followApp?.job_description_id) setOutreach({ app: followApp, purpose: 'follow_up' })
     } catch (e) {
       setError((e as Error).message)
     } finally {
