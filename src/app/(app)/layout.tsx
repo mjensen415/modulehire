@@ -1,4 +1,5 @@
 import '@/app/globals.css';
+import '@/app/app-theme.css';
 import { redirect } from 'next/navigation';
 import AppSidebar from '@/components/layout/AppSidebar';
 import { accessEndsAt, hasActiveSprint } from '@/lib/entitlements';
@@ -60,7 +61,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .toUpperCase();
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="app-shell" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <AppSidebar sprintActive={sprintActive} isAdmin={isAdmin} footer={<AppSidebarUser planLabel={sprintLabel} />} activeProfileName={activeProfileName} activeProfileId={activeProfileId} />
       <main className="app-main">
         <MobileTopHeader userInitial={userInitial} />

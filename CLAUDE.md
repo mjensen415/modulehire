@@ -168,6 +168,16 @@ so it isn't counted: pass `{ userId, action }` on every new call site.
 single-upload business routes — bulk scoring now runs on the `quality` tier, several times the
 cost of Haiku.
 
+## App palette (`src/app/app-theme.css`)
+The signed-in app (anything inside `.app-shell`, set in `(app)/layout.tsx`) uses one warm-neutral
+palette with brand teal as the only accent, in light and dark: `:root:has(.app-shell)` overrides the
+`--bg/--surface/--border/--text/--teal` tokens from `globals.css` (and tones down amber/indigo/rose/
+green). Marketing, press, `/business` and auth keep the original navy tokens. `warm.css`'s `--h-*`
+tokens match it: accent teal `#1f6f63` light / `#5fbfa8` dark; card tints are one earthy family
+(`--h-peach` = clay, `--h-butter` = sand, `--h-sage`, `--h-lavender` = pale teal; names are
+historical). Don't add a second accent color or a cool pastel; new UI should use the tokens. The logo
+keeps its own brand green `#1d9e75`. Contrast was checked to WCAG AA (text3 on bg ≥ 4.5:1).
+
 ## Today home (`/dashboard`)
 The route stays `/dashboard` (redirects and links point at it); the sidebar calls it Home. Server
 page `src/app/(app)/dashboard/page.tsx` with warm styles scoped to `.home` in `home.css` (cream /

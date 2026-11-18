@@ -1,0 +1,34 @@
+/* Signed-in app palette (2026-11-18): one warm-neutral system with brand teal as the only accent,
+   so the shell (sidebar, cards, forms) and the warm pages (.warm: Home, Interviews, Files, Billing,
+   Pricing) read as one product. Scoped to pages that render .app-shell, so marketing, press,
+   /business and auth keep the original navy look. :has on :root also covers anything rendered
+   outside the shell's subtree (body background, portals).
+   Contrast (WCAG): text on bg >= 7:1, text3 on bg >= 4.5:1, teal on bg and on teal-dim >= 4.5:1. */
+
+:root:has(.app-shell) {
+  --bg: #1c1814; --bg2: #191511; --bg3: #2c261f;
+  --surface: #25201b; --surface2: #2c261f;
+  --border: rgba(242, 233, 220, 0.08); --border2: rgba(242, 233, 220, 0.15);
+  --text: #f2e9dc; --text2: #b5a691; --text3: #9a8b7a;
+  --teal: #5fbfa8; --teal-dim: rgba(95, 191, 168, 0.14); --teal-glow: rgba(95, 191, 168, 0.32);
+  /* Status hues, toned down to sit with the warm neutrals. */
+  --amber: oklch(0.76 0.13 70); --amber-dim: oklch(0.76 0.13 70 / 0.15);
+  --indigo: oklch(0.70 0.10 275); --indigo-dim: oklch(0.70 0.10 275 / 0.15);
+  --rose: oklch(0.70 0.14 30); --rose-dim: oklch(0.70 0.14 30 / 0.15);
+  --green: oklch(0.74 0.12 150); --green-dim: oklch(0.74 0.12 150 / 0.15);
+}
+
+:root[data-theme="light"]:has(.app-shell) {
+  --bg: #f7f1e6; --bg2: #efe7da; --bg3: #e7ddcd;
+  --surface: #fffcf6; --surface2: #f6efe3;
+  --border: rgba(70, 48, 22, 0.10); --border2: rgba(70, 48, 22, 0.19);
+  --text: #2b2219; --text2: #5c4f40; --text3: #7a6b58;
+  --teal: #1f6f63; --teal-dim: #dcebe5; --teal-glow: rgba(31, 111, 99, 0.28);
+  --amber: oklch(0.55 0.12 65); --amber-dim: oklch(0.86 0.07 80 / 0.55);
+  --indigo: oklch(0.48 0.10 275); --indigo-dim: oklch(0.88 0.04 280 / 0.6);
+  --rose: oklch(0.52 0.14 30); --rose-dim: oklch(0.88 0.05 35 / 0.6);
+  --green: oklch(0.50 0.10 150); --green-dim: oklch(0.89 0.05 145 / 0.6);
+}
+
+/* Light theme top bars were hardcoded to the old blue-white. */
+:root[data-theme="light"]:has(.app-shell) .app-topbar { background: rgba(247, 241, 230, 0.95); }
