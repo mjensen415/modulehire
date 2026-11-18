@@ -490,6 +490,25 @@ insights; a 90-day Sprint pools 3x. When it ends the account is on Free limits; 
 - Test: `scripts/smoke/part6-sprints.ts` (signs `checkout.session.completed` locally with
   `STRIPE_WEBHOOK_SECRET`; local `.env.local` has live Stripe keys, so no Checkout session is created).
 
+## ModuleHire for Business: plans and billing
+`organizations.tier` is the org entitlement (check constraint: `starter|growth|enterprise`). Shown as Free / Team / Enterprise;
+limits live in `src/lib/business/plan.ts` (`BUSINESS_PLANS`): Free = 1 active posting + 25 scored applicants per UTC calendar
+month, Team ($49/mo, Stripe product `mh_business_team`, price env `STRIPE_PRICE_BUSINESS_TEAM`) = unlimited postings + 500/month,
+Enterprise = unlimited (set by hand; billing events never change it). Monthly usage = `applicants` with `scored_at` this month.
+- Gates (402, `code: business_plan_limit`): new posting and PATCH to `active` (`canActivateJob`); upload, CSV (scores until the
+  allowance runs out, then skips rows), applicant rescore and posting rescore (`remainingMonthlyScores`). Posting rescore also
+  got `rl_biz_job_rescore` (10/hour) and the 500/day org cap; it had no limit before.
+- One owned org per account (`POST /api/business/organizations` 409s), so extra orgs can't multiply the Free allowance.
+- Checkout `POST /api/business/billing/checkout` (owner only, the org's own Stripe customer, `metadata.kind = 'business'` +
+  `org_id` on session and subscription). The Stripe webhook calls `handleBusinessEvent` (`src/lib/business/billing-webhook.ts`)
+  **first**; business events never reach the user-plan code (which would otherwise grant the buyer personal Pro). Portal:
+  `POST /api/business/billing/portal`, default portal config (cancel at period end, no plan switching).
+- Settings shows plan + usage from `GET /api/business/billing/usage`. `scoreApplicant` takes `userId` so `ai_biz_score` cost logs.
+- Public pages: `/business` (landing + pricing; CTAs are relative `/signin?signup=1&next=/business` so signup stays on the
+  business host and lands in org onboarding) and `/business/demo` (static fictional data in `demo/demo-data.ts`, no AI, exempt
+  in middleware). Onboarding's optional "what are you hiring for" answer is stored as `ev_biz_feedback`:
+  `select created_at, metadata from usage_events where action = 'ev_biz_feedback' order by 1 desc;`
+
 ## Press kit (`/press`)
 Public page in `src/app/press/`; files in `public/press/` (how to rebuild the logos and zip: that folder's `README.md`). Copy, facts and the founder bio are approved text, so don't change claims without Matt's sign-off, and keep `modulehire-press-kit.txt` and the zip in step with the page.
 

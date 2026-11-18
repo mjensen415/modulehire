@@ -21,6 +21,16 @@ export async function POST(req: Request) {
     const body = await req.json()
     const name = requiredString(body.name, 100, 'name')
 
+    // One owned org per account: each org gets its own Free allowance, so extra orgs
+    // would multiply it.
+    const { count: owned } = await supabase
+      .from('organizations')
+      .select('*', { count: 'exact', head: true })
+      .eq('owner_id', user.id)
+    if ((owned ?? 0) > 0) {
+      return NextResponse.json({ error: 'You already have an organization.' }, { status: 409 })
+    }
+
     const baseSlug = slugify(name) || 'org'
     let slug = baseSlug
     let suffix = 2

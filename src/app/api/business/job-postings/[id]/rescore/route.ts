@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getOrgRole } from '@/lib/business/org-access'
 import { scoreApplicant } from '@/lib/business/score-applicant'
+import { checkAndLog, checkOrgDailyScoreCap } from '@/lib/rate-limit'
+import { getOrgPlan, remainingMonthlyScores, monthlyLimitMessage, UPGRADE_CODE } from '@/lib/business/plan'
 
 export const maxDuration = 120
 
@@ -21,6 +23,21 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     const role = await getOrgRole(supabase, job.org_id, user.id)
     if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // Rescoring a whole posting re-runs the AI on every applicant; it had no limit at all.
+    const limit = await checkAndLog(supabase, user.id, 'rl_biz_job_rescore', 10, 3600)
+    if (!limit.ok) {
+      return NextResponse.json({ error: 'Rate limit exceeded. Try again later.' }, { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } })
+    }
+    const orgCap = await checkOrgDailyScoreCap(supabase, job.org_id)
+    if (!orgCap.ok) {
+      return NextResponse.json({ error: 'Daily AI-scoring limit reached for this org. Try again tomorrow.' }, { status: 429, headers: { 'Retry-After': String(orgCap.retryAfter) } })
+    }
+
+    if ((await remainingMonthlyScores(supabase, job.org_id)) <= 0) {
+      const plan = await getOrgPlan(supabase, job.org_id)
+      return NextResponse.json({ error: monthlyLimitMessage(plan), code: UPGRADE_CODE }, { status: 402 })
+    }
 
     const { data: criteria, error: criteriaError } = await supabase
       .from('scoring_criteria')
@@ -53,6 +70,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           degreeRequirement: job.degree_requirement ?? null,
           criteria: criteria ?? [],
           supabase,
+          userId: user.id,
         })
         rescored += 1
       } catch (rescoreError) {

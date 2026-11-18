@@ -5,6 +5,7 @@ import { isUuid } from '@/lib/validate'
 import { checkAndLog, checkOrgDailyScoreCap } from '@/lib/rate-limit'
 import { getOrgRole } from '@/lib/business/org-access'
 import { scoreApplicant } from '@/lib/business/score-applicant'
+import { getOrgPlan, remainingMonthlyScores, monthlyLimitMessage, UPGRADE_CODE } from '@/lib/business/plan'
 
 export const maxDuration = 300
 
@@ -49,6 +50,13 @@ export async function POST(req: Request) {
     const orgCap = await checkOrgDailyScoreCap(supabase, job.org_id)
     if (!orgCap.ok) {
       return NextResponse.json({ error: 'Daily AI-scoring limit reached for this org. Try again tomorrow.' }, { status: 429, headers: { 'Retry-After': String(orgCap.retryAfter) } })
+    }
+
+    // Monthly plan allowance: refuse when none is left, otherwise score rows until it runs out.
+    let remaining = await remainingMonthlyScores(supabase, job.org_id)
+    if (remaining <= 0) {
+      const plan = await getOrgPlan(supabase, job.org_id)
+      return NextResponse.json({ error: monthlyLimitMessage(plan), code: UPGRADE_CODE }, { status: 402 })
     }
 
     const file = formData.get('file') as File | null
@@ -97,6 +105,11 @@ export async function POST(req: Request) {
         continue
       }
 
+      if (remaining <= 0) {
+        errors.push({ row: rowNum, reason: 'Skipped: monthly plan limit reached. Upgrade to Team in Settings.' })
+        continue
+      }
+
       try {
         const { data: applicant, error: insertError } = await supabase
           .from('applicants')
@@ -125,9 +138,11 @@ export async function POST(req: Request) {
           degreeRequirement: job.degree_requirement ?? null,
           criteria: criteria ?? [],
           supabase,
+          userId: user.id,
         })
 
         applicantIds.push(applicant.id)
+        remaining -= 1
       } catch (rowError) {
         console.error(`[business/applicants/csv row ${rowNum}]`, rowError)
         errors.push({ row: rowNum, reason: rowError instanceof Error ? rowError.message : 'Unknown error' })

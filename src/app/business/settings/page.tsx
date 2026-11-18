@@ -1,14 +1,138 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 type Org = { id: string; name: string; slug: string; tier: string; role: string; created_at: string }
 
-const TIER_LABELS: Record<string, string> = {
-  free: 'Free',
-  pro: 'Pro',
-  beta_pro: 'Beta Pro',
-  business: 'Business',
+type PlanInfo = { name: string; tier: string; activeJobs: number | null; monthlyScores: number | null }
+type UsageResponse = {
+  plan: PlanInfo
+  usage: { activeJobs: number; scoresThisMonth: number }
+  team: PlanInfo & { price: string }
+  has_billing_account: boolean
+}
+
+function UsageBar({ label, used, limit }: { label: string; used: number; limit: number | null }) {
+  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0
+  const full = limit !== null && used >= limit
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 5 }}>
+        <span style={{ color: 'var(--text2)' }}>{label}</span>
+        <span style={{ color: full ? '#ef4444' : 'var(--text)', fontWeight: 600 }}>
+          {used}{limit === null ? '' : ` of ${limit}`}{limit === null ? ' (unlimited)' : ''}
+        </span>
+      </div>
+      {limit !== null && (
+        <div style={{ height: 5, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: full ? '#ef4444' : 'var(--teal)' }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PlanCard({ orgId, isOwner }: { orgId: string; isOwner: boolean }) {
+  const [info, setInfo] = useState<UsageResponse | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  // Read post-mount so server and client render the same first frame.
+  const [justUpgraded, setJustUpgraded] = useState(false)
+
+  const load = useCallback(() => {
+    fetch(`/api/business/billing/usage?org_id=${orgId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setInfo(d) })
+      .catch(() => {})
+  }, [orgId])
+
+  useEffect(() => {
+    load()
+    if (new URLSearchParams(window.location.search).get('upgraded') === '1') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional post-mount URL read
+      setJustUpgraded(true)
+      // The webhook usually lands within a few seconds of the redirect.
+      const t1 = setTimeout(load, 3000)
+      const t2 = setTimeout(load, 8000)
+      return () => { clearTimeout(t1); clearTimeout(t2) }
+    }
+  }, [load])
+
+  async function go(path: string) {
+    setBusy(true)
+    setError('')
+    try {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_id: orgId }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.url) throw new Error(data.error ?? 'Something went wrong')
+      window.location.href = data.url
+    } catch (e) {
+      setError((e as Error).message)
+      setBusy(false)
+    }
+  }
+
+  const isFree = info?.plan.tier === 'starter'
+
+  return (
+    <div className="section-card" id="plan">
+      <div className="section-head">
+        <div className="section-head-title">Plan</div>
+      </div>
+      <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {justUpgraded && !isFree && info && (
+          <div style={{ fontSize: 13, color: '#1d9e75', background: 'rgba(29,158,117,0.1)', border: '1px solid rgba(29,158,117,0.3)', borderRadius: 8, padding: '9px 12px' }}>
+            You&apos;re on Team. Thanks!
+          </div>
+        )}
+        {justUpgraded && isFree && (
+          <div style={{ fontSize: 13, color: 'var(--text2)', background: 'var(--bg3)', borderRadius: 8, padding: '9px 12px' }}>
+            Payment received. Your plan will update in a few seconds.
+          </div>
+        )}
+        {!info ? (
+          <div style={{ color: 'var(--text3)', fontSize: 13 }}>Loading…</div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em', marginBottom: 4 }}>
+                  {info.plan.name}
+                </div>
+                <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>
+                  {isFree
+                    ? `Upgrade to Team for ${info.team.price}/month: unlimited active jobs, ${info.team.monthlyScores} scored applicants a month.`
+                    : info.plan.tier === 'enterprise'
+                      ? 'Custom plan. Contact info@modulehire.com for changes.'
+                      : `${info.team.price}/month, billed monthly.`}
+                </div>
+              </div>
+              {isOwner && isFree && (
+                <button className="btn-primary" style={{ flexShrink: 0 }} disabled={busy} onClick={() => go('/api/business/billing/checkout')}>
+                  {busy ? 'Opening…' : `Upgrade to Team`}
+                </button>
+              )}
+              {isOwner && info.plan.tier === 'growth' && info.has_billing_account && (
+                <button className="btn-ghost" style={{ flexShrink: 0 }} disabled={busy} onClick={() => go('/api/business/billing/portal')}>
+                  {busy ? 'Opening…' : 'Manage billing'}
+                </button>
+              )}
+            </div>
+            <UsageBar label="Active job postings" used={info.usage.activeJobs} limit={info.plan.activeJobs} />
+            <UsageBar label="Applicants scored this month" used={info.usage.scoresThisMonth} limit={info.plan.monthlyScores} />
+            {!isOwner && isFree && (
+              <div style={{ fontSize: 12, color: 'var(--text3)' }}>Ask the organization owner to upgrade.</div>
+            )}
+            {error && <div style={{ fontSize: 12.5, color: '#ef4444' }}>{error}</div>}
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function formatDate(iso: string) {
@@ -132,29 +256,7 @@ export default function BusinessSettingsPage() {
             </div>
           </div>
 
-          {/* Plan */}
-          <div className="section-card">
-            <div className="section-head">
-              <div className="section-head-title">Plan</div>
-            </div>
-            <div style={{ padding: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em', marginBottom: 4 }}>
-                    {TIER_LABELS[org.tier] ?? org.tier}
-                  </div>
-                  <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>
-                    {org.tier === 'free' ? 'Up to 3 active jobs, 50 applicants per job' : 'Unlimited jobs and applicants'}
-                  </div>
-                </div>
-                {org.tier === 'free' && (
-                  <button className="btn-primary" style={{ flexShrink: 0 }} disabled>
-                    Upgrade (soon)
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+          <PlanCard orgId={org.id} isOwner={org.role === 'owner'} />
 
         </div>
       )}

@@ -5,6 +5,7 @@ import { isUuid } from '@/lib/validate';
 import Stripe from 'stripe';
 import { isSprintSku } from '@/lib/sprint';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { handleBusinessEvent } from '@/lib/business/billing-webhook';
 
 export const dynamic = 'force-dynamic';
 
@@ -111,6 +112,9 @@ export async function POST(req: Request) {
   const supabase = await createAdminClient();
 
   try {
+    // Business (org) subscriptions first: they must never reach the user-plan code below.
+    if (await handleBusinessEvent(event, supabase)) return NextResponse.json({ ok: true });
+
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session;
       const userId = await resolveUserIdFromSession(supabase, session);
