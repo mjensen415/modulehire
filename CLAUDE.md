@@ -126,6 +126,8 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - Applied 2026-11-18. `interviews` (+ `prep_opened_at`, cached `practice_questions`) and `practice_answers` — tracked in `supabase/migrations/20261118_interviews.sql`. Own-rows RLS; users UPDATE only the editable interview columns; `practice_answers` are server-written (they count toward practice limits) and keep `interview_id = null` when a round is deleted so deleting can't reset the Free round.
 - Applied 2026-11-18. Sprints — tracked in `supabase/migrations/20261118_sprints.sql`: `users.sprint_ends_at` (service-role only, not in the users column grants), `sprint_purchases` (read-own RLS, no user writes, unique `stripe_session_id`), and `apply_sprint_purchase(user, sku, session, amount)` (service_role only; locks the user row, extends from `greatest(now(), sprint_ends_at)`, idempotent on the session id).
 
+- Applied 2026-11-18. `stripe_events (id text pk, type, processed_at)`, RLS on, no grants to anon/authenticated — tracked in `supabase/migrations/20261118_stripe_events.sql`. `/api/stripe/webhook` inserts `event.id` before processing (duplicate = 200, skipped); on a handler error it deletes the row and returns 500 so Stripe retries. Write failures in the handler must throw, not log, or the retry never happens.
+
 ## AI models and usage logging (`src/lib/ai.ts`)
 **Haiku everywhere.** Every call resolves to `ANTHROPIC_MODEL_FAST` (Haiku) unless its `action` is
 listed in the `SONNET_FEATURES` env var (comma-separated, or `all`), which opts that one feature into

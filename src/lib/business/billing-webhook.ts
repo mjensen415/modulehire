@@ -41,7 +41,8 @@ async function setOrgTier(
   if (customerId && !org.stripe_customer_id) update.stripe_customer_id = customerId
   if (Object.keys(update).length === 0) return
   const { error } = await supabase.from('organizations').update(update).eq('id', orgId)
-  if (error) console.error('[stripe webhook][business] org update failed', orgId, error)
+  // Thrown so the webhook returns 500 and Stripe retries.
+  if (error) throw new Error(`org tier update failed for ${orgId}: ${error.message}`)
 }
 
 function subscriptionGrants(sub: Stripe.Subscription): boolean {

@@ -111,6 +111,22 @@ export async function POST(req: Request) {
 
   const supabase = await createAdminClient();
 
+  // Idempotency (P2.1): claim the event id first. A duplicate delivery hits the
+  // primary key and is acknowledged without reprocessing. Any other insert error
+  // (table missing, network) falls through and processes anyway: better a rare
+  // double-process than a dropped payment.
+  let claimed = false;
+  {
+    const { error: claimError } = await supabase
+      .from('stripe_events')
+      .insert({ id: event.id, type: event.type });
+    if (claimError?.code === '23505') {
+      return NextResponse.json({ ok: true, duplicate: true });
+    }
+    if (claimError) console.error('[stripe webhook] could not record event id', event.id, claimError);
+    else claimed = true;
+  }
+
   try {
     // Business (org) subscriptions first: they must never reach the user-plan code below.
     if (await handleBusinessEvent(event, supabase)) return NextResponse.json({ ok: true });
@@ -170,7 +186,7 @@ export async function POST(req: Request) {
             p_user_id: userId,
             p_amount: credits,
           });
-          if (error) console.error('[stripe webhook] increment_resume_credits failed:', error);
+          if (error) throw new Error(`increment_resume_credits failed: ${error.message}`);
         } else {
           // Legacy path — older checkouts encoded credits via metadata.type/credits
           // and incremented the deprecated resume_credits column. Still honour
@@ -182,7 +198,7 @@ export async function POST(req: Request) {
               p_user_id: userId,
               p_amount: legacyCredits,
             });
-            if (error) console.error('[stripe webhook] legacy increment_resume_credits failed:', error);
+            if (error) throw new Error(`legacy increment_resume_credits failed: ${error.message}`);
           }
         }
         return NextResponse.json({ ok: true });
@@ -206,10 +222,11 @@ export async function POST(req: Request) {
         // Promote to pro, but never overwrite a complimentary beta_pro grant.
         if (currentTier !== 'beta_pro') update.tier = 'pro';
 
-        await supabase
+        const { error: updateError } = await supabase
           .from('users')
           .update(update)
           .eq('id', userId);
+        if (updateError) throw new Error(`user plan update failed: ${updateError.message}`);
       }
 
       return NextResponse.json({ ok: true });
@@ -248,7 +265,8 @@ export async function POST(req: Request) {
         if (currentTier === 'pro') update.tier = 'free';
       }
 
-      await supabase.from('users').update(update).eq('id', userId);
+      const { error: updateError } = await supabase.from('users').update(update).eq('id', userId);
+      if (updateError) throw new Error(`user plan update failed: ${updateError.message}`);
       return NextResponse.json({ ok: true });
     }
 
@@ -271,12 +289,20 @@ export async function POST(req: Request) {
         update.plan = 'free';
       }
 
-      await supabase.from('users').update(update).eq('id', userId);
+      const { error: updateError } = await supabase.from('users').update(update).eq('id', userId);
+      if (updateError) throw new Error(`user plan update failed: ${updateError.message}`);
       return NextResponse.json({ ok: true });
     }
   } catch (err) {
-    // Log but return 200 — returning non-2xx makes Stripe retry forever.
-    console.error('[stripe webhook] handler error', event.type, err);
+    // Fail loud (P2.2): release the claim and return 500 so Stripe retries with backoff
+    // (it gives up after about 3 days). Safe because the claim above makes a later
+    // successful retry the only one that applies.
+    console.error('[stripe webhook] handler error', event.type, event.id, err);
+    if (claimed) {
+      const { error: releaseError } = await supabase.from('stripe_events').delete().eq('id', event.id);
+      if (releaseError) console.error('[stripe webhook] could not release event id', event.id, releaseError);
+    }
+    return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });
