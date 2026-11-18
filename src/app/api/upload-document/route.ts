@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { isProTier } from '@/lib/plan'
+import { allows, entitlements, LIMIT_MESSAGES } from '@/lib/entitlements'
 import { extractResumeText, isUnreadable, UNREADABLE_TEXT_MESSAGE } from '@/lib/resume-text'
-import {
-  DOCUMENTS_FAIR_USE_MONTHLY, FREE_OTHER_DOCUMENTS, guessPeriod, isImportKind, jobForYear, otherDocumentCounts,
-} from '@/lib/documents'
+import { guessPeriod, isImportKind, jobForYear } from '@/lib/documents'
 
 export const maxDuration = 60
 
@@ -30,17 +28,11 @@ export async function POST(req: Request) {
     }
     if (file.size > MAX_SIZE) return NextResponse.json({ error: 'File exceeds 10MB limit' }, { status: 400 })
 
-    const { data: profile } = await supabase.from('users').select('tier').eq('id', user.id).single()
-    const counts = await otherDocumentCounts(supabase, user.id)
-    if (!isProTier(profile?.tier)) {
-      if (counts.total >= FREE_OTHER_DOCUMENTS) {
-        return NextResponse.json({
-          error: `The Free plan imports ${FREE_OTHER_DOCUMENTS} documents besides your resume. Start a 30-day Sprint to add more.`,
-          code: 'DOCUMENT_LIMIT_REACHED', limit: FREE_OTHER_DOCUMENTS,
-        }, { status: 403 })
-      }
-    } else if (counts.thisMonth >= DOCUMENTS_FAIR_USE_MONTHLY) {
-      return NextResponse.json({ error: `You've imported ${DOCUMENTS_FAIR_USE_MONTHLY} documents this month, the fair-use limit. It resets on the 1st.`, code: 'DOCUMENT_FAIR_USE' }, { status: 429 })
+    const ent = await entitlements(supabase, user.id)
+    if (!allows(ent.documents)) {
+      return ent.active
+        ? NextResponse.json({ error: LIMIT_MESSAGES.fairUse, code: 'DOCUMENT_FAIR_USE' }, { status: 429 })
+        : NextResponse.json({ error: LIMIT_MESSAGES.documents, code: 'DOCUMENT_LIMIT_REACHED', limit: ent.documents.limit }, { status: 403 })
     }
 
     const buffer = Buffer.from(await file.arrayBuffer())

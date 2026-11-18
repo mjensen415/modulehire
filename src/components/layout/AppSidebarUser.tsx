@@ -8,7 +8,7 @@ function IconChevron() {
   );
 }
 
-export default async function AppSidebarUser() {
+export default async function AppSidebarUser({ planLabel = 'Free' }: { planLabel?: string }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -26,7 +26,7 @@ export default async function AppSidebarUser() {
         <div className="user-avatar">{initials}</div>
         <div className="user-info">
           <div className="user-name">{name}</div>
-          <div className="user-plan">Pro plan</div>
+          <div className="user-plan">{planLabel}</div>
         </div>
         <IconChevron />
       </div>

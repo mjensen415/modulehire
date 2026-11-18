@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import SprintButton from '@/components/SprintButton'
 
 type Stage = 'basics' | 'criteria' | 'match' | 'document'
 type Phase = 'paste' | 'building' | 'needTitle' | 'error' | 'timeout'
@@ -350,12 +351,12 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
       {phase === 'error' && error && (
         <div className="gv2-card">
           <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
-            {error.code === 'confirm_modules_first' ? 'Confirm a few modules first' : <>We couldn&apos;t finish your draft</>}
+            {error.code === 'confirm_modules_first' ? 'Confirm a few modules first' : error.code === 'sprint_required' ? 'You have used your free tailored resumes' : <>We couldn&apos;t finish your draft</>}
           </div>
           <div style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 14 }}>{error.message}</div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {error.code === 'monthly_generation_limit' ? (
-              <Link href="/pricing" className="btn-primary" style={{ textDecoration: 'none' }}>See plans</Link>
+            {error.code === 'sprint_required' ? (
+              <SprintButton />
             ) : error.code === 'confirm_modules_first' ? (
               <Link href="/library#review" className="btn-primary" style={{ textDecoration: 'none' }}>Review your modules</Link>
             ) : (

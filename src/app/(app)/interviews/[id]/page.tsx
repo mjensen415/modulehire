@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { isProTier } from '@/lib/plan'
+import { hasActiveSprint } from '@/lib/entitlements'
 import { cleanInterviewers, type PracticeFeedback, type PracticeQuestion } from '@/lib/interviews'
 import type { PrepData } from '@/lib/interview-prep'
 import '@/app/warm.css'
@@ -32,13 +32,13 @@ export default async function InterviewPrepPage({ params }: { params: Promise<{ 
   const app = (Array.isArray(iv.job_applications) ? iv.job_applications[0] : iv.job_applications) as
     { id: string; company: string; title: string; job_description_id: string | null } | null
   const [{ data: me }, { data: prepRow }, { data: answers }] = await Promise.all([
-    supabase.from('users').select('tier').eq('id', user.id).single(),
+    supabase.from('users').select('tier, sprint_ends_at, plan_period_end, tier_expires_at').eq('id', user.id).single(),
     app?.job_description_id
       ? supabase.from('interview_prep_cache').select('prep_data, generated_at').eq('user_id', user.id).eq('job_description_id', app.job_description_id).maybeSingle()
       : Promise.resolve({ data: null }),
     supabase.from('practice_answers').select('id, question, answer, feedback, created_at').eq('interview_id', id).eq('user_id', user.id).order('created_at', { ascending: true }),
   ])
-  const paid = isProTier(me?.tier)
+  const paid = hasActiveSprint(me)
   const prep = (prepRow?.prep_data ?? null) as PrepData | null
   const people = cleanInterviewers(iv.interviewers)
   const questions = (Array.isArray(iv.practice_questions) ? iv.practice_questions : []) as PracticeQuestion[]

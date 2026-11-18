@@ -5,7 +5,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { aiCompleteJson } from './ai'
 import { stripUnsupportedSentences } from './fact-check'
-import { isProTier } from './plan'
+import { allows, entitlements, FREE_LIMITS, LIMIT_MESSAGES } from './entitlements'
 import { isUuid } from './validate'
 
 export const FORMATS = ['phone', 'video', 'onsite'] as const
@@ -270,33 +270,24 @@ function dropRefs(text: string): string {
 }
 
 // ─── Limits ──────────────────────────────────────────────────────────────────
-// Free: one practice round (graded answers on one interview, up to FREE_ANSWERS_PER_ROUND).
-// Paid: any round, fair use PAID_GRADED_PER_30_DAYS graded answers per 30 days.
-
-export const FREE_ANSWERS_PER_ROUND = 15
-export const PAID_GRADED_PER_30_DAYS = 60
+// Free: one practice round (graded answers on one interview, up to FREE_LIMITS.answersPerFreeRound).
+// Sprint: any round, graded answers within the Sprint's fair use (src/lib/entitlements.ts).
 
 export async function practiceAllowed(
   supabase: SupabaseClient,
   userId: string,
-  tier: string | null | undefined,
   interviewId: string,
 ): Promise<{ ok: true } | { ok: false; code: 'PRACTICE_LIMIT_REACHED' | 'PRACTICE_FAIR_USE'; message: string }> {
-  if (isProTier(tier)) {
-    const since = new Date(Date.now() - 30 * 86_400_000).toISOString()
-    const { count } = await supabase.from('practice_answers').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', since)
-    return (count ?? 0) < PAID_GRADED_PER_30_DAYS
-      ? { ok: true }
-      : { ok: false, code: 'PRACTICE_FAIR_USE', message: `You've had ${PAID_GRADED_PER_30_DAYS} answers graded in the last 30 days, the fair-use limit.` }
+  const ent = await entitlements(supabase, userId)
+  if (ent.active) {
+    return allows(ent.graded) ? { ok: true } : { ok: false, code: 'PRACTICE_FAIR_USE', message: LIMIT_MESSAGES.fairUse }
   }
   const { data } = await supabase.from('practice_answers').select('interview_id').eq('user_id', userId).limit(500)
   // A deleted round's answers keep interview_id = null and still count as the one Free round.
   const rounds = new Set((data ?? []).map(r => r.interview_id ?? 'deleted'))
-  if (rounds.size > 0 && !rounds.has(interviewId)) {
-    return { ok: false, code: 'PRACTICE_LIMIT_REACHED', message: 'The Free plan includes one practice round. Start a 30-day Sprint to practice for every round.' }
+  if (rounds.size >= FREE_LIMITS.practiceRounds && !rounds.has(interviewId)) {
+    return { ok: false, code: 'PRACTICE_LIMIT_REACHED', message: LIMIT_MESSAGES.practice }
   }
   const onThis = (data ?? []).filter(r => r.interview_id === interviewId).length
-  return onThis < FREE_ANSWERS_PER_ROUND
-    ? { ok: true }
-    : { ok: false, code: 'PRACTICE_LIMIT_REACHED', message: 'You have used the Free practice round. Start a 30-day Sprint for unlimited practice.' }
+  return onThis < FREE_LIMITS.answersPerFreeRound ? { ok: true } : { ok: false, code: 'PRACTICE_LIMIT_REACHED', message: LIMIT_MESSAGES.practice }
 }

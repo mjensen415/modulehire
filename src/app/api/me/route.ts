@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { accessEndsAt, hasActiveSprint } from '@/lib/entitlements'
 import { createClient } from '@/lib/supabase/server'
 
 const ALLOWED_PATCH_FIELDS: Record<string, number> = {
@@ -17,7 +18,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('users')
-      .select('name, email, phone, linkedin_url, location, summary, plan, resume_credits, tier, tier_expires_at, onboarding_complete')
+      .select('name, email, phone, linkedin_url, location, summary, plan, tier, tier_expires_at, plan_period_end, sprint_ends_at, onboarding_complete')
       .eq('id', user.id)
       .single()
 
@@ -31,9 +32,11 @@ export async function GET() {
       location: data.location ?? '',
       summary: data.summary ?? '',
       plan: data.plan ?? 'free',
-      resume_credits: data.resume_credits ?? 0,
       tier: data.tier ?? 'free',
       tier_expires_at: data.tier_expires_at ?? null,
+      // The one access flag clients should read (paid Sprint, beta grant, or a legacy Pro period).
+      sprint_active: hasActiveSprint(data),
+      sprint_ends_at: accessEndsAt(data),
       onboarding_complete: data.onboarding_complete ?? false,
     })
   } catch (error) {

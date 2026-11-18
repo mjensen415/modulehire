@@ -1,6 +1,7 @@
 import '@/app/globals.css';
 import { redirect } from 'next/navigation';
 import AppSidebar from '@/components/layout/AppSidebar';
+import { accessEndsAt, hasActiveSprint } from '@/lib/entitlements';
 import AppSidebarUser from '@/components/layout/AppSidebarUser';
 import MobileTabBar from '@/components/layout/MobileTabBar';
 import MobileTopHeader from '@/components/layout/MobileTopHeader';
@@ -17,7 +18,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/signin');
   }
 
-  let tier: string = 'free';
+  let sprintActive = false;
+  let sprintLabel = 'Free';
   let isAdmin: boolean = false;
   let activeProfileId = '';
   let activeProfileName = 'Default';
@@ -25,10 +27,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (user) {
     const { data: profile } = await supabase
       .from('users')
-      .select('tier, is_admin')
+      .select('tier, is_admin, sprint_ends_at, plan_period_end, tier_expires_at')
       .eq('id', user.id)
       .single();
-    tier = profile?.tier ?? 'free';
+    sprintActive = hasActiveSprint(profile);
+    const ends = accessEndsAt(profile);
+    sprintLabel = !sprintActive ? 'Free' : ends
+      ? `Sprint until ${new Date(ends).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`
+      : 'Sprint';
     isAdmin = profile?.is_admin ?? false;
 
     const profileId = await getActiveProfileId(supabase, user.id).catch(() => null);
@@ -55,13 +61,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <AppSidebar tier={tier} isAdmin={isAdmin} footer={<AppSidebarUser />} activeProfileName={activeProfileName} activeProfileId={activeProfileId} />
+      <AppSidebar sprintActive={sprintActive} isAdmin={isAdmin} footer={<AppSidebarUser planLabel={sprintLabel} />} activeProfileName={activeProfileName} activeProfileId={activeProfileId} />
       <main className="app-main">
         <MobileTopHeader userInitial={userInitial} />
         {showVerifyBanner && <EmailVerificationBanner email={user.email ?? null} />}
         {children}
       </main>
-      <MobileTabBar tier={tier} />
+      <MobileTabBar sprintActive={sprintActive} />
     </div>
   );
 }

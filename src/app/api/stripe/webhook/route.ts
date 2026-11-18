@@ -3,6 +3,7 @@ import { stripe } from '@/lib/stripe';
 import { createAdminClient } from '@/lib/supabase/server';
 import { isUuid } from '@/lib/validate';
 import Stripe from 'stripe';
+import { isSprintSku } from '@/lib/sprint';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
@@ -134,7 +135,28 @@ export async function POST(req: Request) {
         }
       }
 
-      // ── One-time purchases ─────────────────────────────────────────────────
+      // ── Sprints (one-time, never renew) ───────────────────────────────────
+      // Idempotent on the session id (apply_sprint_purchase). Unlike the other paths, a failure
+      // here returns 500 so Stripe retries: a paid Sprint must never be dropped.
+      if (session.mode === 'payment' && isSprintSku(session.metadata?.sku)) {
+        if (session.payment_status !== 'paid') {
+          console.error('[stripe webhook] sprint session not paid', session.id, session.payment_status);
+          return NextResponse.json({ ok: true });
+        }
+        const { data: endsAt, error } = await supabase.rpc('apply_sprint_purchase', {
+          p_user_id: userId,
+          p_sku: session.metadata!.sku,
+          p_session_id: session.id,
+          p_amount_cents: session.amount_total ?? 0,
+        });
+        if (error) {
+          console.error('[stripe webhook] apply_sprint_purchase failed', session.id, error);
+          return NextResponse.json({ error: 'Could not apply Sprint' }, { status: 500 });
+        }
+        return NextResponse.json({ ok: true, sprint_ends_at: endsAt });
+      }
+
+      // ── Legacy one-time purchases (single / five-pack credits; no longer sold) ──
       if (session.mode === 'payment') {
         const sku = session.metadata?.sku as SkuKey | undefined;
         const credits = sku ? SKU_CREDITS[sku] : undefined;

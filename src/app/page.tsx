@@ -407,7 +407,7 @@ export default function Home() {
               fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
               marginBottom: 18,
             }}>
-              Pro feature
+              Sprint feature
             </div>
             <div>
               <Link href="/signin?signup=1" style={{ fontSize: 14, color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { isProTier } from '@/lib/plan'
+import SprintButton from '@/components/SprintButton'
 import ApplicationSignalChips from '@/components/ApplicationSignalChips'
 import OutreachSheet from '@/components/OutreachSheet'
 import {
@@ -215,7 +215,7 @@ export default function JobTrackerPage() {
   const [archivedOpen, setArchivedOpen] = useState(false)
 
   useEffect(() => {
-    fetch('/api/me').then((r) => r.json()).then((data) => setIsPro(isProTier(data.tier))).catch(() => null)
+    fetch('/api/me').then((r) => r.json()).then((data) => setIsPro(!!data.sprint_active)).catch(() => null)
     loadApplications()
   }, [])
 
@@ -911,16 +911,14 @@ export default function JobTrackerPage() {
           >
             <div style={{ fontSize: 28, marginBottom: 12 }}>🔒</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>
-              Interview prep is a Pro feature
+              Interview prep comes with a Sprint
             </div>
             <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 22 }}>
-              Upgrade to Pro to generate talking points and interview prep documents from your own experience.
+              A 30-day Sprint builds talking points and prep documents from your own confirmed modules. One payment, no auto-renew.
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
               <button onClick={() => setProGateOpen(false)} className="btn-ghost">Not now</button>
-              <Link href="/billing" className="btn-primary" style={{ textDecoration: 'none' }}>
-                Upgrade →
-              </Link>
+              <SprintButton />
             </div>
           </div>
         </div>

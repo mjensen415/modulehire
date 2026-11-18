@@ -9,6 +9,7 @@ import ResumeEditor, { type EditorModule, type EditorJd } from '@/components/res
 import { parseResumeDoc } from '@/lib/resume-doc'
 import { sanitizeCriteria } from '@/lib/dimensions'
 import { getUsableModules } from '@/lib/usable-modules'
+import { hasActiveSprint, loadSprintUser } from '@/lib/entitlements'
 
 export default async function ResumeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -92,6 +93,8 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
       : null
   }
   const editable = !!(docRow && parsedDoc?.ok)
+  // Free accounts view and export; live editing and fit come with a Sprint.
+  const locked = editable && !hasActiveSprint(await loadSprintUser(supabase, user.id))
 
   const createdDate = new Date(resume.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
@@ -138,6 +141,7 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
                 initialDoc={parsedDoc.doc}
                 initialVersion={docRow.version}
                 modules={editorModules}
+                locked={locked}
                 jd={editorJd}
                 initialFit={docRow.fit_report as { overall: number; doc_version: number } | null}
                 unsupportedPhrases={unsupportedPhrases}

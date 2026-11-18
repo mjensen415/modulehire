@@ -8,6 +8,7 @@ import { allBlocks, docText, parseResumeDoc, type BlockSuggestion } from '@/lib/
 import { unsupportedClaims } from '@/lib/fact-check'
 import { scoreLiveFit } from '@/lib/live-fit'
 import { getUsableModules } from '@/lib/usable-modules'
+import { sprintRequired } from '@/lib/entitlements'
 
 export const maxDuration = 60
 
@@ -43,6 +44,8 @@ export async function POST(req: Request, { params }: RouteContext) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const gate = await sprintRequired(supabase, user.id)
+    if (gate) return NextResponse.json(gate, { status: 402 })
 
     const { id } = await params
     if (!isUuid(id)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })

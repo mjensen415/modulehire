@@ -5,6 +5,7 @@ import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid, optionalString } from '@/lib/validate'
 import { sanitizeCriteria } from '@/lib/dimensions'
 import { getUsableModules } from '@/lib/usable-modules'
+import { sprintRequired } from '@/lib/entitlements'
 
 export const maxDuration = 60
 
@@ -107,6 +108,8 @@ export async function POST(req: Request) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const gate = await sprintRequired(supabase, user.id)
+    if (gate) return NextResponse.json(gate, { status: 402 })
 
     const body = await req.json()
     const { jd_id, job_application_id } = body

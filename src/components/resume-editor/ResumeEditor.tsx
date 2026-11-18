@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import SprintButton from '@/components/SprintButton'
 import { DndContext, PointerSensor, KeyboardSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -42,7 +43,11 @@ type Props = {
   initialFit?: { overall: number; doc_version: number } | null
   /** Posting phrases generation left off because no module supports them. */
   unsupportedPhrases?: string[]
+  /** Free accounts: view and export only. Live editing and fit come with a Sprint. */
+  locked?: boolean
 }
+
+const LOCKED_NOTICE = 'Editing and live fit come with a Sprint. You can still export this resume in every format.'
 
 const FORMAT_LABELS: Record<ResumeDocFormat, string> = {
   classic: 'Classic', tech: 'Tech', combination: 'Combination', executive: 'Executive', minimal: 'Minimal', 'two-column': 'Two-column',
@@ -80,13 +85,19 @@ function saveLabel(state: SaveState): string {
   return 'Saved'
 }
 
-export default function ResumeEditor({ docId, initialDoc, initialVersion, modules, jd, initialFit, unsupportedPhrases = [] }: Props) {
+export default function ResumeEditor({ docId, initialDoc, initialVersion, modules, jd, initialFit, unsupportedPhrases = [], locked = false }: Props) {
   const history = useDocHistory(initialDoc)
-  const { doc, docRef, commit, setLive, beginEdit, endEdit, undo, redo, reset, canUndo, canRedo } = history
+  const { doc, docRef, commit: commitEdit, setLive, beginEdit, endEdit, undo, redo, reset, canUndo, canRedo } = history
   const [activeId, setActiveId] = useState<string | null>(null)
   const [swapOpen, setSwapOpen] = useState(false)
   const [addOpenFor, setAddOpenFor] = useState<number | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // Locked: every change goes through commit, so blocking it here blocks them all (the server
+  // refuses saves too).
+  const commit: typeof commitEdit = useCallback((next) => {
+    if (locked) { setNotice(LOCKED_NOTICE); return }
+    commitEdit(next)
+  }, [locked, commitEdit])
   // Line-level AI: which line is being rewritten, and the last message per line.
   const [aiBusy, setAiBusy] = useState<string | null>(null)
   const [aiMessage, setAiMessage] = useState<{ blockId: string; text: string } | null>(null)
@@ -254,6 +265,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
   }, [])
 
   const activate = (id: string) => {
+    if (locked) { setNotice(LOCKED_NOTICE); return }
     setSwapOpen(false)
     setAddOpenFor(null)
     setActiveId(id)
@@ -429,7 +441,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
   }, [activeId, undo, redo])
 
   useEffect(() => {
-    if (criteria.length === 0) return
+    if (criteria.length === 0 || locked) return
     const timer = setTimeout(async () => {
       setFitChecking(true)
       try {
@@ -655,6 +667,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
+  const dndSensors = locked ? [] : sensors
 
   // ── Rendering ─────────────────────────────────────────────────────────────
   const line = (id: string, opts: { placeholder?: string; style?: React.CSSProperties; removable?: boolean; swapEntry?: number; ai?: boolean } = {}) => {
@@ -793,7 +806,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
     const available = availableFor(entryIndex)
     return (
       <>
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={e => reorder(entryIndex, e)}>
+        <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={e => reorder(entryIndex, e)}>
           <SortableContext items={entry.bullets.map(b => b.id)} strategy={verticalListSortingStrategy}>
             <ul className="rd-bullets">
               {entry.bullets.map(b => (
@@ -920,7 +933,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
             {doc.skill_sections.map((s, i) => (
               <div key={s.id} className="rd-job">
                 <div className="rd-role-title">{s.category}</div>
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={e => reorderSkillSection(i, e)}>
+                <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={e => reorderSkillSection(i, e)}>
                   <SortableContext items={s.bullets.map(b => b.id)} strategy={verticalListSortingStrategy}>
                     <ul className="rd-bullets">
                       {s.bullets.map(b => (
@@ -999,6 +1012,14 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
     </div>
     <aside className="rd-aside">
       <div className="rd-rail">
+        {locked && (
+          <div className="rd-locked">
+            <div className="rd-locked-title">Make it yours</div>
+            <p>Editing lines, swapping modules and the live fit check come with a Sprint. Your resume and every export stay free.</p>
+            <SprintButton label="Start a 30-day Sprint" />
+          </div>
+        )}
+        {!locked && <>
         <div className="rd-tabs" role="tablist" aria-label="Resume tools">
           {criteria.length > 0 && (
             <button type="button" role="tab" aria-selected={railTab === 'fit'} className={railTab === 'fit' ? 'on' : ''} onClick={() => openTab('fit')}>Fit</button>
@@ -1043,6 +1064,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
         {railTab === 'library' && (
           <LibraryRail groups={libraryGroups} preview={m => moduleResumeLine(m.content)} onShow={showBlock} onAdd={addFromRail} />
         )}
+        </>}
       </div>
     </aside>
     </div>
@@ -1078,6 +1100,9 @@ const EDITOR_CSS = `
 .rd-root { display: flex; flex-direction: column; gap: 14px; min-width: 0; flex: 1 1 560px; max-width: 780px; }
 .rd-aside { flex: 0 1 300px; position: sticky; top: 16px; display: flex; flex-direction: column; gap: 14px; min-width: 260px; }
 .rd-rail { background: var(--surface); border: 1px solid var(--border2); border-radius: 10px; overflow: hidden; }
+.rd-locked { padding: 16px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.rd-locked-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.rd-locked p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text2); }
 .rd-tabs { display: flex; border-bottom: 1px solid var(--border2); }
 .rd-tabs button { flex: 1; background: none; border: none; border-bottom: 2px solid transparent; padding: 10px 8px; font: 600 12.5px var(--font); color: var(--text3); cursor: pointer; margin-bottom: -1px; }
 .rd-tabs button.on { color: var(--teal); border-bottom-color: var(--teal); }

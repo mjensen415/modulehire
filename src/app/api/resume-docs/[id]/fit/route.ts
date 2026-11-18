@@ -5,6 +5,7 @@ import { isUuid } from '@/lib/validate'
 import { sanitizeCriteria } from '@/lib/dimensions'
 import { docEvidence, parseResumeDoc } from '@/lib/resume-doc'
 import { scoreCriteria } from '@/lib/criteria-score'
+import { sprintRequired } from '@/lib/entitlements'
 
 export const maxDuration = 120
 
@@ -25,6 +26,8 @@ export async function POST(_req: Request, { params }: RouteContext) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const gate = await sprintRequired(supabase, user.id)
+    if (gate) return NextResponse.json(gate, { status: 402 })
 
     const { id } = await params
     if (!isUuid(id)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })

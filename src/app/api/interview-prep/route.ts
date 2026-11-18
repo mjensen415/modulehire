@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { isProTier } from '@/lib/plan'
+import { sprintRequired } from '@/lib/entitlements'
 import { isUuid } from '@/lib/validate'
 import { getInterviewPrep, InterviewPrepError } from '@/lib/interview-prep'
 
@@ -12,14 +12,8 @@ export async function POST(req: Request) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { data: profile } = await supabase
-      .from('users')
-      .select('tier')
-      .eq('id', user.id)
-      .single()
-    if (!isProTier(profile?.tier)) {
-      return NextResponse.json({ error: 'pro_required' }, { status: 403 })
-    }
+    const gate = await sprintRequired(supabase, user.id)
+    if (gate) return NextResponse.json({ ...gate, error: 'pro_required', message: gate.error }, { status: 403 })
 
     const body = await req.json()
     const jobDescriptionId = body?.job_description_id

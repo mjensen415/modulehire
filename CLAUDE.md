@@ -124,6 +124,7 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - Applied 2026-11-18. Confirmed library — tracked in `supabase/migrations/20261118_confirmed_library.sql` (also in `schema.sql`). `modules.status` is now `draft|confirmed|rejected` (default `draft`; the old unused `complete/needs-review/needs-add` check was dropped and every existing row set to `confirmed`), plus `modules.source_quote` and `modules.source_document_id`.
 - Applied 2026-11-18. `documents` table (kind, filename, file_url, raw_text, job_experience_id, period_label, `source_resume_id`, `deleted_at`) + `modules.source_document_id` FK + private storage bucket `documents` — tracked in `supabase/migrations/20261118_documents.sql`. Users can only read their rows (insert/update/delete revoked; the server writes with the service role), so deleting can't reset the Free document limit.
 - Applied 2026-11-18. `interviews` (+ `prep_opened_at`, cached `practice_questions`) and `practice_answers` — tracked in `supabase/migrations/20261118_interviews.sql`. Own-rows RLS; users UPDATE only the editable interview columns; `practice_answers` are server-written (they count toward practice limits) and keep `interview_id = null` when a round is deleted so deleting can't reset the Free round.
+- Applied 2026-11-18. Sprints — tracked in `supabase/migrations/20261118_sprints.sql`: `users.sprint_ends_at` (service-role only, not in the users column grants), `sprint_purchases` (read-own RLS, no user writes, unique `stripe_session_id`), and `apply_sprint_purchase(user, sku, session, amount)` (service_role only; locks the user row, extends from `greatest(now(), sprint_ends_at)`, idempotent on the session id).
 
 ## AI models and usage logging (`src/lib/ai.ts`)
 **Haiku everywhere.** Every call resolves to `ANTHROPIC_MODEL_FAST` (Haiku) unless its `action` is
@@ -456,22 +457,38 @@ runs `apply_library_repair` (one transaction, ownership re-checked, `library_rep
 the before-state); `undo_library_repair` restores it. Never automatic; other users' accounts need
 their email typed and Matt's sign-off.
 
-## Billing: `plan` vs `tier`
-`users.plan` (`free`/`starter`/`pro`) is the Stripe-facing SKU bucket; `users.tier`
-(`free`/`pro`/`beta_pro`) is the actual entitlement gate every feature check reads
-(`isProTier()` in `src/lib/plan.ts` — upload limit, module limit, generation limit,
-interview-prep, business AI-check caps, etc.). The Stripe webhook (`api/stripe/webhook`)
-keeps both in sync on every subscription event, promoting/demoting `tier` alongside `plan`
-but never overwriting a complimentary `beta_pro` grant. The admin `/admin` page's `PlanSelect`
-dropdown (`PATCH /api/admin/users/[id]`, `{ plan }`) used to only write `plan`, silently
-leaving `tier` on `free` — found via a real user stuck behind "Upload limit reached for your
-plan" after being manually set to pro; 7 other accounts had the same drift (fixed via a one-off
-`UPDATE` querying `plan = 'pro' and tier not in ('pro','beta_pro')`). The route now syncs
-`tier` to match whenever `plan` is set to `pro` or `free` (same rule as the webhook: skip if
-current `tier` is `beta_pro`; `starter` doesn't map to any tier so it's left alone). The newer
-`/admin/users/[id]` page's `TierControl` (`POST /api/admin/set-user-tier`) always wrote `tier`
-directly and was never affected — prefer it over the old `/admin` page's plan dropdown when
-granting pro access manually.
+## Billing: Sprints (one-time, no auto-renew)
+Free: module library and confirmations, 1 resume + 2 other documents, 2 tailored resumes (deleted
+ones count), every export format, 1 practice round. A 30-day ($19) or 90-day ($45) Sprint adds
+unlimited tailored resumes (fair use 100/30 days), live editing and fit, unlimited documents (30/30
+days), practice for every round (60 graded answers/30 days), outreach drafts and application
+insights; a 90-day Sprint pools 3x. When it ends the account is on Free limits; nothing is deleted.
+- **One place for access:** `src/lib/entitlements.ts`. `hasActiveSprint(user)` = `sprint_ends_at` in
+  the future, or `beta_pro` (until `tier_expires_at` if set), or legacy `pro` with a future
+  `plan_period_end`/`tier_expires_at`. `entitlements()` returns allowances (Free = lifetime counts;
+  Sprint = since the covering `sprint_purchases.starts_at`, beta/legacy = last 30 days) and
+  `sprintRequired()` guards Sprint-only routes (402 `sprint_required`). Gates: `jobs/start` (before any
+  AI) and `generate-resume` (tailored), `upload-resume`/`upload-document` (documents),
+  `interviews/[id]/practice`, `outreach-draft`, `interview-prep`, `resume-docs/[id]` PATCH + fit +
+  rewrite-block + suggestions (live editing; the editor gets `locked` for Free: view and export only),
+  MCP (`src/lib/mcp/quota.ts`, and update_block/reorder_blocks/set_section_visibility). `/api/me`
+  returns `sprint_active`/`sprint_ends_at` for clients. Don't gate on `tier`/`isProTier` (kept only for
+  the admin plan/tier sync).
+- **Checkout:** `POST /api/billing/checkout` `{ sku: 'sprint_30' | 'sprint_90' }`, mode `payment`,
+  prices from `STRIPE_PRICE_SPRINT_30/_90` (`src/lib/sprint.ts`). `components/SprintButton.tsx` is the
+  only buy button. `/api/checkout`, `/api/checkout/overage`, `/api/usage`, credits and the
+  single/five-pack UI are gone; the webhook still honors old credit sessions and subscription events.
+- **Webhook:** `checkout.session.completed` with a sprint sku and `payment_status = 'paid'` calls
+  `apply_sprint_purchase`; on error it returns 500 so Stripe retries.
+- **Reminders:** `/api/cron/sprint-reminders` (daily 15:00 UTC in `vercel.json`) via
+  `src/lib/sprint-reminders.ts` and `sendEmail` (Brevo): 3 days before the end and on the end day, once
+  each per end date, logged as `ev_sprint_reminder` `{ kind, sprint_ends_at }`. `.test` addresses are
+  logged, never sent. Needs `EMAIL_FROM` (a verified Brevo sender) in Vercel.
+- **UI:** `/billing` is "Your Sprint" (days left, included, usage, Extend, purchases); `/pricing` is
+  "Sprints, not subscriptions" with three cards and the three promises. Hitting a Free limit shows one
+  sentence (`LIMIT_MESSAGES`) and a "Start a 30-day Sprint" button; existing data is never hidden.
+- Test: `scripts/smoke/part6-sprints.ts` (signs `checkout.session.completed` locally with
+  `STRIPE_WEBHOOK_SECRET`; local `.env.local` has live Stripe keys, so no Checkout session is created).
 
 ## Press kit (`/press`)
 Public page in `src/app/press/`; files in `public/press/` (how to rebuild the logos and zip: that folder's `README.md`). Copy, facts and the founder bio are approved text, so don't change claims without Matt's sign-off, and keep `modulehire-press-kit.txt` and the zip in step with the page.

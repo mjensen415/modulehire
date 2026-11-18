@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { isProTier } from '@/lib/plan'
 import {
   IconGrid,
   IconStar,
@@ -44,7 +43,7 @@ const TABS = [
   { href: '/interviews', label: 'Interviews', icon: IconClipboard, exact: false },
 ]
 
-export default function MobileTabBar({ tier }: { tier?: string }) {
+export default function MobileTabBar({ sprintActive = false }: { sprintActive?: boolean }) {
   const pathname = usePathname()
   const [sheetOpen, setSheetOpen] = useState(false)
 
@@ -59,7 +58,7 @@ export default function MobileTabBar({ tier }: { tier?: string }) {
     { href: '/account', label: 'Settings', icon: IconSettings },
     { href: '/my-info', label: 'My info', icon: IconPerson },
     { href: '/preferences', label: 'AI preferences', icon: IconSliders },
-    ...(!isProTier(tier) ? [{ href: '/billing', label: 'Upgrade', icon: IconUpgrade }] : []),
+    sprintActive ? { href: '/billing', label: 'Your Sprint', icon: IconUpgrade } : { href: '/pricing', label: 'Start a Sprint', icon: IconUpgrade },
     { href: '/business/dashboard', label: 'For Business', icon: IconBuilding },
   ]
 

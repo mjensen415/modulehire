@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { isProTier } from '@/lib/plan'
 import { analyzeJd, fetchJdFromUrl, looksLikeUrl } from '@/lib/analyze-jd-client'
+import SprintButton from '@/components/SprintButton'
 
 type JobDescriptionSummary = {
   id: string
@@ -72,7 +72,7 @@ export default function InterviewPrepPage() {
   const mainPanelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    fetch('/api/me').then((r) => r.json()).then((data) => setIsPro(isProTier(data.tier))).catch(() => null)
+    fetch('/api/me').then((r) => r.json()).then((data) => setIsPro(!!data.sprint_active)).catch(() => null)
     loadJdList()
   }, [])
 
@@ -153,7 +153,7 @@ export default function InterviewPrepPage() {
       const data = await res.json()
       if (!res.ok) {
         if (data.error === 'pro_required') {
-          setError('Interview prep is a Pro feature. Upgrade to generate a prep document.')
+          setError('Interview prep comes with a Sprint.')
         } else {
           throw new Error(data.error ?? 'Could not generate prep document')
         }
@@ -364,13 +364,10 @@ export default function InterviewPrepPage() {
                     style={{ opacity: isPro ? 1 : 0.5 }}
                   >
                     {generating ? 'Analyzing your experience…' : 'Generate Prep Document'}
-                    {!isPro && ' 🔒 Pro'}
                   </button>
                   {!isPro && (
                     <div style={{ marginTop: 14 }}>
-                      <Link href="/billing" style={{ fontSize: 12.5, color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>
-                        Upgrade to Pro to unlock interview prep →
-                      </Link>
+                      <SprintButton />
                     </div>
                   )}
                 </div>

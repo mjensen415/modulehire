@@ -6,6 +6,7 @@ import { sanitizeCriteria, type JdCriterion } from '@/lib/dimensions'
 import { autoPickModules, jobResolver, AUTO_PICK, type JobRow, type RankedForPick } from '@/lib/job-grouping'
 import { getActiveProfileId } from '@/lib/profile'
 import { CONFIRM_FIRST_CODE, CONFIRM_FIRST_MESSAGE, libraryCounts } from '@/lib/usable-modules'
+import { allows, entitlements, LIMIT_MESSAGES, SPRINT_REQUIRED_CODE } from '@/lib/entitlements'
 import { finishMatch, loadMatchInputs, localShortlist, MatchError, rescoreShortlist } from '@/lib/match'
 import { draftGenerateBody } from '@/lib/draft-request'
 import { internalRequest } from '@/lib/internal-call'
@@ -84,6 +85,11 @@ export async function POST(req: Request) {
   const counts = await libraryCounts(supabase, user.id, await getActiveProfileId(supabase, user.id))
   if (counts.confirmed === 0 && counts.drafts > 0) {
     return NextResponse.json({ error: CONFIRM_FIRST_MESSAGE, code: CONFIRM_FIRST_CODE, drafts: counts.drafts }, { status: 409 })
+  }
+  // Out of tailored resumes: say so before any AI runs (generate-resume checks again).
+  const ent = await entitlements(supabase, user.id)
+  if (!allows(ent.tailored)) {
+    return NextResponse.json({ error: ent.active ? LIMIT_MESSAGES.fairUse : LIMIT_MESSAGES.tailored, code: SPRINT_REQUIRED_CODE, limit: 'tailored' }, { status: 402 })
   }
   const startedAt = Date.now()
   const base = req.url
