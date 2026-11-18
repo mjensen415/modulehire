@@ -8,6 +8,14 @@ import FeedbackModal from '@/components/FeedbackModal';
 import ThemeToggle from '@/components/ThemeToggle';
 import { isProTier } from '@/lib/plan';
 
+const SETTINGS_PATHS = ['/account', '/my-info', '/preferences', '/billing', '/settings'];
+const SETTINGS_LINKS = [
+  { href: '/account', label: 'Account' },
+  { href: '/my-info', label: 'My info' },
+  { href: '/preferences', label: 'AI preferences' },
+  { href: '/billing', label: 'Billing' },
+];
+
 type ProfileSummary = { id: string; name: string; module_count: number; is_active: boolean };
 
 function IconSwap() {
@@ -329,21 +337,23 @@ export default function AppSidebar({ footer, tier, isAdmin, activeProfileName, a
   const pathname = usePathname();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
+  // Main nav: Home, Jobs, Library, Resumes, Interviews, Files, Settings. `also` lists the other
+  // routes that belong to an item, so it stays highlighted there.
   const navItems = [
-    { href: '/dashboard', label: 'Home', icon: <IconGrid />, exact: true },
-    { href: '/library', label: 'My Modules', icon: <IconBlocks />, exact: false },
-    { href: '/generate', label: 'Generate', icon: <IconStar />, exact: false },
-    { href: '/matches', label: 'Job Matches', icon: <IconTarget />, exact: false },
-    { href: '/applications', label: 'Applications', icon: <IconFiles />, exact: false },
-    { href: '/resumes', label: 'My Resumes', icon: <IconResume />, exact: false },
-    { href: '/my-info', label: 'My Info', icon: <IconPerson />, exact: true },
-    { href: '/job-tracker', label: 'Job Tracker', icon: <IconBriefcase2 />, exact: false },
-    { href: '/interview-prep', label: 'Interview Prep', icon: <IconClipboard />, exact: false },
+    { href: '/dashboard', label: 'Home', icon: <IconGrid />, exact: true, also: [] as string[] },
+    { href: '/job-tracker', label: 'Jobs', icon: <IconBriefcase2 />, exact: false, also: ['/generate', '/matches', '/applications'] },
+    { href: '/library', label: 'Library', icon: <IconBlocks />, exact: false, also: ['/module-review', '/upload'] },
+    { href: '/resumes', label: 'Resumes', icon: <IconResume />, exact: false, also: [] },
+    { href: '/interviews', label: 'Interviews', icon: <IconClipboard />, exact: false, also: ['/interview-prep'] },
+    { href: '/files', label: 'Files', icon: <IconFiles />, exact: false, also: [] },
+    { href: '/account', label: 'Settings', icon: <IconSettings />, exact: false, also: SETTINGS_PATHS },
   ];
 
-  function active(href: string, exact: boolean) {
-    return exact ? pathname === href : pathname.startsWith(href);
+  function active(href: string, exact: boolean, also: string[] = []) {
+    if (exact) return pathname === href;
+    return [href, ...also].some(p => pathname === p || pathname.startsWith(`${p}/`));
   }
+  const inSettings = SETTINGS_PATHS.some(p => pathname === p || pathname.startsWith(`${p}/`)) || pathname.startsWith('/account');
 
   return (
     <aside className="app-sidebar">
@@ -361,27 +371,34 @@ export default function AppSidebar({ footer, tier, isAdmin, activeProfileName, a
       <div className="sidebar-section">
         <div className="sidebar-section-label">Workspace</div>
         {navItems.map(item => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`nav-item${active(item.href, item.exact) ? ' active' : ''}`}
-          >
-            <span className="nav-item-icon">{item.icon}</span>
-            {item.label}
-          </Link>
+          <div key={item.href}>
+            <Link
+              href={item.href}
+              className={`nav-item${active(item.href, item.exact, item.also) ? ' active' : ''}`}
+            >
+              <span className="nav-item-icon">{item.icon}</span>
+              {item.label}
+            </Link>
+            {item.label === 'Settings' && inSettings && (
+              <div style={{ display: 'flex', flexDirection: 'column', margin: '2px 0 6px 26px' }}>
+                {SETTINGS_LINKS.map(l => (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    className={`nav-item${pathname === l.href ? ' active' : ''}`}
+                    style={{ fontSize: 12.5, padding: '5px 10px' }}
+                  >
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         ))}
       </div>
 
       <div className="sidebar-section">
-        <div className="sidebar-section-label">Account</div>
-        <Link href="/account" className={`nav-item${pathname === '/account' ? ' active' : ''}`}>
-          <span className="nav-item-icon"><IconSettings /></span>
-          Account
-        </Link>
-        <Link href="/preferences" className={`nav-item${pathname === '/preferences' ? ' active' : ''}`}>
-          <span className="nav-item-icon"><IconSliders /></span>
-          AI Preferences
-        </Link>
+        <div className="sidebar-section-label">More</div>
         {!isProTier(tier) && (
           <Link href="/billing" className={`nav-item${pathname === '/billing' ? ' active' : ''}`}>
             <span className="nav-item-icon"><IconUpgrade /></span>

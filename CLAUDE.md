@@ -291,6 +291,23 @@ interview date?" → `/interviews?app=<id>`. Limits: Free gets one practice roun
 answers on one interview); paid: fair use 60 graded answers per 30 days. Test:
 `scripts/smoke/part4-interviews.ts`.
 
+
+## Files (`/files`) and navigation
+`/files` (`FilesClient.tsx`, warm style) lists every non-deleted `documents` row plus tailored
+resumes from `GET /api/files` (kind chip, name, date, linked job: the document's job, or the
+interview's tracked job for an interview email, or the JD for a tailored resume; module count).
+Download: `GET /api/files/download?type=document|generated&id=` redirects to a 5-minute signed URL
+(resume files live in the `resumes` bucket, other uploads in `documents`, tailored resumes re-render
+from `resume_documents` or sign the old `temp` file); a pasted interview email downloads as .txt.
+Delete: documents go through `DELETE /api/documents/[id]` (`{ keep_modules }`, default keep): the
+stored file and `raw_text` are removed and the row soft-deleted (still counts toward the Free limit);
+`keep_modules: false` soft-deletes modules with that `source_document_id` (and, for a resume, the
+older ones with its `source_resume_id`). Tailored resumes use the existing `PATCH /api/my-resumes`.
+Sidebar (`AppSidebar.tsx`): Home, Jobs (`/job-tracker`, also lit on `/generate`, `/matches`,
+`/applications`), Library, Resumes, Interviews, Files, Settings (`/account`; expands to Account, My
+info, AI preferences, Billing). Mobile tabs: Home, Jobs, Library, Interviews + More. Test:
+`scripts/smoke/part5-files.ts`.
+
 ## JD Match Report
 `POST /api/match-report` (`{ jd_id }`) scores each of a JD's `extracted_criteria` against the
 active profile's modules in one `aiCompleteJson` call (`src/lib/criteria-score.ts`, shared with the

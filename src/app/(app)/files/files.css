@@ -1,0 +1,19 @@
+/* /files. Tokens: src/app/warm.css. */
+.fl-filters { flex-wrap: wrap; border-radius: 18px; }
+.fl-list { list-style: none; margin: 0; padding: 4px 20px; }
+.fl-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--h-line); }
+.fl-row:first-child { border-top: none; }
+.fl-chip { justify-self: start; color: var(--h-ink); }
+.fl-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.fl-name { font-size: 14.5px; font-weight: 600; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.fl-name:hover { text-decoration: underline; }
+.fl-meta { font-size: 12.5px; color: var(--h-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-actions { display: flex; gap: 6px; }
+.fl-btn { font-size: 12.5px; padding: 6px 12px; }
+.fl-confirm { grid-column: 1 / -1; background: var(--h-card2); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.fl-choice { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.fl-choice label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+@media (max-width: 640px) {
+  .fl-list { padding: 4px 14px; }
+  .fl-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
