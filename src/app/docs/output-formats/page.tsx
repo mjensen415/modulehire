@@ -14,7 +14,7 @@ export default function OutputFormats() {
       <p className="docs-lead">Every generation produces a DOCX and a PDF simultaneously. Both are available for download immediately after generation completes.</p>
 
       <h2>DOCX</h2>
-      <p>The Word document is the editable version. Use this when you want to make manual adjustments before sending — tweak a sentence, move a section, add your contact details if they weren't parsed correctly. The DOCX is formatted with heading styles so it's easy to navigate and modify in Word or Google Docs.</p>
+      <p>The Word document is the editable version. Use this when you want to make manual adjustments before sending — tweak a sentence, move a section, add your contact details if they weren&apos;t parsed correctly. The DOCX is formatted with heading styles so it&apos;s easy to navigate and modify in Word or Google Docs.</p>
       <p>The DOCX uses clean, ATS-friendly formatting: standard fonts, no tables, no text boxes, no headers/footers. Most applicant tracking systems parse it without issues.</p>
 
       <h2>PDF</h2>
@@ -24,10 +24,10 @@ export default function OutputFormats() {
         <div className="callout-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="8" cy="8" r="6" /><path d="M8 5v3M8 11h.01" /></svg>
         </div>
-        <div className="callout-text"><strong>Which to use?</strong> When in doubt, use the DOCX — edit it in Google Docs, export to PDF yourself once you're satisfied. This gives you a final review pass before it goes out.</div>
+        <div className="callout-text"><strong>Which to use?</strong> When in doubt, use the DOCX — edit it in Google Docs, export to PDF yourself once you&apos;re satisfied. This gives you a final review pass before it goes out.</div>
       </div>
 
-      <h2>What's included in the output</h2>
+      <h2>What&apos;s included in the output</h2>
       <p>The generated resume contains:</p>
       <p><strong>Header</strong> — Your name, current or most recent job title, and contact information pulled from the source resume. Review this — the parser sometimes misses email or phone if they were formatted unusually.</p>
       <p><strong>Summary</strong> — If a career narrative module was included in the stack, it appears here as a 2–3 sentence opening. Otherwise this section is omitted.</p>
@@ -36,7 +36,7 @@ export default function OutputFormats() {
       <p><strong>Education</strong> — Included if the source resume contained education information that was parsed into a module.</p>
 
       <h2>Download links and expiration</h2>
-      <p>On the free plan, download links are valid for 24 hours. After that, the files are deleted from storage and the links expire. If you need to download again after 24 hours, you'll need to regenerate.</p>
+      <p>On the free plan, download links are valid for 24 hours. After that, the files are deleted from storage and the links expire. If you need to download again after 24 hours, you&apos;ll need to regenerate.</p>
 
       <div className="callout amber">
         <div className="callout-icon">
@@ -46,7 +46,7 @@ export default function OutputFormats() {
       </div>
 
       <h2>Pro plan storage</h2>
-      <p>Pro plan users get permanent storage for all generated resumes. Download links don't expire, and all previous generations remain accessible from the generation history screen. Coming in Phase 2.</p>
+      <p>Pro plan users get permanent storage for all generated resumes. Download links don&apos;t expire, and all previous generations remain accessible from the generation history screen. Coming in Phase 2.</p>
 
       <div className="note-box">
         <div className="note-label">Coming soon</div>

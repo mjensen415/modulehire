@@ -78,7 +78,7 @@ export default function HowItWorks() {
           <div className="step-content">
             <div className="step-num"><div className="step-num-circle">02</div>Step 02</div>
             <h2 className="step-title">Parse into modules.</h2>
-            <p className="step-desc">Every job you've held contains multiple skill domains. We find them. A 4-year IT role might produce 6 separate modules — one for security work, one for hardware, one for provisioning. Each module stands on its own.</p>
+            <p className="step-desc">Every job you&apos;ve held contains multiple skill domains. We find them. A 4-year IT role might produce 6 separate modules — one for security work, one for hardware, one for provisioning. Each module stands on its own.</p>
           </div>
           <div className="step-visual">
             <div className="module-stack-wrap">
@@ -119,7 +119,7 @@ export default function HowItWorks() {
           <div className="step-content">
             <div className="step-num"><div className="step-num-circle">03</div>Step 03</div>
             <h2 className="step-title">Match to a job description.</h2>
-            <p className="step-desc">Drop in any job description — paste it, upload it, or link it. The system scores every module in your library against the role's requirements and builds the optimal stack automatically.</p>
+            <p className="step-desc">Drop in any job description — paste it, upload it, or link it. The system scores every module in your library against the role&apos;s requirements and builds the optimal stack automatically.</p>
           </div>
           <div className="step-visual">
             <div className="jd-match">
