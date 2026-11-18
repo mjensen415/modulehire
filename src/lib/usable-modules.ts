@@ -6,10 +6,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // Every route that reads modules to *use* them starts from this query, so none forgets the rule.
 export const USABLE_STATUS = 'confirmed'
 
-export function getUsableModules<Q extends string = '*'>(supabase: SupabaseClient, columns?: Q) {
+export function getUsableModules(supabase: SupabaseClient, columns: string = '*') {
+  // Typed as '*': a generic column string sends supabase-js's type-level select parser into
+  // an instantiation blow-up that ran `next build` out of memory.
   return supabase
     .from('modules')
-    .select((columns ?? '*') as Q)
+    .select(columns as '*')
     .eq('status', USABLE_STATUS)
     .is('deleted_at', null)
 }
