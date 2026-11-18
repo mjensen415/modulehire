@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Conversation, type Mode } from '@elevenlabs/react'
 import type { VoiceFeedback } from '@/lib/voice/interview'
+import GrantBadge from '@/components/GrantBadge'
+import './voice.css'
 
 type Job = { id: string; label: string }
 type SessionSummary = {
@@ -28,18 +30,12 @@ type Turn = { role: 'user' | 'agent'; message: string }
 type Phase = 'setup' | 'connecting' | 'live' | 'scoring' | 'feedback'
 
 const TYPES = [
-  { key: 'recruiter_screen', label: 'Recruiter screen', blurb: 'Background, motivation, logistics.' },
-  { key: 'behavioral', label: 'Hiring manager', blurb: 'Tell-me-about-a-time questions tied to the role.' },
-  { key: 'deep_dive', label: 'Role deep dive', blurb: 'How you would actually do the job.' },
+  { key: 'recruiter_screen', label: 'Recruiter screen', sample: 'Walk me through your background. Why this role, and why now?' },
+  { key: 'behavioral', label: 'Hiring manager', sample: 'Tell me about a time you had to win over a skeptical stakeholder.' },
+  { key: 'deep_dive', label: 'Role deep dive', sample: 'How would you spend your first 90 days in this job?' },
 ] as const
 const TYPE_LABEL: Record<string, string> = Object.fromEntries(TYPES.map((t) => [t.key, t.label]))
 const CONSENT_KEY = 'mh-voice-consent'
-
-const card: React.CSSProperties = { border: '1px solid var(--border)', borderRadius: 12, background: 'var(--surface)', padding: 20 }
-const chip = (on: boolean): React.CSSProperties => ({
-  fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
-  border: `1px solid ${on ? 'var(--teal)' : 'var(--border2)'}`, color: on ? 'var(--teal)' : 'var(--text3)',
-})
 
 // The SDK plays the interviewer through a hidden <audio> element it creates after connecting and
 // relies on autoplay. Browsers block that when the click that started the call was too long ago
@@ -53,9 +49,15 @@ async function startInterviewerAudio(): Promise<boolean> {
 }
 
 function fmt(s: number) {
-  const m = Math.floor(s / 60)
-  return `${m}:${String(Math.max(0, s % 60)).padStart(2, '0')}`
+  const m = Math.floor(Math.max(0, s) / 60)
+  return `${m}:${String(Math.max(0, s) % 60).padStart(2, '0')}`
 }
+
+function scoreTone(n: number) {
+  return n >= 75 ? 'good' : n >= 50 ? 'ok' : 'low'
+}
+
+type Conv = Awaited<ReturnType<typeof Conversation.startSession>>
 
 export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: { jobs: Job[]; initialJdId: string | null; initialSessionId: string | null }) {
   const [status, setStatus] = useState<StatusResp | null>(null)
@@ -75,13 +77,16 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [maxSeconds, setMaxSeconds] = useState(600)
   const [audioBlocked, setAudioBlocked] = useState(false)
+  const [sessionMeta, setSessionMeta] = useState<{ jobTitle: string; company: string; type: string } | null>(null)
 
-  const convRef = useRef<Awaited<ReturnType<typeof Conversation.startSession>> | null>(null)
+  const convRef = useRef<Conv | null>(null)
   const sessionIdRef = useRef<string | null>(null)
   const conversationIdRef = useRef<string | null>(null)
   const maxSecondsRef = useRef(600)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const finishingRef = useRef(false)
+  const orbRef = useRef<HTMLDivElement | null>(null)
+  const captionsRef = useRef<HTMLDivElement | null>(null)
 
   async function loadStatus() {
     const res = await fetch('/api/interview/voice')
@@ -100,7 +105,7 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
     const data = await res.json()
     setActiveSessionId(id)
     setFeedback(data.feedback ?? null)
-    setFeedbackNote(data.feedback ? '' : data.status === 'failed' ? 'Scoring failed for this session.' : 'No feedback for this session (it was too short to score).')
+    setFeedbackNote(data.feedback ? '' : data.status === 'failed' ? 'Scoring failed for this session.' : 'This session was too short to score. Answer at least two questions next time.')
     setViewTranscript((data.transcript ?? []).filter((t: Turn) => t.message))
     setPhase('feedback')
   }
@@ -116,6 +121,33 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
     if (timerRef.current) clearInterval(timerRef.current)
     convRef.current?.endSession().catch(() => null)
   }, [])
+
+  // The orb follows the real audio levels: teal for the interviewer, indigo for the candidate.
+  // Written straight to CSS variables each frame so React doesn't re-render 60 times a second.
+  useEffect(() => {
+    if (phase !== 'live') return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    let raf = 0
+    let out = 0
+    let inp = 0
+    const tick = () => {
+      const c = convRef.current
+      if (c && orbRef.current) {
+        out += ((c.getOutputVolume?.() ?? 0) - out) * 0.25
+        inp += ((c.getInputVolume?.() ?? 0) - inp) * 0.25
+        const el = orbRef.current
+        el.style.setProperty('--out', reduce ? '0' : Math.min(1, out * 1.6).toFixed(3))
+        el.style.setProperty('--in', reduce ? '0' : Math.min(1, inp * 2.2).toFixed(3))
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [phase])
+
+  useEffect(() => {
+    captionsRef.current?.scrollTo({ top: captionsRef.current.scrollHeight, behavior: 'smooth' })
+  }, [turns])
 
   async function finish() {
     if (finishingRef.current) return
@@ -162,7 +194,7 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
       await navigator.mediaDevices.getUserMedia({ audio: true })
     } catch {
       setPhase('setup')
-      return setError('Microphone access was blocked. Allow it in your browser and try again.')
+      return setError('Microphone access is blocked. Allow it in your browser’s site settings, then start again.')
     }
     try { localStorage.setItem(CONSENT_KEY, status?.consent_version ?? '') } catch { /* ignore */ }
 
@@ -180,13 +212,14 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
       setPhase('setup')
-      return setError(data.error === 'pro_required' ? 'Voice interviews are a Pro feature.' : data.error || 'Could not start.')
+      return setError(data.error === 'pro_required' ? 'Voice interviews are part of Pro.' : data.error || 'Could not start the interview.')
     }
 
     sessionIdRef.current = data.session_id
     conversationIdRef.current = null
     maxSecondsRef.current = data.max_seconds
     setMaxSeconds(data.max_seconds)
+    setSessionMeta({ jobTitle: data.job_title, company: data.company, type })
     setTurns([])
     setAudioBlocked(false)
     setElapsed(0)
@@ -223,7 +256,7 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
     } catch (e) {
       console.error(e)
       setPhase('setup')
-      setError('Could not connect to the interviewer. Check your connection and try again.')
+      setError('Could not connect to the interviewer. Check your connection and start again.')
     }
   }
 
@@ -248,123 +281,185 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
     loadStatus()
   }
 
-  if (!status) return <div style={{ color: 'var(--text3)', fontSize: 13 }}>Loading…</div>
+  if (!status) return <div className="vi"><p className="vi-muted">Loading…</p></div>
 
   const left = Math.max(0, status.monthly_limit - status.used_this_month)
   const history = status.sessions.filter((s) => !jdId || s.job_description_id === jdId)
+  const job = jobs.find((j) => j.id === jdId)
+  const typeInfo = TYPES.find((t) => t.key === type) ?? TYPES[1]
 
   // ─── Live ────────────────────────────────────────────────────────────────
   if (phase === 'connecting' || phase === 'live') {
     const remaining = maxSeconds - elapsed
+    const progress = Math.min(1, elapsed / Math.max(1, maxSeconds))
+    const R = 140
+    const C = 2 * Math.PI * R
     const lastAgent = [...turns].reverse().find((t) => t.role === 'agent')
+    const stateLabel = phase === 'connecting'
+      ? 'Connecting to your interviewer'
+      : mode === 'speaking' ? 'Interviewer is speaking' : muted ? 'You’re muted' : 'Your turn. Take your time.'
     return (
-      <div style={{ maxWidth: 720, margin: '0 auto' }}>
-        <div style={{ ...card, textAlign: 'center', padding: 36 }}>
-          <div
-            style={{
-              width: 120, height: 120, borderRadius: '50%', margin: '0 auto 20px',
-              background: mode === 'speaking' ? 'var(--teal)' : 'var(--teal-dim)',
-              boxShadow: mode === 'speaking' ? '0 0 0 14px var(--teal-dim)' : 'none',
-              transition: 'all 0.25s',
-            }}
-          />
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
-            {phase === 'connecting' ? 'Connecting…' : mode === 'speaking' ? 'Interviewer is speaking' : muted ? 'You are muted' : 'Listening'}
+      <div className="vi vi-room">
+        <div className="vi-stage">
+          <div className="vi-stage-head">
+            <div>
+              <div className="vi-stage-title">{sessionMeta?.jobTitle}{sessionMeta?.company ? ` at ${sessionMeta.company}` : ''}</div>
+              <div className="vi-muted">{TYPE_LABEL[sessionMeta?.type ?? ''] ?? 'Interview'} practice with an AI interviewer</div>
+            </div>
+            <div className={`vi-clock${remaining < 60 && phase === 'live' ? ' is-late' : ''}`}>
+              {phase === 'live' ? (remaining >= 0 ? fmt(remaining) : 'Wrapping up') : '--:--'}
+            </div>
           </div>
-          <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 4, fontFamily: 'var(--mono)' }}>
-            {phase === 'live' ? (remaining >= 0 ? `${fmt(remaining)} left` : 'Wrapping up') : ''}
+
+          <div className="vi-orb-wrap">
+            <svg className="vi-ring" viewBox="0 0 300 300" aria-hidden="true">
+              <circle cx="150" cy="150" r={R} className="vi-ring-track" />
+              <circle cx="150" cy="150" r={R} className="vi-ring-fill" strokeDasharray={C} strokeDashoffset={C * (1 - progress)} />
+            </svg>
+            <div ref={orbRef} className={`vi-orb is-${phase === 'connecting' ? 'connecting' : mode}${muted ? ' is-muted' : ''}`}>
+              <span className="vi-orb-in" />
+              <span className="vi-orb-out" />
+              <span className="vi-orb-core" />
+            </div>
           </div>
-          {lastAgent && (
-            <div style={{ fontSize: 14, color: 'var(--text2)', marginTop: 20, lineHeight: 1.5 }}>&ldquo;{lastAgent.message}&rdquo;</div>
-          )}
+
+          <div className="vi-state" role="status">{stateLabel}</div>
+          <p className="vi-line">{lastAgent ? lastAgent.message : ' '}</p>
+
           {audioBlocked && phase === 'live' && (
-            <button
-              className="btn-primary"
-              style={{ marginTop: 20 }}
-              onClick={() => startInterviewerAudio().then((ok) => setAudioBlocked(!ok))}
-            >
-              🔊 Can&apos;t hear the interviewer? Turn on audio
+            <button className="vi-btn vi-btn-primary" onClick={() => startInterviewerAudio().then((ok) => setAudioBlocked(!ok))}>
+              Turn on interviewer audio
             </button>
           )}
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 24 }}>
-            <button className="btn-ghost" onClick={toggleMute} disabled={phase !== 'live'}>{muted ? 'Unmute' : 'Mute'}</button>
-            <button className="btn-primary" onClick={end}>End interview</button>
+
+          <div className="vi-controls">
+            <button className="vi-btn" onClick={toggleMute} disabled={phase !== 'live'} aria-pressed={muted}>
+              {muted ? 'Unmute' : 'Mute'}
+            </button>
+            <button className="vi-btn vi-btn-end" onClick={end}>End interview</button>
           </div>
         </div>
-        <p style={{ fontSize: 11.5, color: 'var(--text3)', textAlign: 'center', marginTop: 12 }}>
-          You are talking to an AI. Audio is processed by ElevenLabs; ModuleHire saves the transcript to your account.
-        </p>
+
+        <aside className="vi-captions" aria-label="Live captions">
+          <div className="vi-captions-head">Captions</div>
+          <div ref={captionsRef} className="vi-captions-list">
+            {turns.length === 0 && <p className="vi-muted">What you and the interviewer say shows up here.</p>}
+            {turns.map((t, i) => (
+              <div key={i} className={`vi-turn is-${t.role}`}>
+                <span className="vi-turn-who">{t.role === 'agent' ? 'Interviewer' : 'You'}</span>
+                <span>{t.message}</span>
+              </div>
+            ))}
+          </div>
+          <p className="vi-fine">You&apos;re talking to an AI. Audio is processed by ElevenLabs and not stored by ModuleHire.</p>
+        </aside>
       </div>
     )
   }
 
   if (phase === 'scoring') {
     return (
-      <div style={{ ...card, maxWidth: 720, margin: '0 auto', textAlign: 'center', padding: 36 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Reviewing your answers…</div>
-        <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 6 }}>Checking each answer against your library. About a minute.</div>
+      <div className="vi">
+        <div className="vi-scoring">
+          <div className="vi-orb is-thinking"><span className="vi-orb-core" /></div>
+          <h2>Reviewing your answers</h2>
+          <p className="vi-muted">Checking each answer against your library. This takes about a minute.</p>
+        </div>
       </div>
     )
   }
 
   // ─── Feedback ────────────────────────────────────────────────────────────
   if (phase === 'feedback') {
+    const R = 46
+    const C = 2 * Math.PI * R
     return (
-      <div style={{ maxWidth: 820, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-ghost" onClick={() => { setPhase('setup'); setFeedback(null) }}>← Practice again</button>
-          {activeSessionId && <button className="btn-ghost" onClick={() => remove(activeSessionId)}>Delete this session</button>}
+      <div className="vi vi-report">
+        <div className="vi-report-actions">
+          <button className="vi-btn" onClick={() => { setPhase('setup'); setFeedback(null) }}>Practice again</button>
+          {activeSessionId && <button className="vi-btn vi-btn-quiet" onClick={() => remove(activeSessionId)}>Delete this session</button>}
         </div>
+
         {!feedback ? (
-          <div style={card}><div style={{ fontSize: 14, color: 'var(--text2)' }}>{feedbackNote || 'No feedback yet.'}</div></div>
+          <div className="vi-panel"><p>{feedbackNote || 'No feedback yet.'}</p></div>
         ) : (
           <>
-            <div style={{ ...card, display: 'flex', gap: 20, alignItems: 'center' }}>
-              <div style={{ fontSize: 40, fontWeight: 800, color: 'var(--teal)', fontFamily: 'var(--mono)' }}>{feedback.overall_score}</div>
-              <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.55 }}>{feedback.summary}</div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-              <List title="What worked" items={feedback.strengths} />
-              <List title="Fix next time" items={feedback.improvements} />
-            </div>
-            {feedback.unused_strengths.length > 0 && (
-              <List title="Strong library modules you never mentioned" items={feedback.unused_strengths} />
-            )}
-            {feedback.questions.map((q, i) => (
-              <div key={i} style={card}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{q.question}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text2)', fontFamily: 'var(--mono)', flexShrink: 0 }}>{q.score}/5</div>
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 6 }}>{q.answer_summary}</div>
-                <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-                  {(['situation', 'task', 'action', 'result'] as const).map((k) => (
-                    <span key={k} style={chip(q.star[k])}>{k[0].toUpperCase() + k.slice(1)}</span>
-                  ))}
-                </div>
-                {q.modules_used.length > 0 && (
-                  <div style={{ fontSize: 12.5, color: 'var(--text3)', marginTop: 10 }}>Drew on: {q.modules_used.join(', ')}</div>
-                )}
-                {q.missed_module && (
-                  <div style={{ fontSize: 12.5, color: 'var(--amber)', marginTop: 6 }}>Better example in your library: {q.missed_module}</div>
-                )}
-                {q.unsupported_claims.length > 0 && (
-                  <div style={{ fontSize: 12.5, color: 'var(--rose)', marginTop: 6 }}>
-                    Not in your library: {q.unsupported_claims.join('; ')}. Add it to a module or stop saying it. <Link href="/library" style={{ color: 'var(--teal)' }}>Library ↗</Link>
-                  </div>
-                )}
-                <div style={{ fontSize: 13, color: 'var(--text)', marginTop: 10 }}>Tip: {q.better_answer_tip}</div>
+            <section className="vi-panel vi-summary">
+              <div className={`vi-score is-${scoreTone(feedback.overall_score)}`}>
+                <svg viewBox="0 0 110 110" aria-hidden="true">
+                  <circle cx="55" cy="55" r={R} className="vi-score-track" />
+                  <circle cx="55" cy="55" r={R} className="vi-score-fill" strokeDasharray={C} strokeDashoffset={C * (1 - feedback.overall_score / 100)} />
+                </svg>
+                <span className="vi-score-num">{feedback.overall_score}</span>
               </div>
-            ))}
+              <div>
+                <h2>How it went</h2>
+                <p>{feedback.summary}</p>
+              </div>
+            </section>
+
+            <div className="vi-two">
+              {feedback.strengths.length > 0 && (
+                <section className="vi-panel vi-list is-good">
+                  <h3>What worked</h3>
+                  <ul>{feedback.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                </section>
+              )}
+              {feedback.improvements.length > 0 && (
+                <section className="vi-panel vi-list is-fix">
+                  <h3>Fix next time</h3>
+                  <ul>{feedback.improvements.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                </section>
+              )}
+            </div>
+
+            {feedback.unused_strengths.length > 0 && (
+              <section className="vi-panel">
+                <h3>Strong examples from your library that never came up</h3>
+                <div className="vi-chips">{feedback.unused_strengths.map((s, i) => <span key={i} className="vi-chip">{s}</span>)}</div>
+              </section>
+            )}
+
+            <section className="vi-questions">
+              <h3>Question by question</h3>
+              {feedback.questions.map((q, i) => {
+                const parts = (['situation', 'task', 'action', 'result'] as const)
+                return (
+                  <details key={i} className="vi-q" open={i === 0}>
+                    <summary>
+                      <span className="vi-q-text">{q.question}</span>
+                      <span className="vi-star" aria-label={`Covered: ${parts.filter((k) => q.star[k]).join(', ') || 'none'}`}>
+                        {parts.map((k) => <span key={k} className={q.star[k] ? 'on' : ''} title={k[0].toUpperCase() + k.slice(1)} />)}
+                      </span>
+                      <span className={`vi-q-score is-${q.score >= 4 ? 'good' : q.score >= 3 ? 'ok' : 'low'}`}>{q.score}/5</span>
+                    </summary>
+                    <div className="vi-q-body">
+                      <p>{q.answer_summary}</p>
+                      <p className="vi-tip">{q.better_answer_tip}</p>
+                      {q.modules_used.length > 0 && <p className="vi-muted">You drew on: {q.modules_used.join(', ')}</p>}
+                      {q.missed_module && <p className="vi-note is-amber">Better example in your library: {q.missed_module}</p>}
+                      {q.unsupported_claims.length > 0 && (
+                        <p className="vi-note is-rose">
+                          Not in your library: {q.unsupported_claims.join('; ')}. Add it to a module or stop saying it. <Link href="/library">Open library</Link>
+                        </p>
+                      )}
+                    </div>
+                  </details>
+                )
+              })}
+              <p className="vi-fine">The four marks next to each question show which parts of a complete answer you covered: situation, task, action and result.</p>
+            </section>
           </>
         )}
+
         {viewTranscript && viewTranscript.length > 0 && (
-          <details style={card}>
-            <summary style={{ cursor: 'pointer', fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>Transcript</summary>
-            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <details className="vi-panel vi-transcript">
+            <summary>Transcript</summary>
+            <div className="vi-captions-list">
               {viewTranscript.map((t, i) => (
-                <div key={i} style={{ fontSize: 13, color: t.role === 'agent' ? 'var(--text2)' : 'var(--text)' }}>
-                  <strong>{t.role === 'agent' ? 'Interviewer' : 'You'}:</strong> {t.message}
+                <div key={i} className={`vi-turn is-${t.role}`}>
+                  <span className="vi-turn-who">{t.role === 'agent' ? 'Interviewer' : 'You'}</span>
+                  <span>{t.message}</span>
                 </div>
               ))}
             </div>
@@ -377,113 +472,109 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
   // ─── Setup ───────────────────────────────────────────────────────────────
   const canStart = status.enabled && status.is_pro && left > 0 && !!jdId && consent
   return (
-    <div style={{ maxWidth: 820, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {!status.is_pro && (
-        <div style={{ ...card, borderColor: 'var(--teal)' }}>
-          <div style={{ fontSize: 14, color: 'var(--text)' }}>
-            Voice mock interviews are part of Pro. <Link href="/pricing" style={{ color: 'var(--teal)', fontWeight: 700 }}>See plans →</Link>
-          </div>
-        </div>
-      )}
-      {!status.enabled && status.is_pro && (
-        <div style={card}><div style={{ fontSize: 14, color: 'var(--text2)' }}>Voice interviews are paused right now. Check back soon.</div></div>
-      )}
-
-      <div style={card}>
-        <Label>Job</Label>
-        {jobs.length === 0 ? (
-          <div style={{ fontSize: 13, color: 'var(--text2)' }}>
-            Save a job first. <Link href="/interview-prep" style={{ color: 'var(--teal)' }}>Add one in Interview Prep →</Link>
-          </div>
-        ) : (
-          <select className="form-input" value={jdId} onChange={(e) => setJdId(e.target.value)}>
-            {jobs.map((j) => <option key={j.id} value={j.id}>{j.label}</option>)}
-          </select>
+    <div className="vi vi-setup">
+      <div className="vi-setup-main">
+        {!status.is_pro && (
+          <div className="vi-panel vi-callout">Voice mock interviews are part of Pro. <Link href="/pricing">See plans</Link></div>
+        )}
+        {!status.enabled && status.is_pro && (
+          <div className="vi-panel vi-callout">Voice interviews are paused right now. Check back soon.</div>
         )}
 
-        <Label style={{ marginTop: 18 }}>Interview type</Label>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
-          {TYPES.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setType(t.key)}
-              style={{
-                textAlign: 'left', padding: 14, borderRadius: 10, cursor: 'pointer', background: 'var(--bg2)',
-                border: `1.5px solid ${type === t.key ? 'var(--teal)' : 'var(--border)'}`, fontFamily: 'var(--font)',
-              }}
-            >
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>{t.label}</div>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 3 }}>{t.blurb}</div>
-            </button>
-          ))}
-        </div>
+        <h2 className="vi-h">Practice the interview out loud</h2>
+        <p className="vi-lede">An AI interviewer asks the questions this job is likely to ask, using what&apos;s in your library. When you hang up, you get a scored report.</p>
 
-        <Label style={{ marginTop: 18 }}>Length</Label>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {([10, 20] as const).map((n) => (
-            <button key={n} className={length === n ? 'btn-primary' : 'btn-ghost'} onClick={() => setLength(n)}>{n} min</button>
-          ))}
-        </div>
+        <label className="vi-field">
+          <span className="vi-legend">Job</span>
+          {jobs.length === 0 ? (
+            <span className="vi-muted">Save a job first. <Link href="/interview-prep">Add one in Interview Prep</Link></span>
+          ) : (
+            <select className="form-input" value={jdId} onChange={(e) => setJdId(e.target.value)}>
+              {jobs.map((j) => <option key={j.id} value={j.id}>{j.label}</option>)}
+            </select>
+          )}
+        </label>
 
-        <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 20, fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.5, cursor: 'pointer' }}>
-          <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} style={{ marginTop: 3 }} />
+        <fieldset className="vi-field">
+          <legend className="vi-legend">Who&apos;s interviewing you</legend>
+          <div className="vi-types" role="radiogroup">
+            {TYPES.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="radio"
+                aria-checked={type === t.key}
+                className={`vi-type${type === t.key ? ' is-on' : ''}`}
+                onClick={() => setType(t.key)}
+              >
+                <span className="vi-type-name">{t.label}</span>
+                <span className="vi-type-q">&ldquo;{t.sample}&rdquo;</span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset className="vi-field">
+          <legend className="vi-legend">Length</legend>
+          <div className="vi-seg" role="radiogroup">
+            {([10, 20] as const).map((n) => (
+              <button key={n} type="button" role="radio" aria-checked={length === n} className={length === n ? 'is-on' : ''} onClick={() => setLength(n)}>
+                {n} minutes
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
+        <label className="vi-consent">
+          <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
           <span>
             I understand I&apos;m talking to an AI interviewer, not a person. I agree that my voice is recorded and processed by
             ElevenLabs to run the conversation, and that ModuleHire saves the transcript and feedback to my account. ModuleHire
-            does not store audio. I can delete any session at any time. <Link href="/privacy#voice" style={{ color: 'var(--teal)' }}>Privacy</Link>
+            does not store audio. I can delete any session at any time. <Link href="/privacy#voice">Privacy</Link>
           </span>
         </label>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 18 }}>
-          <button className="btn-primary" onClick={start} disabled={!canStart}>Start interview</button>
-          <span style={{ fontSize: 12, color: 'var(--text3)' }}>
-            {status.is_pro ? `${left} of ${status.monthly_limit} left this month` : ''}
-          </span>
-        </div>
-        {error && <div style={{ fontSize: 13, color: 'var(--rose)', marginTop: 12 }}>{error}</div>}
-        <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 16 }}>
-          Use headphones for the best experience. Voice interviews are powered by ElevenLabs and supported by the{' '}
-          <a href="https://elevenlabs.io/startup-grants" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--teal)' }}>ElevenLabs Grants</a> program.
-        </div>
+        {error && <p className="vi-error" role="alert">{error}</p>}
       </div>
 
-      {history.length > 0 && (
-        <div style={card}>
-          <Label>Past interviews{jdId ? ' for this job' : ''}</Label>
-          {history.map((s) => (
-            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
-              <button
-                onClick={() => openSession(s.id)}
-                style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font)', padding: 0 }}
-              >
-                <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600 }}>{TYPE_LABEL[s.interview_type] ?? s.interview_type}</span>
-                <span style={{ fontSize: 12, color: 'var(--text3)', marginLeft: 8 }}>
-                  {new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  {s.duration_s ? ` · ${fmt(s.duration_s)}` : ''}
-                </span>
-              </button>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--teal)', fontFamily: 'var(--mono)' }}>{s.overall_score ?? '–'}</span>
-              <button className="btn-ghost" style={{ fontSize: 11.5, padding: '4px 10px' }} onClick={() => remove(s.id)}>Delete</button>
-            </div>
-          ))}
+      <aside className="vi-setup-side">
+        <div className="vi-preview">
+          <div className="vi-orb is-idle"><span className="vi-orb-core" /></div>
+          <div className="vi-preview-job">{job?.label ?? 'Pick a job'}</div>
+          <div className="vi-muted">{typeInfo.label}, {length} minutes</div>
+          <p className="vi-preview-q">&ldquo;{typeInfo.sample}&rdquo;</p>
+          <button className="vi-btn vi-btn-primary vi-start" onClick={start} disabled={!canStart}>Start interview</button>
+          <div className="vi-muted vi-left">
+            {status.is_pro ? `${left} of ${status.monthly_limit} interviews left this month` : 'Pro only'}
+          </div>
+          {!consent && status.is_pro && <div className="vi-fine">Tick the consent box to start.</div>}
+          <div className="vi-fine">Headphones help the interviewer hear you clearly.</div>
         </div>
-      )}
-    </div>
-  )
-}
 
-function Label({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8, ...style }}>{children}</div>
-}
+        {history.length > 0 && (
+          <div className="vi-history">
+            <h3>Past interviews for this job</h3>
+            {history.map((s) => (
+              <div key={s.id} className="vi-history-row">
+                <button type="button" onClick={() => openSession(s.id)}>
+                  <span>{TYPE_LABEL[s.interview_type] ?? s.interview_type}</span>
+                  <span className="vi-muted">
+                    {new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {s.duration_s ? `, ${Math.max(1, Math.round(s.duration_s / 60))} min` : ''}
+                  </span>
+                </button>
+                <span className={`vi-history-score${s.overall_score != null ? ` is-${scoreTone(s.overall_score)}` : ''}`}>{s.overall_score ?? '–'}</span>
+                <button type="button" className="vi-history-del" onClick={() => remove(s.id)} aria-label="Delete this interview">Delete</button>
+              </div>
+            ))}
+          </div>
+        )}
 
-function List({ title, items }: { title: string; items: string[] }) {
-  if (!items.length) return null
-  return (
-    <div style={card}>
-      <Label>{title}</Label>
-      <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {items.map((s, i) => <li key={i} style={{ fontSize: 13.5, color: 'var(--text)', lineHeight: 1.5 }}>{s}</li>)}
-      </ul>
+        <div className="vi-grant">
+          <span className="vi-fine">Voice interviews are supported by</span>
+          <GrantBadge width={170} />
+        </div>
+      </aside>
     </div>
   )
 }

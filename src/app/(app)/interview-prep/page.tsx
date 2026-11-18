@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { analyzeJd, fetchJdFromUrl, looksLikeUrl } from '@/lib/analyze-jd-client'
 import SprintButton from '@/components/SprintButton'
+import GrantBadge from '@/components/GrantBadge'
 
 type JobDescriptionSummary = {
   id: string
@@ -215,6 +216,9 @@ export default function InterviewPrepPage() {
         <div>
           <span className="topbar-title">Interview Prep</span>
           <span className="topbar-sub">— Talking points built from your own experience</span>
+        </div>
+        <div className="no-print" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+          <GrantBadge width={150} />
         </div>
       </div>
 

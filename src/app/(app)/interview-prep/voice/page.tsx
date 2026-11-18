@@ -23,7 +23,7 @@ export default async function VoiceInterviewPage({ searchParams }: Props) {
       <div className="app-topbar">
         <div>
           <span className="topbar-title">Voice mock interview</span>
-          <span className="topbar-sub">Practice out loud with an AI interviewer that knows your library</span>
+          <span className="topbar-sub">Interview Prep</span>
         </div>
       </div>
       <div className="dash-content">
