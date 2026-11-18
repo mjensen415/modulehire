@@ -10,7 +10,7 @@ Founder: Matt Jensen
 Stage: Public beta
 For: Job seekers, with a separate version for hiring teams
 Connects to: AI assistants that support remote MCP servers with sign-in, including Claude, ChatGPT and Cursor
-Pricing: Free plan available. Pro is $19 a month or $99 a year. Current pricing: https://www.modulehire.com/pricing
+Pricing: Free plan available. Sprints are one-time passes: $19 for 30 days or $45 for 90 days, with no auto-renew. Current pricing: https://www.modulehire.com/pricing
 Website: https://www.modulehire.com
 
 ONE-SENTENCE DESCRIPTION

@@ -817,7 +817,7 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
             </ul>
           </SortableContext>
         </DndContext>
-        <div className="rd-add">
+        {!locked && <div className="rd-add">
           <button type="button" className="rd-add-toggle" onClick={() => setAddOpenFor(v => (v === entryIndex ? null : entryIndex))}>
             + Add from your library{available.length > 0 ? ` (${available.length})` : ''}
           </button>
@@ -835,14 +835,14 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
               ))}
             </div>
           )}
-        </div>
+        </div>}
       </>
     )
   }
 
   return (
     <div className="rd-layout">
-    <div className="rd-root">
+    <div className={`rd-root${locked ? ' rd-is-locked' : ''}`}>
       <style>{EDITOR_CSS}</style>
 
       <div className="rd-head" ref={menuRef}>
@@ -1007,7 +1007,9 @@ export default function ResumeEditor({ docId, initialDoc, initialVersion, module
       </div>
 
       <p className="rd-help">
-        Click any line to edit it. Enter or Esc finishes. Drag ⋮⋮ to reorder within a job. Exports use exactly what you see here.
+        {locked
+          ? 'Exports use exactly what you see here. Editing comes with a Sprint.'
+          : 'Click any line to edit it. Enter or Esc finishes. Drag ⋮⋮ to reorder within a job. Exports use exactly what you see here.'}
       </p>
     </div>
     <aside className="rd-aside">
@@ -1195,6 +1197,7 @@ const EDITOR_CSS = `
 .rd-glyph { flex-shrink: 0; padding-top: 2px; }
 .rd-handle { position: absolute; left: -26px; top: 2px; width: 20px; border: none; background: none; color: #aaa; cursor: grab; font-size: 11px; letter-spacing: -2px; opacity: 0; padding: 2px 0; touch-action: none; }
 .rd-bullet:hover .rd-handle, .rd-handle:focus-visible { opacity: 1; }
+.rd-is-locked .rd-handle { display: none; }
 .rd-dragging { opacity: 0.6; z-index: 2; background: #fff; }
 .rd-line { border-radius: 3px; margin: 0 -4px; padding: 1px 4px; }
 .rd-static { cursor: text; outline: none; border-radius: 3px; min-height: 1.5em; }

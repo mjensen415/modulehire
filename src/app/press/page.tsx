@@ -27,7 +27,7 @@ const FACTS: { label: string; value: ReactNode }[] = [
   { label: 'Stage', value: 'Public beta' },
   { label: 'For', value: 'Job seekers, with a separate version for hiring teams' },
   { label: 'Connects to', value: 'AI assistants that support remote MCP servers with sign-in, including Claude, ChatGPT and Cursor' },
-  { label: 'Pricing', value: <>Free plan available. Pro is $19 a month or $99 a year. <Link href="/pricing">Current pricing</Link></> },
+  { label: 'Pricing', value: <>Free plan available. Sprints are one-time passes: $19 for 30 days or $45 for 90 days, with no auto-renew. <Link href="/pricing">Current pricing</Link></> },
   { label: 'Website', value: <Link href="/">modulehire.com</Link> },
 ]
 

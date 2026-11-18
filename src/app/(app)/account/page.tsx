@@ -14,6 +14,8 @@ type Profile = {
   plan: string
   tier?: 'free' | 'pro' | 'beta_pro'
   tier_expires_at?: string | null
+  sprint_active?: boolean
+  sprint_ends_at?: string | null
 }
 
 type ModuleProfile = { id: string; name: string; module_count: number; is_active: boolean }
@@ -28,8 +30,6 @@ export default function Settings() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
-  const [portalLoading, setPortalLoading] = useState(false)
-  const [portalError, setPortalError] = useState('')
 
   const [moduleProfiles, setModuleProfiles] = useState<ModuleProfile[]>([])
   const [profilesLoading, setProfilesLoading] = useState(false)
@@ -111,27 +111,11 @@ export default function Settings() {
     }
   }
 
-  async function openBillingPortal() {
-    setPortalError('')
-    setPortalLoading(true)
-    try {
-      const res = await fetch('/api/billing/portal', { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok || !data.url) {
-        setPortalError(data.error ?? 'Could not open billing portal.')
-        return
-      }
-      window.location.href = data.url
-    } catch {
-      setPortalError('Could not open billing portal. Please try again.')
-    } finally {
-      setPortalLoading(false)
-    }
-  }
-
-  const tier = profile?.tier ?? 'free'
-  const tierLabel = tier === 'beta_pro' ? 'Pro (Beta)' : tier === 'pro' ? 'Pro' : 'Free'
-  const expiresAt = profile?.tier_expires_at ? new Date(profile.tier_expires_at) : null
+  // Access comes from /api/me's sprint_active (paid Sprint, beta grant, or legacy Pro period).
+  const sprintActive = !!profile?.sprint_active
+  const isBeta = profile?.tier === 'beta_pro'
+  const tierLabel = !sprintActive ? 'Free' : isBeta ? 'Sprint (beta access)' : 'Sprint'
+  const expiresAt = profile?.sprint_ends_at ? new Date(profile.sprint_ends_at) : null
   const expiresLabel = expiresAt
     ? expiresAt.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     : null
@@ -302,27 +286,17 @@ export default function Settings() {
                     <div className="plan-value">{tierLabel}</div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <button
-                      className="btn-primary"
-                      onClick={openBillingPortal}
-                      disabled={portalLoading}
-                    >
-                      {portalLoading ? 'Opening…' : 'Manage Billing'}
-                    </button>
+                    <a href="/billing" className="btn-primary" style={{ textDecoration: 'none' }}>Your Sprint</a>
                   </div>
                 </div>
 
-                {tier === 'beta_pro' && expiresLabel && (
+                {sprintActive && expiresLabel && (
                   <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 6, fontSize: 13, color: 'var(--teal)' }}>
-                    Pro access — complimentary through {expiresLabel}.
+                    {isBeta ? `Complimentary Sprint access through ${expiresLabel}.` : `Your Sprint runs through ${expiresLabel}. It never renews on its own.`}
                   </div>
                 )}
 
-                {portalError && (
-                  <div style={{ marginTop: 12, fontSize: 12, color: 'var(--rose)' }}>{portalError}</div>
-                )}
-
-                {tier === 'free' && (
+                {!sprintActive && (
                   <div className="upgrade-card" style={{ marginTop: 16 }}>
                     <div className="upgrade-card-title">Start a Sprint</div>
                     <div className="upgrade-card-sub">Unlimited tailored resumes, live editing, interview practice and more. $19 for 30 days or $45 for 90, one payment, no auto-renew.</div>
