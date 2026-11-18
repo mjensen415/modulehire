@@ -246,6 +246,7 @@ export default function JobWorkspacePage() {
           minYears: c.min_years ?? undefined,
         })))
       })
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches the job's applicants on mount and when the job changes
     loadApplicants()
   }, [jobId, loadApplicants])
 
@@ -265,6 +266,7 @@ export default function JobWorkspacePage() {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the detail pane when a different applicant is selected
     setDetailTab('score')
     setAiCheckResult(null)
     if (selectedId) loadDetail(selectedId)

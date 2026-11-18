@@ -74,11 +74,6 @@ export default function OnboardingClient({
     setConfirmedCount(data.modules?.length ?? 0)
   }
 
-  useEffect(() => {
-    if (step === 2 && jobs.length === 0) loadLibraryPreview()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step])
-
   async function loadLibraryPreview() {
     try {
       const [jobsRes, modsRes, assignRes] = await Promise.all([
@@ -103,6 +98,12 @@ export default function OnboardingClient({
       setJobsStatus('error')
     }
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- step 2 can be the initial step or reached from several places; load the preview whenever it opens
+    if (step === 2 && jobs.length === 0) loadLibraryPreview()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step])
 
   function validateFile(file: File): string | null {
     const ok = file.type === 'application/pdf'

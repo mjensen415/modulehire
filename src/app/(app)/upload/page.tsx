@@ -397,6 +397,7 @@ function ResumeUpload({ kindPicker }: { kindPicker: React.ReactNode }) {
   // page state (Next.js App Router). Without this, stage can be 'done' on return,
   // hiding the upload zone and preventing a second upload until full page reload.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset on mount so a Back-button restore shows the upload zone again
     setStage('idle')
     setErrorMessage('')
     setModuleCount(0)

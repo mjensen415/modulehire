@@ -22,6 +22,7 @@ export default function FeedbackModal({ isOpen, onClose }: { isOpen: boolean; on
   // Reset everything whenever the modal closes
   useEffect(() => {
     if (!isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the form when the parent closes the modal
       setRating(0)
       setCategory('')
       setMessage('')
