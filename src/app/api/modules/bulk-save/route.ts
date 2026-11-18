@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getActiveProfileId } from '@/lib/profile'
+import { isUuid } from '@/lib/validate'
 
 export async function POST(req: Request) {
   try {
@@ -8,7 +9,15 @@ export async function POST(req: Request) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { resume_id, modules } = await req.json()
+    const { resume_id, modules, discarded_ids } = await req.json()
+    if (Array.isArray(discarded_ids) && discarded_ids.length > 0) {
+      await supabase
+        .from('modules')
+        .update({ status: 'rejected', deleted_at: new Date().toISOString() })
+        .eq('user_id', user.id)
+        .eq('status', 'draft')
+        .in('id', discarded_ids.filter(isUuid).slice(0, 500))
+    }
     if (!Array.isArray(modules) || modules.length === 0) {
       return NextResponse.json({ error: 'No modules provided' }, { status: 400 })
     }
@@ -23,6 +32,8 @@ export async function POST(req: Request) {
         user_id: user.id,
         profile_id: profileId,
         source_resume_id: resume_id ?? null,
+        // Module review after upload: saving what the user kept confirms it.
+        status: 'confirmed',
       }
       // Only include id if it's a real UUID (not a temp "new-N" id)
       if (id && typeof id === 'string' && !id.startsWith('new-')) {

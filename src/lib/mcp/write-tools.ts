@@ -26,6 +26,7 @@ import { CARD_META, cardFor, docForModel, loadResumeDoc } from './tools'
 import { withCard } from './card'
 import { registerAppTool } from '@modelcontextprotocol/ext-apps/server'
 import { appUrl } from './urls'
+import { getUsableModules } from '@/lib/usable-modules'
 
 // Annotations. destructiveHint is true only where a call overwrites something the user wrote.
 const ADDS = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const
@@ -122,6 +123,8 @@ export function registerWriteTools(server: McpServer) {
             date_start: job.start_date ? String(job.start_date).slice(0, 7) : null,
             date_end: job.end_date ? String(job.end_date).slice(0, 7) : null,
             dimensions: dims,
+            // The user stated it in the conversation and agreed to save it.
+            status: 'confirmed',
           })
           .select('id')
           .single()
@@ -170,7 +173,7 @@ export function registerWriteTools(server: McpServer) {
         let warnings: { kind: string; term: string }[] = []
         if (block.module_id) {
           const [{ data: mod }, { data: jd }] = await Promise.all([
-            env.supabase.from('modules').select('title, content').eq('id', block.module_id).eq('user_id', env.userId).maybeSingle(),
+            getUsableModules(env.supabase, 'title, content').eq('id', block.module_id).eq('user_id', env.userId).maybeSingle(),
             row.job_description_id
               ? env.supabase.from('job_descriptions').select('extracted_job_title, extracted_company').eq('id', row.job_description_id).maybeSingle()
               : Promise.resolve({ data: null }),

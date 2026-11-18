@@ -121,6 +121,7 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
   - `20261029_lock_organizations_columns.sql`: users INSERT `(name, slug, owner_id)` and UPDATE `name` only; `tier` (enterprise skips `checkOrgDailyScoreCap`) and `stripe_customer_id` are service_role only.
   - `20261029_lock_applicants_columns.sql`: `applicants.file_url` (signed with the service role on read, so a member could get a link to another org's file) is service_role only, as are `org_id`/`job_id` after insert; no DELETE. `applicant_status_history`'s insert policy now also requires org membership. `business/applicants/upload` writes `file_url` with the admin client.
   - `20261029_revoke_truncate.sql`: revokes TRUNCATE/REFERENCES/TRIGGER from anon/authenticated on every public table. New tables get the default grants back; rerun it after adding one.
+- Applied 2026-11-18. Confirmed library — tracked in `supabase/migrations/20261118_confirmed_library.sql` (also in `schema.sql`). `modules.status` is now `draft|confirmed|rejected` (default `draft`; the old unused `complete/needs-review/needs-add` check was dropped and every existing row set to `confirmed`), plus `modules.source_quote` and `modules.source_document_id`.
 
 ## AI models and usage logging (`src/lib/ai.ts`)
 **Haiku everywhere.** Every call resolves to `ANTHROPIC_MODEL_FAST` (Haiku) unless its `action` is
@@ -222,6 +223,30 @@ for real but writes nothing (the eval suite). Forced tool-use is reliable but no
 non-object array element defensively (a bare string spread into an insert becomes numeric-keyed
 columns Postgres rejects) and `extractModulesWithFocus` coerces a non-array `modules` response to
 `[]` rather than letting it crash downstream `.filter`/`.map` calls.
+
+
+## Confirmed library (drafts → confirmed)
+Parsed modules are inserted as `status = 'draft'` with `source_quote` (the shortest verbatim span of
+the source text; `verifiedQuote()` in `parse-modules.ts` keeps it only if it really appears in
+`raw_text`, ignoring whitespace/quote/dash differences). **Only confirmed modules are used**: every
+route that reads modules to use them starts from `getUsableModules()` (`src/lib/usable-modules.ts`:
+`status = 'confirmed'` and not deleted) — match (`match.ts`), match report, `jobs/start`,
+`generate-resume`, the editor's library/swap/fact guard (`resumes/[id]`), rewrite-block, suggestions,
+outreach, interview prep, theme-alignment/auto-select (classic), legacy doc rebuild, and MCP
+`search_modules`/`update_block`. `/api/my-modules` lists confirmed only. A new route that uses modules
+must go through it.
+- Review queue: `src/components/ReviewQueue.tsx` (top of `/library` as "To review (n)", and
+  onboarding step 2) over `GET /api/modules/review-queue`. Confirm / Edit (then confirm) / Not true go
+  through `PATCH /api/modules/[id]` `{ status }` (`rejected` also sets `deleted_at`); "Confirm all from
+  this upload" is `POST /api/modules/confirm` (`ids` | `source_document_id` | `source_resume_id`).
+  Module review's save (`bulk-save`) confirms what the user kept and rejects what they discarded.
+  Modules the user writes (`POST /api/modules`, MCP `add_module`) are confirmed on insert.
+- Gate: `jobs/start` returns 409 `confirm_modules_first` before any AI when the profile has drafts
+  but nothing confirmed; `generate-resume` drops non-confirmed ids and 409s if none are left.
+- Rejected modules still block a re-add on the next upload (parse dedupe includes them).
+- Smoke tests: `scripts/smoke/` (`harness.ts` makes a disposable `*@modulehire.test` user, calls the
+  local dev server on :3101 with its cookie, and deletes it after). Run with Node 25+ (`pdfjs` needs
+  `Promise.try`): `PATH=/opt/homebrew/bin:$PATH npx tsx scripts/smoke/part1-confirmed-library.ts`.
 
 ## JD Match Report
 `POST /api/match-report` (`{ jd_id }`) scores each of a JD's `extracted_criteria` against the

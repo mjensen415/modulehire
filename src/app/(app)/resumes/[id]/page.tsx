@@ -8,6 +8,7 @@ import MakeEditableCard from '@/components/MakeEditableCard'
 import ResumeEditor, { type EditorModule, type EditorJd } from '@/components/resume-editor/ResumeEditor'
 import { parseResumeDoc } from '@/lib/resume-doc'
 import { sanitizeCriteria } from '@/lib/dimensions'
+import { getUsableModules } from '@/lib/usable-modules'
 
 export default async function ResumeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -68,11 +69,9 @@ export default async function ResumeDetailPage({ params }: { params: Promise<{ i
   let editorModules: EditorModule[] = []
   let editorJd: EditorJd = null
   if (docRow && parsedDoc?.ok) {
-    let moduleQuery = supabase
-      .from('modules')
-      .select('id, title, content, source_company')
+    // The editor's library (Add, Swap) and its fact guard work from confirmed modules only.
+    let moduleQuery = getUsableModules(supabase, 'id, title, content, source_company')
       .eq('user_id', user.id)
-      .is('deleted_at', null)
     if (resume.profile_id) moduleQuery = moduleQuery.eq('profile_id', resume.profile_id)
     const { data: libraryModules } = await moduleQuery
     const libraryIds = (libraryModules ?? []).map(m => m.id)

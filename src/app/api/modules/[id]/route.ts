@@ -46,6 +46,16 @@ export async function PATCH(req: Request, { params }: RouteContext) {
       if (key in body) updates[key] = body[key]
     }
 
+    // Review queue: Confirm (and Edit, then confirm) sets 'confirmed'; "Not true" sets
+    // 'rejected' and soft-deletes it. Nothing moves a module back to 'draft'.
+    if ('status' in body) {
+      if (body.status === 'confirmed') updates.status = 'confirmed'
+      else if (body.status === 'rejected') {
+        updates.status = 'rejected'
+        updates.deleted_at = new Date().toISOString()
+      } else return NextResponse.json({ error: 'status must be confirmed or rejected' }, { status: 400 })
+    }
+
     if ('dimensions' in updates) {
       if (!Array.isArray(updates.dimensions)) {
         return NextResponse.json({ error: 'dimensions must be an array' }, { status: 400 })

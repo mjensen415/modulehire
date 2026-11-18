@@ -7,6 +7,7 @@ import { getActiveProfileId } from './profile'
 import { getUserPreferences, buildPreferenceContext } from './preferences'
 import { shortlistScores } from './shortlist'
 import { sanitizeCriteria } from './dimensions'
+import { CONFIRM_FIRST_CODE, CONFIRM_FIRST_MESSAGE, getUsableModules, libraryCounts } from './usable-modules'
 
 export type RankedModule = { module_id: string; match_score: number; include_reason: string }
 
@@ -57,7 +58,7 @@ export const PASS2_SHORTLIST_SIZE = 20
 const MODULE_FIELDS = 'id, title, themes, weight, pinned, type, content, source_company, source_role_title, date_start, date_end, dimensions'
 
 export class MatchError extends Error {
-  constructor(message: string, public status: number) { super(message) }
+  constructor(message: string, public status: number, public code?: string) { super(message) }
 }
 
 /** The JD (scoped to the user), the active profile's modules, and the prompt context. */
@@ -69,11 +70,13 @@ export async function loadMatchInputs(supabase: SupabaseClient, userId: string, 
   if (jdError || !jd) throw new MatchError('Job description not found', 404)
 
   const [{ data: modules, error: modError }, prefs] = await Promise.all([
-    supabase.from('modules').select(MODULE_FIELDS).eq('user_id', userId).eq('profile_id', profileId).is('deleted_at', null),
+    getUsableModules(supabase, MODULE_FIELDS).eq('user_id', userId).eq('profile_id', profileId),
     getUserPreferences(supabase, userId),
   ])
   if (modError) throw modError
   if (!modules || modules.length === 0) {
+    const { drafts } = await libraryCounts(supabase, userId, profileId)
+    if (drafts > 0) throw new MatchError(CONFIRM_FIRST_MESSAGE, 409, CONFIRM_FIRST_CODE)
     throw new MatchError('Your module library is empty for this profile. Upload a resume or switch profiles, then try matching again.', 400)
   }
 

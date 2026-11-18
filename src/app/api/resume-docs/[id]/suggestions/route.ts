@@ -7,6 +7,7 @@ import { sanitizeCriteria } from '@/lib/dimensions'
 import { allBlocks, docText, parseResumeDoc, type BlockSuggestion } from '@/lib/resume-doc'
 import { unsupportedClaims } from '@/lib/fact-check'
 import { scoreLiveFit } from '@/lib/live-fit'
+import { getUsableModules } from '@/lib/usable-modules'
 
 export const maxDuration = 60
 
@@ -69,7 +70,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     const lines = allBlocks(doc).filter(b => b.block.module_id && isUuid(b.block.module_id) && b.block.text.trim())
     const moduleIds = [...new Set(lines.map(l => l.block.module_id!))]
     if (moduleIds.length === 0) return NextResponse.json({ suggestions: [] })
-    const { data: modules } = await supabase.from('modules').select('id, title, content').in('id', moduleIds).eq('user_id', user.id)
+    const { data: modules } = await getUsableModules(supabase, 'id, title, content').in('id', moduleIds).eq('user_id', user.id)
     const moduleById = new Map((modules ?? []).map(m => [m.id, m]))
 
     const gaps = scoreLiveFit(docText(doc), criteria).criteria.filter(c => !c.covered)

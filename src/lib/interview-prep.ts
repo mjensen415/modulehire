@@ -6,6 +6,7 @@ import { jsonrepair } from 'jsonrepair'
 import { aiComplete } from '@/lib/ai'
 import { getActiveProfileId } from '@/lib/profile'
 import { getUserPreferences, buildPreferenceContext } from '@/lib/preferences'
+import { getUsableModules } from './usable-modules'
 
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
@@ -57,12 +58,9 @@ export async function getInterviewPrep(
   }
 
   const profileId = await getActiveProfileId(supabase, userId)
-  const { data: modules, error: modulesError } = await supabase
-    .from('modules')
-    .select('title, content, source_company, source_role_title, weight, pinned')
+  const { data: modules, error: modulesError } = await getUsableModules(supabase, 'title, content, source_company, source_role_title, weight, pinned')
     .eq('user_id', userId)
     .eq('profile_id', profileId)
-    .is('deleted_at', null)
     .order('weight', { ascending: true })
   if (modulesError) throw modulesError
 

@@ -19,6 +19,7 @@ import { jsonrepair } from 'jsonrepair'
 import { createResumeStreamReader } from '@/lib/stream-json'
 import { contactLine, makeBlock, type ResumeDoc } from '@/lib/resume-doc'
 import { docToRenderInput, renderResume, type CombinationData, type Contact, type CoverLetterConfig, type EducationEntry, type ResumeFormat, type StructuredData } from '@/lib/resume-render'
+import { CONFIRM_FIRST_CODE, CONFIRM_FIRST_MESSAGE, getUsableModules } from '@/lib/usable-modules'
 
 export const maxDuration = 60
 
@@ -171,9 +172,8 @@ export async function POST(req: Request) {
     if (jdError || !jd) return NextResponse.json({ error: 'Job description not found' }, { status: 404 })
 
     const profileId = await getActiveProfileId(supabase, user.id)
-    const { data: modules, error: modError } = await supabase
-      .from('modules')
-      .select('*')
+    // Confirmed modules only: a draft never reaches a resume, even if a client sends its id.
+    const { data: modules, error: modError } = await getUsableModules(supabase, '*')
       .eq('user_id', user.id)
       .eq('profile_id', profileId)
       .in('id', module_ids)
@@ -187,6 +187,9 @@ export async function POST(req: Request) {
         const augmented = module_augmentations?.[String(m.id)]
         return augmented ? { ...m, content: augmented } : m
       })
+    if (orderedModules.length === 0) {
+      return NextResponse.json({ error: CONFIRM_FIRST_MESSAGE, code: CONFIRM_FIRST_CODE }, { status: 409 })
+    }
 
     // ── Experience groups from real job records ─────────────────────────────
     // Group by the job a module is assigned to (module_job_assignments → job_experiences),

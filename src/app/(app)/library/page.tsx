@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
 import MergeConfirmModal from '@/components/MergeConfirmModal'
 import { isDimension, DIMENSIONS, DIMENSION_LABELS, type Dimension } from '@/lib/dimensions'
+import ReviewQueue from '@/components/ReviewQueue'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Job = { id: string; company: string; title: string | null; start_date: string | null; end_date: string | null; location: string | null; employment_type: string | null }
@@ -600,6 +601,9 @@ export default function LibraryPage() {
           </Link>
         </div>
       </div>
+
+      {/* Drafts from uploads wait here; the library below shows confirmed modules only. */}
+      <ReviewQueue onChange={() => setLoadTrigger(t => t + 1)} />
 
       {loading ? (
         <div className="dash-content" style={{ color: 'var(--text3)', fontSize: 13 }}>Loading…</div>

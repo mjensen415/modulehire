@@ -4,6 +4,8 @@ import { isUuid } from '@/lib/validate'
 import { checkAndLog } from '@/lib/rate-limit'
 import { sanitizeCriteria, type JdCriterion } from '@/lib/dimensions'
 import { autoPickModules, jobResolver, AUTO_PICK, type JobRow, type RankedForPick } from '@/lib/job-grouping'
+import { getActiveProfileId } from '@/lib/profile'
+import { CONFIRM_FIRST_CODE, CONFIRM_FIRST_MESSAGE, libraryCounts } from '@/lib/usable-modules'
 import { finishMatch, loadMatchInputs, localShortlist, MatchError, rescoreShortlist } from '@/lib/match'
 import { draftGenerateBody } from '@/lib/draft-request'
 import { internalRequest } from '@/lib/internal-call'
@@ -76,6 +78,12 @@ export async function POST(req: Request) {
   const jdIdInput = isUuid(body?.jd_id) ? body.jd_id as string : null
   if (!jdIdInput && !urlInput && rawInput.trim().length < 50) {
     return NextResponse.json({ error: 'Paste the job posting (or its link) to start.' }, { status: 400 })
+  }
+  // Never build from drafts: with nothing confirmed but drafts waiting, send the user to the queue
+  // before any AI runs. (An empty library falls through to match's own message.)
+  const counts = await libraryCounts(supabase, user.id, await getActiveProfileId(supabase, user.id))
+  if (counts.confirmed === 0 && counts.drafts > 0) {
+    return NextResponse.json({ error: CONFIRM_FIRST_MESSAGE, code: CONFIRM_FIRST_CODE, drafts: counts.drafts }, { status: 409 })
   }
   const startedAt = Date.now()
   const base = req.url
@@ -285,7 +293,7 @@ export async function POST(req: Request) {
       } catch (error) {
         console.error('[jobs/start]', error)
         const message = error instanceof MatchError ? error.message : (error as Error).message || 'Something went wrong. Try again.'
-        fail(message)
+        fail(message, error instanceof MatchError ? error.code : undefined)
         logTiming(jdIdForLog, 'error')
       } finally {
         try { controller.close() } catch { /* already closed */ }

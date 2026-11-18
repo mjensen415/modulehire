@@ -5,6 +5,7 @@ import { isUuid } from '@/lib/validate'
 import { draftGenerateBody } from '@/lib/draft-request'
 import { internalRequest } from '@/lib/internal-call'
 import { POST as generateResume } from '@/app/api/generate-resume/route'
+import { getUsableModules } from '@/lib/usable-modules'
 
 export const maxDuration = 120
 
@@ -48,7 +49,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     // Only modules that still exist.
     const usedIds: string[] = Array.isArray(resume.module_ids_used) ? resume.module_ids_used.filter(isUuid) : []
     const { data: modules } = usedIds.length > 0
-      ? await supabase.from('modules').select('id, title, type').in('id', usedIds).eq('user_id', user.id).is('deleted_at', null)
+      ? await getUsableModules(supabase, 'id, title, type').in('id', usedIds).eq('user_id', user.id)
       : { data: [] as Array<{ id: string; title: string; type: string }> }
     const alive = new Set((modules ?? []).map(m => m.id))
     const moduleIds = usedIds.filter(id => alive.has(id))

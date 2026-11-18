@@ -69,7 +69,7 @@ export async function POST(req: Request) {
     try {
       inputs = await loadMatchInputs(supabase, user.id, jd_id)
     } catch (e) {
-      if (e instanceof MatchError) return NextResponse.json({ error: e.message }, { status: e.status })
+      if (e instanceof MatchError) return NextResponse.json({ error: e.message, ...(e.code ? { code: e.code } : {}) }, { status: e.status })
       throw e
     }
     const { jd, modules, moduleMap } = inputs

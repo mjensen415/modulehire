@@ -6,6 +6,7 @@ import { isUuid } from '@/lib/validate'
 import { sanitizeCriteria } from '@/lib/dimensions'
 import { parseResumeDoc, modulesOnResume } from '@/lib/resume-doc'
 import { unsupportedClaims } from '@/lib/fact-check'
+import { getUsableModules } from '@/lib/usable-modules'
 
 export const maxDuration = 60
 
@@ -67,20 +68,21 @@ export async function POST(req: Request, { params }: RouteContext) {
   type Mod = { id: string; title: string; content: string }
   let sources: Mod[] = []
   if (isUuid(body?.module_id)) {
-    const { data } = await supabase.from('modules').select('id, title, content').eq('id', body.module_id).eq('user_id', user.id).maybeSingle()
+    const { data } = await getUsableModules(supabase, 'id, title, content').eq('id', body.module_id).eq('user_id', user.id).maybeSingle()
     if (data) sources = [data as Mod]
   } else if (isUuid(body?.job_id)) {
     const { data } = await supabase
       .from('module_job_assignments')
-      .select('modules!inner(id, title, content, user_id, deleted_at)')
+      .select('modules!inner(id, title, content, user_id, deleted_at, status)')
       .eq('job_id', body.job_id)
       .eq('modules.user_id', user.id)
+      .eq('modules.status', 'confirmed')
       .is('modules.deleted_at', null)
     sources = (data ?? []).map(r => (Array.isArray(r.modules) ? r.modules[0] : r.modules) as Mod).filter(Boolean)
   } else {
     const ids = [...modulesOnResume(doc)].filter(isUuid)
     if (ids.length > 0) {
-      const { data } = await supabase.from('modules').select('id, title, content').in('id', ids).eq('user_id', user.id)
+      const { data } = await getUsableModules(supabase, 'id, title, content').in('id', ids).eq('user_id', user.id)
       sources = (data ?? []) as Mod[]
     }
   }

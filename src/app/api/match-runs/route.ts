@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { resolveAuth } from '@/lib/supabase/resolve-auth'
 import { isUuid } from '@/lib/validate'
 import { getActiveProfileId } from '@/lib/profile'
+import { getUsableModules } from '@/lib/usable-modules'
 
 type StoredRank = { module_id: string; match_score: number; include_reason: string }
 
@@ -28,12 +29,9 @@ export async function GET(req: Request) {
     if (!run) return NextResponse.json({ run: null })
 
     const profileId = await getActiveProfileId(supabase, user.id)
-    const { data: modules, error: modError } = await supabase
-      .from('modules')
-      .select('id, title, themes, weight, pinned, type, content, source_company, source_role_title, date_start, date_end, dimensions, role_types')
+    const { data: modules, error: modError } = await getUsableModules(supabase, 'id, title, themes, weight, pinned, type, content, source_company, source_role_title, date_start, date_end, dimensions, role_types')
       .eq('user_id', user.id)
       .eq('profile_id', profileId)
-      .is('deleted_at', null)
     if (modError) throw modError
 
     const moduleMap = new Map((modules ?? []).map(m => [m.id, m]))

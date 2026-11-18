@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkAndLog } from '@/lib/rate-limit'
 import { isUuid, optionalString } from '@/lib/validate'
 import { sanitizeCriteria } from '@/lib/dimensions'
+import { getUsableModules } from '@/lib/usable-modules'
 
 export const maxDuration = 60
 
@@ -190,11 +191,8 @@ export async function POST(req: Request) {
 
     let evidence: EvidenceModule[] = []
     if (evidenceIds.length > 0) {
-      const { data: mods } = await supabase
-        .from('modules')
-        .select('id, title, content')
+      const { data: mods } = await getUsableModules(supabase, 'id, title, content')
         .eq('user_id', user.id)
-        .is('deleted_at', null)
         .in('id', evidenceIds)
       evidence = evidenceIds
         .map(id => (mods ?? []).find(m => m.id === id))

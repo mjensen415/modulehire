@@ -18,6 +18,7 @@ import { planUsage } from './quota'
 import { appUrl } from './urls'
 import { RESUME_CARD_URI, resumeCard, withCard } from './card'
 import { registerAppTool } from '@modelcontextprotocol/ext-apps/server'
+import { getUsableModules } from '@/lib/usable-modules'
 
 // Older job rows store an open end as "present-01"; the model should only ever see "present".
 const endOrPresent = (end: string | null) => (!end || isPresentDate(end) ? 'present' : end)
@@ -150,7 +151,7 @@ export function registerClassicTools(server: McpServer) {
             .order('start_date', { ascending: false, nullsFirst: false }),
           env.supabase
             .from('modules')
-            .select('id, dimensions, pinned')
+            .select('id, dimensions, pinned, status')
             .eq('user_id', env.userId)
             .eq('profile_id', profileId)
             .is('deleted_at', null),
@@ -160,7 +161,9 @@ export function registerClassicTools(server: McpServer) {
         if (jobsRes.error) throw jobsRes.error
         if (modulesRes.error) throw modulesRes.error
 
-        const modules = modulesRes.data ?? []
+        // Drafts wait for the user to confirm them on the Library page and are never used.
+        const drafts = (modulesRes.data ?? []).filter((m) => m.status === 'draft').length
+        const modules = (modulesRes.data ?? []).filter((m) => m.status === 'confirmed')
         const moduleIds = new Set(modules.map((m) => m.id))
         const perJob = new Map<string, number>()
         for (const a of assignRes.data ?? []) {
@@ -177,6 +180,7 @@ export function registerClassicTools(server: McpServer) {
           plan: usage,
           targeting: { roles: prefs.target_roles ?? [], career_level: prefs.career_level ?? null },
           total_modules: modules.length,
+          drafts_to_review: drafts,
           pinned_modules: modules.filter((m) => m.pinned).length,
           modules_per_dimension: perDimension,
           work_history: (jobsRes.data ?? []).map((j) => ({
@@ -209,12 +213,9 @@ export function registerClassicTools(server: McpServer) {
     async ({ query, company, dimension, limit }, ctx) =>
       runTool('search_modules', ctx.http?.authInfo, async (env) => {
         const profileId = await getActiveProfileId(env.supabase, env.userId)
-        let q = env.supabase
-          .from('modules')
-          .select('id, title, content, source_company, source_role_title, date_start, date_end, dimensions, themes, pinned')
+        let q = getUsableModules(env.supabase, 'id, title, content, source_company, source_role_title, date_start, date_end, dimensions, themes, pinned')
           .eq('user_id', env.userId)
           .eq('profile_id', profileId)
-          .is('deleted_at', null)
         if (company) q = q.ilike('source_company', `%${company.replace(/[%_]/g, '')}%`)
         if (dimension) q = q.contains('dimensions', [dimension])
         if (query) {
