@@ -325,6 +325,14 @@ export default function InterviewPrepPage() {
                   {prepGeneratedAt && (
                     <div style={{ fontSize: 12, color: 'var(--text3)' }}>Generated {formatDateTime(prepGeneratedAt)}</div>
                   )}
+                  {/* Plain <a>, not <Link>: the voice page needs its own CSP, which only a full page load applies. */}
+                  <a
+                    href={`/interview-prep/voice?jd=${selectedId}`}
+                    className="btn-ghost no-print"
+                    style={{ display: 'inline-flex', marginTop: 10, fontSize: 12.5, textDecoration: 'none' }}
+                  >
+                    🎙 Practice out loud{!isPro && ' 🔒 Pro'}
+                  </a>
                 </div>
                 {prep && (
                   <div className="no-print" style={{ display: 'flex', gap: 8, flexShrink: 0 }}>

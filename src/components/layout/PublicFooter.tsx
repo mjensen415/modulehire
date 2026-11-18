@@ -16,7 +16,13 @@ export default function PublicFooter() {
         <li><Link href="/press">Press</Link></li>
         <li><Link href="/status">Status</Link></li>
       </ul>
-      <div className="footer-copy">© 2026</div>
+      <div className="footer-copy">
+        {/* ElevenLabs Grants condition: badge linking to ElevenLabs for 12 months (from Nov 2026). */}
+        <a href="https://elevenlabs.io/startup-grants" target="_blank" rel="noopener noreferrer" style={{ marginRight: 12 }}>
+          ElevenLabs Grants
+        </a>
+        © 2026
+      </div>
     </footer>
   );
 }

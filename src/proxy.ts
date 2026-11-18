@@ -14,7 +14,8 @@ const SECURITY_HEADERS: Record<string, string> = {
   'X-Frame-Options': 'DENY',
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  // microphone=(self): the voice mock interview (/interview-prep/voice) needs the mic.
+  'Permissions-Policy': 'camera=(), microphone=(self), geolocation=()',
   'X-DNS-Prefetch-Control': 'off',
 }
 
@@ -26,18 +27,30 @@ const CORS_HEADERS = 'Content-Type, Authorization'
 // the request CSP header) and the inline theme script in the root layout. Styles
 // allow 'unsafe-inline' because the app uses React inline style attributes
 // throughout (style-src-attr). connect-src is locked to self + Supabase.
-function buildCsp(nonce: string): string {
+//
+// The voice interview page is the one exception: the ElevenLabs client loads its audio
+// worklets from blob: URLs (and a resampler from jsDelivr), and 'strict-dynamic' does not
+// extend trust to worklets, so that page drops 'strict-dynamic' and lists those sources.
+// Next's own chunks are still covered by 'self' and the nonce.
+const VOICE_PAGE = '/interview-prep/voice'
+const ELEVENLABS_CONNECT = 'https://api.elevenlabs.io wss://api.elevenlabs.io'
+
+function buildCsp(nonce: string, pathname = ''): string {
+  const voice = pathname === VOICE_PAGE
   return [
     "default-src 'self'",
     // Cloudflare Turnstile: strict-dynamic covers the script we inject at
     // runtime; the explicit host is a fallback for browsers without
     // strict-dynamic support.
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://challenges.cloudflare.com`,
+    voice
+      ? `script-src 'self' 'nonce-${nonce}' blob: https://cdn.jsdelivr.net`
+      : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://challenges.cloudflare.com`,
     "style-src 'self' 'unsafe-inline'",
     "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com",
+    `connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com${voice ? ` ${ELEVENLABS_CONNECT} https://cdn.jsdelivr.net` : ''}`,
+    ...(voice ? ["worker-src 'self' blob:", "media-src 'self' blob:"] : []),
     // Turnstile renders its challenge in an iframe from this origin.
     "frame-src https://challenges.cloudflare.com",
     "frame-ancestors 'none'",
@@ -95,7 +108,7 @@ export async function proxy(request: NextRequest) {
   // scripts and the root layout can read it. The Supabase cookie handling on the
   // returned response is preserved untouched.
   const nonce = btoa(crypto.randomUUID())
-  const csp = buildCsp(nonce)
+  const csp = buildCsp(nonce, request.nextUrl.pathname)
 
   const res = await updateSession(request, nonce, csp)
   applySecurityHeaders(res)
