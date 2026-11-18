@@ -10,7 +10,6 @@ import {
   IconBlocks,
   IconBriefcase2,
   IconClipboard,
-  IconTarget,
   IconFiles,
   IconResume,
   IconPerson,
@@ -40,9 +39,9 @@ function IconChevronRight() {
 
 const TABS = [
   { href: '/dashboard', label: 'Home', icon: IconGrid, exact: true },
-  { href: '/generate', label: 'Generate', icon: IconStar, exact: false },
+  { href: '/job-tracker', label: 'Jobs', icon: IconBriefcase2, exact: false },
   { href: '/library', label: 'Library', icon: IconBlocks, exact: false },
-  { href: '/job-tracker', label: 'Tracker', icon: IconBriefcase2, exact: false },
+  { href: '/interviews', label: 'Interviews', icon: IconClipboard, exact: false },
 ]
 
 export default function MobileTabBar({ tier }: { tier?: string }) {
@@ -54,13 +53,12 @@ export default function MobileTabBar({ tier }: { tier?: string }) {
   }
 
   const moreItems = [
-    { href: '/interview-prep', label: 'Interview Prep', icon: IconClipboard },
-    { href: '/matches', label: 'Job Matches', icon: IconTarget },
-    { href: '/applications', label: 'Applications', icon: IconFiles },
-    { href: '/resumes', label: 'My Resumes', icon: IconResume },
-    { href: '/my-info', label: 'My Info', icon: IconPerson },
-    { href: '/account', label: 'Account', icon: IconSettings },
-    { href: '/preferences', label: 'AI Preferences', icon: IconSliders },
+    { href: '/resumes', label: 'Resumes', icon: IconResume },
+    { href: '/files', label: 'Files', icon: IconFiles },
+    { href: '/generate', label: 'New resume from a posting', icon: IconStar },
+    { href: '/account', label: 'Settings', icon: IconSettings },
+    { href: '/my-info', label: 'My info', icon: IconPerson },
+    { href: '/preferences', label: 'AI preferences', icon: IconSliders },
     ...(!isProTier(tier) ? [{ href: '/billing', label: 'Upgrade', icon: IconUpgrade }] : []),
     { href: '/business/dashboard', label: 'For Business', icon: IconBuilding },
   ]

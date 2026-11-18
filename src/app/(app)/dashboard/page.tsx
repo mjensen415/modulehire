@@ -195,6 +195,7 @@ export default async function Home() {
               <section className="home-panel">
                 <div className="home-panel-head">
                   <h2 className="home-panel-title">Files</h2>
+                  <Link href="/files" className="home-panel-link">All files</Link>
                 </div>
                 {files.length === 0 ? (
                   <p className="home-panel-empty">Your uploads and tailored resumes will show up here.</p>
@@ -212,7 +213,7 @@ export default async function Home() {
                       )
                       return (
                         <li key={f.id}>
-                          {f.href ? <Link href={f.href} className="home-row">{inner}</Link> : <div className="home-row">{inner}</div>}
+                          <Link href={f.href ?? '/files'} className="home-row">{inner}</Link>
                         </li>
                       )
                     })}
