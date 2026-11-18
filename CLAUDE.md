@@ -123,6 +123,7 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
   - `20261029_revoke_truncate.sql`: revokes TRUNCATE/REFERENCES/TRIGGER from anon/authenticated on every public table. New tables get the default grants back; rerun it after adding one.
 - Applied 2026-11-18. Confirmed library — tracked in `supabase/migrations/20261118_confirmed_library.sql` (also in `schema.sql`). `modules.status` is now `draft|confirmed|rejected` (default `draft`; the old unused `complete/needs-review/needs-add` check was dropped and every existing row set to `confirmed`), plus `modules.source_quote` and `modules.source_document_id`.
 - Applied 2026-11-18. `documents` table (kind, filename, file_url, raw_text, job_experience_id, period_label, `source_resume_id`, `deleted_at`) + `modules.source_document_id` FK + private storage bucket `documents` — tracked in `supabase/migrations/20261118_documents.sql`. Users can only read their rows (insert/update/delete revoked; the server writes with the service role), so deleting can't reset the Free document limit.
+- Applied 2026-11-18. `interviews` (+ `prep_opened_at`, cached `practice_questions`) and `practice_answers` — tracked in `supabase/migrations/20261118_interviews.sql`. Own-rows RLS; users UPDATE only the editable interview columns; `practice_answers` are server-written (they count toward practice limits) and keep `interview_id = null` when a round is deleted so deleting can't reset the Free round.
 
 ## AI models and usage logging (`src/lib/ai.ts`)
 **Haiku everywhere.** Every call resolves to `ANTHROPIC_MODEL_FAST` (Haiku) unless its `action` is
@@ -271,6 +272,24 @@ Limits: Free imports 2 non-resume documents ever (deleted ones count); paid: fai
 Fixture: `test-resumes/review-fixture.pdf` (fictional 2024 Fieldnote AI review for the Tessa test
 resume; rebuild with `scripts/smoke/make-review-fixture.tsx`). Test: `scripts/smoke/part2-documents.ts`.
 For a browser look, `scripts/smoke/session.ts create|delete` makes a disposable signed-in user.
+
+
+## Interviews (`/interviews`, `/interviews/[id]`)
+Rounds per tracked job (`src/lib/interviews.ts` holds the prompts, validation and limits). Add a
+round by hand or paste the email: `POST /api/interviews/from-email` (Haiku, `ai_interview_email`,
+worked example) returns the fields plus the tracked job with the same normalized company and keeps the
+email as a `documents` row (`interview_email`); nothing is saved until the user confirms
+(`POST /api/interviews` with `source_document_id`). The prep page shows who you'll meet, the existing
+JD prep (`interview_prep_cache` / `BuildPrepButton` → `/api/interview-prep`, paid only), and
+`PracticeRound`: 8-12 questions per round (`POST /api/interviews/[id]/questions`, `ai_interview_questions`,
+cached on the row) and graded answers (`POST /api/interviews/[id]/practice`, `ai_practice_feedback`):
+four 1-5 scores, strongest part, one fix, a suggested confirmed module (short refs `m1…`, scrubbed from
+the text), and a tighter version run through `stripUnsupportedSentences` against the answer plus the
+confirmed modules. `cleanField()` cuts any leaked tool markup ("</fix><parameter…", seen in testing).
+Opening the prep page sets `prep_opened_at`. Moving a tracker job to Interviewing asks "Add the
+interview date?" → `/interviews?app=<id>`. Limits: Free gets one practice round (up to 15 graded
+answers on one interview); paid: fair use 60 graded answers per 30 days. Test:
+`scripts/smoke/part4-interviews.ts`.
 
 ## JD Match Report
 `POST /api/match-report` (`{ jd_id }`) scores each of a JD's `extracted_criteria` against the

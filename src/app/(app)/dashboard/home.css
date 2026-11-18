@@ -1,28 +1,4 @@
-/* Today home: the warm style (cream ground, serif headlines, pastel stat cards).
-   Tokens are scoped to .home so the rest of the app keeps its own look.
-   :root is the dark theme in this app; [data-theme="light"] is light. */
-.home {
-  --h-bg: #1c1814; --h-card: #25201b; --h-card2: #2c261f;
-  --h-ink: #f2e9dc; --h-muted: #b5a691; --h-faint: #85786a;
-  --h-line: rgba(242, 233, 220, 0.09); --h-line-strong: rgba(242, 233, 220, 0.18);
-  --h-peach: #4a3324; --h-sage: #2c3a2b; --h-lavender: #332f48; --h-butter: #463c1f;
-  --h-accent: #e3a072; --h-accent-ink: #1c1814; --h-good: #8fc28a;
-  --h-serif: ui-serif, 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
-  background: var(--h-bg);
-  color: var(--h-ink);
-  min-height: 100vh;
-  padding: 36px 40px 64px;
-}
-[data-theme="light"] .home {
-  --h-bg: #f7f1e6; --h-card: #fffcf6; --h-card2: #fbf5ea;
-  --h-ink: #2b2219; --h-muted: #6e604f; --h-faint: #9a8b78;
-  --h-line: rgba(70, 48, 22, 0.1); --h-line-strong: rgba(70, 48, 22, 0.22);
-  --h-peach: #fbe0cb; --h-sage: #dcead6; --h-lavender: #e6e0f6; --h-butter: #f9ecc1;
-  --h-accent: #b9572a; --h-accent-ink: #fffcf6; --h-good: #3f7a3a;
-}
-/* Full bleed: the shell's padding would frame the cream ground. Keeps the mobile tab-bar gap. */
-.app-main:has(> .home) { padding: 0 0 var(--home-bottom-gap, 0) 0 !important; }
-@media (max-width: 900px) { .app-main:has(> .home) { --home-bottom-gap: var(--mobile-bar-h); } }
+/* Today home. Tokens and shared pieces: src/app/warm.css (.warm). */
 .home-inner { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
 .home a { color: inherit; }
 
@@ -97,7 +73,6 @@
 .home-empty-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
 
 @media (max-width: 900px) {
-  .home { padding: 22px 16px 48px; }
   .home-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .home-panels { grid-template-columns: 1fr; }
   .home-header { gap: 14px; }
