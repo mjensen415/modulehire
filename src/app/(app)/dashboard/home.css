@@ -1,0 +1,109 @@
+/* Today home: the warm style (cream ground, serif headlines, pastel stat cards).
+   Tokens are scoped to .home so the rest of the app keeps its own look.
+   :root is the dark theme in this app; [data-theme="light"] is light. */
+.home {
+  --h-bg: #1c1814; --h-card: #25201b; --h-card2: #2c261f;
+  --h-ink: #f2e9dc; --h-muted: #b5a691; --h-faint: #85786a;
+  --h-line: rgba(242, 233, 220, 0.09); --h-line-strong: rgba(242, 233, 220, 0.18);
+  --h-peach: #4a3324; --h-sage: #2c3a2b; --h-lavender: #332f48; --h-butter: #463c1f;
+  --h-accent: #e3a072; --h-accent-ink: #1c1814; --h-good: #8fc28a;
+  --h-serif: ui-serif, 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  background: var(--h-bg);
+  color: var(--h-ink);
+  min-height: 100vh;
+  padding: 36px 40px 64px;
+}
+[data-theme="light"] .home {
+  --h-bg: #f7f1e6; --h-card: #fffcf6; --h-card2: #fbf5ea;
+  --h-ink: #2b2219; --h-muted: #6e604f; --h-faint: #9a8b78;
+  --h-line: rgba(70, 48, 22, 0.1); --h-line-strong: rgba(70, 48, 22, 0.22);
+  --h-peach: #fbe0cb; --h-sage: #dcead6; --h-lavender: #e6e0f6; --h-butter: #f9ecc1;
+  --h-accent: #b9572a; --h-accent-ink: #fffcf6; --h-good: #3f7a3a;
+}
+/* Full bleed: the shell's padding would frame the cream ground. Keeps the mobile tab-bar gap. */
+.app-main:has(> .home) { padding: 0 0 var(--home-bottom-gap, 0) 0 !important; }
+@media (max-width: 900px) { .app-main:has(> .home) { --home-bottom-gap: var(--mobile-bar-h); } }
+.home-inner { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+.home a { color: inherit; }
+
+/* Header */
+.home-header { display: flex; align-items: center; gap: 24px; }
+.home-blocks { flex-shrink: 0; }
+.home-date { font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--h-faint); font-weight: 600; }
+.home-greeting { font-family: var(--h-serif); font-weight: 500; font-size: clamp(28px, 4vw, 40px); line-height: 1.1; margin: 4px 0 6px; letter-spacing: -0.01em; }
+.home-summary { font-size: 15.5px; color: var(--h-muted); margin: 0; }
+
+/* Stat cards */
+.home-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.home-stat { border-radius: 16px; padding: 16px 18px 18px; border: 1px solid var(--h-line); text-decoration: none; display: flex; flex-direction: column; gap: 6px; transition: transform 0.15s ease, border-color 0.15s ease; }
+.home-stat:hover { transform: translateY(-1px); border-color: var(--h-line-strong); }
+.home-stat:nth-child(1) { background: var(--h-peach); }
+.home-stat:nth-child(2) { background: var(--h-sage); }
+.home-stat:nth-child(3) { background: var(--h-lavender); }
+.home-stat:nth-child(4) { background: var(--h-butter); }
+.home-stat-value { font-family: var(--h-serif); font-size: 34px; line-height: 1; font-weight: 500; }
+.home-stat-label { font-size: 13px; color: var(--h-muted); font-weight: 600; }
+
+/* Sections */
+.home-section-title { font-family: var(--h-serif); font-size: 22px; font-weight: 500; margin: 0 0 12px; }
+.home-today { background: var(--h-card); border: 1px solid var(--h-line); border-radius: 18px; padding: 20px 22px; }
+.home-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.home-step { display: flex; align-items: center; gap: 12px; }
+.home-step-skeleton { height: 52px; border-radius: 12px; background: var(--h-card2); }
+.home-check { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--h-line-strong); background: none; color: transparent; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: all 0.15s ease; }
+.home-check:hover, .home-check:focus-visible { color: var(--h-good); border-color: var(--h-good); }
+.home-check:disabled { opacity: 0.5; }
+.home-step-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 12px; background: var(--h-card2); border: 1px solid transparent; text-decoration: none; transition: border-color 0.15s ease; }
+.home-step-link:hover { border-color: var(--h-line-strong); }
+.home-step-num { font-family: var(--h-serif); font-size: 20px; color: var(--h-accent); width: 18px; text-align: center; flex-shrink: 0; }
+.home-step-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.home-step-title { font-size: 15px; font-weight: 600; }
+.home-step-detail { font-size: 13px; color: var(--h-muted); }
+.home-step-arrow { color: var(--h-faint); }
+.home-steps-empty { font-size: 14.5px; color: var(--h-muted); padding: 6px 0; }
+
+/* Panels */
+.home-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.home-panel { background: var(--h-card); border: 1px solid var(--h-line); border-radius: 18px; padding: 18px 20px; min-width: 0; display: flex; flex-direction: column; }
+.home-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.home-panel-title { font-family: var(--h-serif); font-size: 19px; font-weight: 500; margin: 0; }
+.home-panel-link { font-size: 13px; color: var(--h-accent) !important; text-decoration: none; font-weight: 600; }
+.home-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.home-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--h-line); text-decoration: none; min-width: 0; }
+.home-rows > li:first-child > .home-row, .home-rows > .home-row:first-child { border-top: none; }
+.home-row-main { flex: 1; min-width: 0; }
+.home-row-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-row-sub { font-size: 12.5px; color: var(--h-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-chip { font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--h-card2); border: 1px solid var(--h-line); color: var(--h-muted); white-space: nowrap; }
+.home-fit { width: 72px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+.home-fit-bar { width: 100%; height: 6px; border-radius: 3px; background: var(--h-card2); overflow: hidden; }
+.home-fit-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--h-accent); }
+.home-fit-num { font-size: 11.5px; color: var(--h-muted); font-variant-numeric: tabular-nums; }
+.home-panel-empty { font-size: 13.5px; color: var(--h-muted); line-height: 1.5; }
+.home-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 700; padding: 9px 16px; border-radius: 999px; background: var(--h-accent); color: var(--h-accent-ink) !important; text-decoration: none; border: none; cursor: pointer; }
+.home-btn-ghost { background: none; color: var(--h-ink) !important; border: 1px solid var(--h-line-strong); }
+
+/* The review queue inside the home panel picks up the warm tokens. */
+.home .rq-card { background: var(--h-card2); border-color: var(--h-line); }
+.home .rq-card-title { color: var(--h-ink); }
+.home .rq-content, .home .rq-quote q { color: var(--h-muted); }
+.home .rq-btn { background: none; border-color: var(--h-line-strong); color: var(--h-ink); }
+.home .rq-btn-primary { background: var(--h-accent); border-color: var(--h-accent); color: var(--h-accent-ink); }
+
+/* Brand new user */
+.home-empty { background: var(--h-card); border: 1px solid var(--h-line); border-radius: 22px; padding: 40px 36px; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+.home-empty h2 { font-family: var(--h-serif); font-weight: 500; font-size: 30px; margin: 0; }
+.home-empty p { font-size: 15px; color: var(--h-muted); margin: 0; max-width: 560px; line-height: 1.55; }
+.home-empty-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
+
+@media (max-width: 900px) {
+  .home { padding: 22px 16px 48px; }
+  .home-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-panels { grid-template-columns: 1fr; }
+  .home-header { gap: 14px; }
+  .home-blocks { width: 72px; height: 62px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-stat, .home-step-link, .home-check { transition: none; }
+  .home-stat:hover { transform: none; }
+}

@@ -159,20 +159,24 @@ focused parse calls 6400 because Haiku overran 2048 on long roles and 3200 on ex
 single-upload business routes — bulk scoring now runs on the `quality` tier, several times the
 cost of Haiku.
 
-## Dashboard layout
-Two columns via `.dash-two-col-b` (defined in `globals.css`, ~38%/62% split above 900px, stacks
-to one column at/below it — the same breakpoint `.dash-two-col` uses). Left: resume/profile card
-(`DashboardProfileSwitch.tsx` for the profile picker), "What you're targeting" (from
-`users.preferences.target_roles[0]`/`career_level` and `users.location`), and the per-dimension
-module breakdown (count + 5-dot strength, `anchor`/`strong` modules weighted 1.5×) — each row is a
-`DashboardBreakdownRow.tsx` client component (dashboard itself stays a server component, passing
-each dimension's first 5 module `{id, title}` as props) that expands on click to list those titles
-(linking to `/library/[id]`), a "See all N in library →" link to `/library?dimension=<name>` when
-there are more, and a weak-dimension hint (`strength <= 2`). The library page reads `?dimension=`
-into `dimensionFilter` state alongside its existing weight/assignment filter chips. Right: the
-existing `nextMove` card (restyled), a compact `MatchReport` for the most recent JD with
-`extracted_criteria`, and recent resumes. Job descriptions and a module-library link render
-full-width below both columns.
+## Today home (`/dashboard`)
+The route stays `/dashboard` (redirects and links point at it); the sidebar calls it Home. Server
+page `src/app/(app)/dashboard/page.tsx` with warm styles scoped to `.home` in `home.css` (cream /
+warm charcoal tokens `--h-*` for light/dark, serif headlines, pastel stat cards; the shell padding is
+dropped with `.app-main:has(> .home)`). Header (`HomeHeader.tsx`, client for the local greeting and
+date) with the stacked-blocks SVG and a one-line summary; four stat cards (tracking, applied this
+month, interviews coming up, confirmed modules); Today's three (`TodaySteps.tsx` over
+`GET/POST /api/home/today?day=<local YYYY-MM-DD>`); panels: Jobs (3 latest applications, fit from the
+JD's cached `match_report.overall`, stage chip), Library to review (`ReviewQueue limit={2} compact`),
+Interviews (next two), Files (latest three of documents + tailored resumes). A brand-new account
+(no modules, documents, jobs or postings) gets one "Upload your resume" card instead.
+- `src/lib/today.ts` `computeTodaySteps()` builds every candidate in priority order: interview in the
+  next 3 days with prep not opened → drafts waiting (newest upload) → applied 5-9 days ago with no reply
+  (`/job-tracker?followup=<id>` opens the outreach drafter) → tailored resume for a posting not applied
+  to → saved job with no resume → fewer than 10 confirmed modules → no jobs yet. The API drops keys in
+  `home_step_dismissals` for that day and returns the first three.
+- Migration `20261118_home_step_dismissals.sql` (applied 2026-11-18): `(user_id, step_key, day)` PK,
+  own-rows RLS, no UPDATE. Test: `scripts/smoke/part3-today.ts`.
 
 ## Dimension chips on modules
 Modules carry 1-3 dimensions (tagged at parse time or via the admin backfill — see "Six-dimension
