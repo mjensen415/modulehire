@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 export default function BusinessOnboardingPage() {
   const router = useRouter()
   const [name, setName] = useState('')
+  const [hiringFor, setHiringFor] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -22,6 +23,14 @@ export default function BusinessOnboardingPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Could not create organization')
+      if (hiringFor.trim()) {
+        // Optional and best effort: never block onboarding on it.
+        await fetch('/api/business/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: hiringFor.trim(), org_id: data.org?.id, context: 'onboarding' }),
+        }).catch(() => {})
+      }
       router.push('/business/dashboard')
     } catch (e) {
       setError((e as Error).message)
@@ -50,6 +59,20 @@ export default function BusinessOnboardingPage() {
             maxLength={100}
             autoFocus
             style={{ marginBottom: 16 }}
+          />
+
+          <label className="form-label">
+            What are you hiring for, and what would make this worth paying for?{' '}
+            <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(optional)</span>
+          </label>
+          <textarea
+            className="form-input"
+            placeholder="e.g. 3 support roles a quarter, 200+ applicants each. I need it to plug into Greenhouse."
+            value={hiringFor}
+            onChange={(e) => setHiringFor(e.target.value)}
+            maxLength={2000}
+            rows={3}
+            style={{ marginBottom: 16, resize: 'vertical', fontFamily: 'inherit' }}
           />
 
           {error && (

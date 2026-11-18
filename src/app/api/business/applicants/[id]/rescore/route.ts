@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getOrgRole } from '@/lib/business/org-access'
 import { scoreApplicant } from '@/lib/business/score-applicant'
+import { getOrgPlan, remainingMonthlyScores, monthlyLimitMessage, UPGRADE_CODE } from '@/lib/business/plan'
 
 export const maxDuration = 300
 
@@ -24,6 +25,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     if (!applicant.raw_text) {
       return NextResponse.json({ error: 'Applicant has no resume text to score' }, { status: 400 })
+    }
+
+    if ((await remainingMonthlyScores(supabase, applicant.org_id)) <= 0) {
+      const plan = await getOrgPlan(supabase, applicant.org_id)
+      return NextResponse.json({ error: monthlyLimitMessage(plan), code: UPGRADE_CODE }, { status: 402 })
     }
 
     const { data: job, error: jobError } = await supabase
@@ -51,6 +57,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       degreeRequirement: job.degree_requirement ?? null,
       criteria: criteria ?? [],
       supabase,
+      userId: user.id,
     })
 
     const { data: updated, error: updatedError } = await supabase

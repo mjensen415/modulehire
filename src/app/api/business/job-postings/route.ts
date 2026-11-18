@@ -4,6 +4,7 @@ import { requiredString, isUuid } from '@/lib/validate'
 import { aiComplete } from '@/lib/ai'
 import { jsonrepair } from 'jsonrepair'
 import { getOrgRole } from '@/lib/business/org-access'
+import { canActivateJob, getOrgPlan, activeJobLimitMessage, UPGRADE_CODE } from '@/lib/business/plan'
 import { DEGREE_PROMPT, sanitizeDegree } from '@/lib/jd-signal'
 
 export const maxDuration = 60
@@ -23,6 +24,12 @@ export async function POST(req: Request) {
 
     const role = await getOrgRole(supabase, orgId, user.id)
     if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // New postings are created active, so the Free plan's one-active-job limit applies here.
+    if (!(await canActivateJob(supabase, orgId))) {
+      const plan = await getOrgPlan(supabase, orgId)
+      return NextResponse.json({ error: activeJobLimitMessage(plan), code: UPGRADE_CODE }, { status: 402 })
+    }
 
     const { data: job, error: insertError } = await supabase
       .from('job_postings')

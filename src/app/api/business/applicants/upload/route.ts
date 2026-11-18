@@ -4,6 +4,7 @@ import { isUuid } from '@/lib/validate'
 import { checkAndLog, checkOrgDailyScoreCap } from '@/lib/rate-limit'
 import { getOrgRole } from '@/lib/business/org-access'
 import { scoreApplicant } from '@/lib/business/score-applicant'
+import { getOrgPlan, remainingMonthlyScores, monthlyLimitMessage, UPGRADE_CODE } from '@/lib/business/plan'
 
 export const maxDuration = 300
 
@@ -74,6 +75,11 @@ export async function POST(req: Request) {
     const orgCap = await checkOrgDailyScoreCap(supabase, job.org_id)
     if (!orgCap.ok) {
       return NextResponse.json({ error: 'Daily AI-scoring limit reached for this org. Try again tomorrow.' }, { status: 429, headers: { 'Retry-After': String(orgCap.retryAfter) } })
+    }
+
+    if ((await remainingMonthlyScores(supabase, job.org_id)) <= 0) {
+      const plan = await getOrgPlan(supabase, job.org_id)
+      return NextResponse.json({ error: monthlyLimitMessage(plan), code: UPGRADE_CODE }, { status: 402 })
     }
 
     const file = formData.get('file') as File | null
@@ -150,6 +156,7 @@ export async function POST(req: Request) {
       degreeRequirement: job.degree_requirement ?? null,
       criteria: criteria ?? [],
       supabase,
+      userId: user.id,
     })
 
     const { data: finalApplicant, error: finalError } = await supabase

@@ -54,8 +54,10 @@ export async function scoreApplicant(params: {
   degreeRequirement?: unknown
   criteria: Criterion[]
   supabase: SupabaseClient
+  /** Logs the call's model and tokens to usage_events (ai_biz_score) for cost visibility. */
+  userId?: string
 }): Promise<void> {
-  const { applicantId, applicantName, rawText, jobTitle, jobCompany, themes, phrases, degreeRequirement, criteria, supabase } = params
+  const { applicantId, applicantName, rawText, jobTitle, jobCompany, themes, phrases, degreeRequirement, criteria, supabase, userId } = params
   const degreeWaivable = isDegreeWaivable(degreeRequirement)
   const educationCriterionIds = new Set(criteria.filter(isEducationCriterion).map(c => c.id))
 
@@ -89,7 +91,7 @@ ${rawText.slice(0, 8000)}`
     ],
     SCORE_SCHEMA,
     1200,
-    { tier: 'quality', action: 'ai_biz_score' }
+    { tier: 'quality', action: 'ai_biz_score', userId }
   )
 
   // Enforce the waivable-degree rule server-side too: a failed education criterion alone can't

@@ -126,6 +126,8 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - Applied 2026-11-18. `interviews` (+ `prep_opened_at`, cached `practice_questions`) and `practice_answers` — tracked in `supabase/migrations/20261118_interviews.sql`. Own-rows RLS; users UPDATE only the editable interview columns; `practice_answers` are server-written (they count toward practice limits) and keep `interview_id = null` when a round is deleted so deleting can't reset the Free round.
 - Applied 2026-11-18. Sprints — tracked in `supabase/migrations/20261118_sprints.sql`: `users.sprint_ends_at` (service-role only, not in the users column grants), `sprint_purchases` (read-own RLS, no user writes, unique `stripe_session_id`), and `apply_sprint_purchase(user, sku, session, amount)` (service_role only; locks the user row, extends from `greatest(now(), sprint_ends_at)`, idempotent on the session id).
 
+- Applied 2026-11-18. `stripe_events (id text pk, type, processed_at)`, RLS on, no grants to anon/authenticated — tracked in `supabase/migrations/20261118_stripe_events.sql`. `/api/stripe/webhook` inserts `event.id` before processing (duplicate = 200, skipped); on a handler error it deletes the row and returns 500 so Stripe retries. Write failures in the handler must throw, not log, or the retry never happens.
+
 ## AI models and usage logging (`src/lib/ai.ts`)
 **Haiku everywhere.** Every call resolves to `ANTHROPIC_MODEL_FAST` (Haiku) unless its `action` is
 listed in the `SONNET_FEATURES` env var (comma-separated, or `all`), which opts that one feature into
@@ -489,6 +491,25 @@ insights; a 90-day Sprint pools 3x. When it ends the account is on Free limits; 
   sentence (`LIMIT_MESSAGES`) and a "Start a 30-day Sprint" button; existing data is never hidden.
 - Test: `scripts/smoke/part6-sprints.ts` (signs `checkout.session.completed` locally with
   `STRIPE_WEBHOOK_SECRET`; local `.env.local` has live Stripe keys, so no Checkout session is created).
+
+## ModuleHire for Business: plans and billing
+`organizations.tier` is the org entitlement (check constraint: `starter|growth|enterprise`). Shown as Free / Team / Enterprise;
+limits live in `src/lib/business/plan.ts` (`BUSINESS_PLANS`): Free = 1 active posting + 25 scored applicants per UTC calendar
+month, Team ($49/mo, Stripe product `mh_business_team`, price env `STRIPE_PRICE_BUSINESS_TEAM`) = unlimited postings + 500/month,
+Enterprise = unlimited (set by hand; billing events never change it). Monthly usage = `applicants` with `scored_at` this month.
+- Gates (402, `code: business_plan_limit`): new posting and PATCH to `active` (`canActivateJob`); upload, CSV (scores until the
+  allowance runs out, then skips rows), applicant rescore and posting rescore (`remainingMonthlyScores`). Posting rescore also
+  got `rl_biz_job_rescore` (10/hour) and the 500/day org cap; it had no limit before.
+- One owned org per account (`POST /api/business/organizations` 409s), so extra orgs can't multiply the Free allowance.
+- Checkout `POST /api/business/billing/checkout` (owner only, the org's own Stripe customer, `metadata.kind = 'business'` +
+  `org_id` on session and subscription). The Stripe webhook calls `handleBusinessEvent` (`src/lib/business/billing-webhook.ts`)
+  **first**; business events never reach the user-plan code (which would otherwise grant the buyer personal Pro). Portal:
+  `POST /api/business/billing/portal`, default portal config (cancel at period end, no plan switching).
+- Settings shows plan + usage from `GET /api/business/billing/usage`. `scoreApplicant` takes `userId` so `ai_biz_score` cost logs.
+- Public pages: `/business` (landing + pricing; CTAs are relative `/signin?signup=1&next=/business` so signup stays on the
+  business host and lands in org onboarding) and `/business/demo` (static fictional data in `demo/demo-data.ts`, no AI, exempt
+  in middleware). Onboarding's optional "what are you hiring for" answer is stored as `ev_biz_feedback`:
+  `select created_at, metadata from usage_events where action = 'ev_biz_feedback' order by 1 desc;`
 
 ## Press kit (`/press`)
 Public page in `src/app/press/`; files in `public/press/` (how to rebuild the logos and zip: that folder's `README.md`). Copy, facts and the founder bio are approved text, so don't change claims without Matt's sign-off, and keep `modulehire-press-kit.txt` and the zip in step with the page.

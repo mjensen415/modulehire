@@ -44,12 +44,12 @@ _This is the phase that actually gates the launch. Right now open signup = unbou
 
 ## Phase 2 — Payment integrity (this week, ~half day)
 
-- [ ] **P2.1 — Make the Stripe webhook idempotent** _(closes #3, Medium)_
+- [x] **P2.1 — Make the Stripe webhook idempotent** _(closes #3, Medium)_ ✅ 2026-11-18: `stripe_events` table (service role only, `supabase/migrations/20261118_stripe_events.sql`, applied); the webhook claims `event.id` first and acks duplicates with `{ duplicate: true }`.
   - Steps: create `stripe_events(id text primary key, type text, processed_at timestamptz default now())`; at the top of the handler, `insert ... on conflict do nothing`; if no row was inserted, return 200 without processing.
   - Done when: replaying the same `checkout.session.completed` event grants credits exactly once (test with Stripe CLI `stripe trigger` / resend).
   - Effort: 2 hrs.
 
-- [ ] **P2.2 — Fail loud on credit-grant errors** _(closes #4, Medium)_
+- [x] **P2.2 — Fail loud on credit-grant errors** _(closes #4, Medium)_ ✅ 2026-11-18: credit RPC, user plan and org tier write failures throw; the handler releases the claim and returns 500 so Stripe retries. Unresolvable users still 200 (a retry can't fix them). Alerting still waits on P3.1.
   - Steps: in the one-time-purchase branch, if `increment_resume_credits` returns an error, return a non-2xx so Stripe retries (safe now that P2.1 makes retries idempotent); log + alert.
   - Done when: a simulated RPC failure causes a Stripe retry rather than a silent `{ ok: true }`; the failure is visible in your error tracker (P3.1).
   - Effort: 1 hr. Depends on: P2.1.
