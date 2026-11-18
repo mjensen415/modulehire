@@ -50,3 +50,4 @@ bobiverse-tracker.html
 
 # Eval suite output (npm run eval)
 scripts/eval/last-run.json
+.smoke-session.json

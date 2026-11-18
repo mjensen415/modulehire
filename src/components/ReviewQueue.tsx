@@ -21,6 +21,8 @@ export default function ReviewQueue({ limit, compact = false, onChange }: Props)
   const [busy, setBusy] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<{ id: string; title: string; content: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const GROUP_PREVIEW = 6
 
   const [reloadKey, setReloadKey] = useState(0)
   useEffect(() => {
@@ -123,14 +125,14 @@ export default function ReviewQueue({ limit, compact = false, onChange }: Props)
             <div className="rq-group-head">
               <span className="rq-group-label">From {g.label}</span>
               {g.source.kind !== 'none' && (
-                <button type="button" className="btn-ghost rq-small" onClick={() => confirmGroup(g)} disabled={g.items.some(d => busy.has(d.id))}>
+                <button type="button" className="rq-btn" onClick={() => confirmGroup(g)} disabled={g.items.some(d => busy.has(d.id))}>
                   Confirm all from this upload
                 </button>
               )}
             </div>
           )}
           <ul className="rq-list">
-            {g.items.map(d => {
+            {(compact || expanded.has(g.key) ? g.items : g.items.slice(0, GROUP_PREVIEW)).map(d => {
               const isEditing = editing?.id === d.id
               const isBusy = busy.has(d.id)
               return (
@@ -167,14 +169,14 @@ export default function ReviewQueue({ limit, compact = false, onChange }: Props)
                   <div className="rq-actions">
                     {isEditing ? (
                       <>
-                        <button type="button" className="btn-primary rq-small" onClick={saveAndConfirm} disabled={isBusy}>Save and confirm</button>
-                        <button type="button" className="btn-ghost rq-small" onClick={() => setEditing(null)} disabled={isBusy}>Cancel</button>
+                        <button type="button" className="rq-btn rq-btn-primary" onClick={saveAndConfirm} disabled={isBusy}>Save and confirm</button>
+                        <button type="button" className="rq-btn" onClick={() => setEditing(null)} disabled={isBusy}>Cancel</button>
                       </>
                     ) : (
                       <>
-                        <button type="button" className="btn-primary rq-small" onClick={() => confirm(d.id)} disabled={isBusy}>Confirm</button>
-                        <button type="button" className="btn-ghost rq-small" onClick={() => setEditing({ id: d.id, title: d.title, content: d.content })} disabled={isBusy}>Edit</button>
-                        <button type="button" className="btn-ghost rq-small rq-reject" onClick={() => reject(d.id)} disabled={isBusy}>Not true</button>
+                        <button type="button" className="rq-btn rq-btn-primary" onClick={() => confirm(d.id)} disabled={isBusy}>Confirm</button>
+                        <button type="button" className="rq-btn" onClick={() => setEditing({ id: d.id, title: d.title, content: d.content })} disabled={isBusy}>Edit</button>
+                        <button type="button" className="rq-btn rq-reject" onClick={() => reject(d.id)} disabled={isBusy}>Not true</button>
                       </>
                     )}
                   </div>
@@ -182,6 +184,11 @@ export default function ReviewQueue({ limit, compact = false, onChange }: Props)
               )
             })}
           </ul>
+          {!compact && !expanded.has(g.key) && g.items.length > GROUP_PREVIEW && (
+            <button type="button" className="rq-showall" onClick={() => setExpanded(e => new Set([...e, g.key]))}>
+              Show all {g.items.length} from {g.label}
+            </button>
+          )}
         </div>
       ))}
       {compact && total > drafts.length && (
@@ -211,8 +218,13 @@ const RQ_CSS = `
 .rq-quote q { font-style: italic; color: var(--text2); }
 .rq-noquote { color: var(--amber); }
 .rq-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
-.rq-small { font-size: 12.5px !important; padding: 6px 12px !important; }
-.rq-reject { color: var(--rose) !important; }
+.rq-btn { font: inherit; font-size: 12.5px; font-weight: 600; padding: 6px 12px; border-radius: 7px; border: 1px solid var(--border2); background: var(--surface); color: var(--text2); cursor: pointer; white-space: nowrap; }
+.rq-btn:hover:not(:disabled) { color: var(--text); border-color: var(--text3); }
+.rq-btn:disabled { opacity: 0.5; cursor: default; }
+.rq-btn-primary { background: var(--teal); border-color: var(--teal); color: #fff; }
+.rq-btn-primary:hover:not(:disabled) { color: #fff; opacity: 0.9; }
+.rq-reject { color: var(--rose); }
+.rq-showall { font: inherit; font-size: 13px; color: var(--teal); background: none; border: none; padding: 8px 0 0; cursor: pointer; }
 .rq-edit { display: flex; flex-direction: column; gap: 6px; }
 .rq-input { width: 100%; font: inherit; font-size: 13px; color: var(--text); background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px; padding: 8px 10px; box-sizing: border-box; }
 .rq-more { font-size: 13px; color: var(--teal); text-decoration: none; display: inline-block; margin-top: 8px; }

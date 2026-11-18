@@ -123,8 +123,18 @@ export async function POST(req: Request) {
 
     if (resumeError) throw resumeError
 
+    // Every upload is also a documents row (Files page, module provenance). resumes stays the
+    // source of truth for the resume flow; a failure here never blocks the upload.
+    const { data: docRow, error: docError } = await adminClient
+      .from('documents')
+      .insert({ user_id: user.id, kind: 'resume', filename: file.name, file_url: fileUrl, raw_text: rawText, source_resume_id: resumeRow.id })
+      .select('id')
+      .single()
+    if (docError) console.error('[upload-resume] documents row', docError)
+
     return NextResponse.json({
       resume_id: resumeRow.id,
+      document_id: docRow?.id ?? null,
       raw_text: rawText,
       filename: file.name,
     })

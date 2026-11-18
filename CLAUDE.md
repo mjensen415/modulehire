@@ -122,6 +122,7 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
   - `20261029_lock_applicants_columns.sql`: `applicants.file_url` (signed with the service role on read, so a member could get a link to another org's file) is service_role only, as are `org_id`/`job_id` after insert; no DELETE. `applicant_status_history`'s insert policy now also requires org membership. `business/applicants/upload` writes `file_url` with the admin client.
   - `20261029_revoke_truncate.sql`: revokes TRUNCATE/REFERENCES/TRIGGER from anon/authenticated on every public table. New tables get the default grants back; rerun it after adding one.
 - Applied 2026-11-18. Confirmed library — tracked in `supabase/migrations/20261118_confirmed_library.sql` (also in `schema.sql`). `modules.status` is now `draft|confirmed|rejected` (default `draft`; the old unused `complete/needs-review/needs-add` check was dropped and every existing row set to `confirmed`), plus `modules.source_quote` and `modules.source_document_id`.
+- Applied 2026-11-18. `documents` table (kind, filename, file_url, raw_text, job_experience_id, period_label, `source_resume_id`, `deleted_at`) + `modules.source_document_id` FK + private storage bucket `documents` — tracked in `supabase/migrations/20261118_documents.sql`. Users can only read their rows (insert/update/delete revoked; the server writes with the service role), so deleting can't reset the Free document limit.
 
 ## AI models and usage logging (`src/lib/ai.ts`)
 **Haiku everywhere.** Every call resolves to `ANTHROPIC_MODEL_FAST` (Haiku) unless its `action` is
@@ -247,6 +248,25 @@ must go through it.
 - Smoke tests: `scripts/smoke/` (`harness.ts` makes a disposable `*@modulehire.test` user, calls the
   local dev server on :3101 with its cookie, and deletes it after). Run with Node 25+ (`pdfjs` needs
   `Promise.try`): `PATH=/opt/homebrew/bin:$PATH npx tsx scripts/smoke/part1-confirmed-library.ts`.
+
+
+## Document import (performance reviews, brag docs)
+`/upload` has a Resume · Performance review · Other picker (`?kind=performance_review` preselects).
+Non-resume imports: `POST /api/upload-document` (form `file`, `kind`) extracts text (`resume-text.ts`),
+stores the file in the `documents` bucket (`{user_id}/{ts}-{name}`), writes a `documents` row and
+guesses the period/job (`guessPeriod`/`jobForYear` in `src/lib/documents.ts`: a year next to
+"review"/"period" wins; the job whose dates contain it). The client (`DocumentImport.tsx`) asks
+"Which role is this review from?", then `POST /api/parse-document` runs one Haiku call
+(`src/lib/parse-document.ts`, action `ai_parse_review`, worked example + one retry at temperature 0):
+accomplishments only, each with a verified `source_quote`; a module naming a number or name the
+document doesn't contain is cut back to its quote or dropped. Modules are inserted as drafts with
+`source_document_id` and assigned to the chosen job (admin client), so they land in the review queue.
+Resume uploads also write a `documents` row (`kind = 'resume'`, `source_resume_id`; the file stays in
+the `resumes` bucket) and `parse-resume` passes its id so resume modules point back at it.
+Limits: Free imports 2 non-resume documents ever (deleted ones count); paid: fair use 30 a month.
+Fixture: `test-resumes/review-fixture.pdf` (fictional 2024 Fieldnote AI review for the Tessa test
+resume; rebuild with `scripts/smoke/make-review-fixture.tsx`). Test: `scripts/smoke/part2-documents.ts`.
+For a browser look, `scripts/smoke/session.ts create|delete` makes a disposable signed-in user.
 
 ## JD Match Report
 `POST /api/match-report` (`{ jd_id }`) scores each of a JD's `extracted_criteria` against the
