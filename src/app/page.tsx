@@ -5,6 +5,7 @@ import Link from 'next/link';
 
 import PublicNav from '@/components/layout/PublicNav';
 import PublicFooter from '@/components/layout/PublicFooter';
+import GrantBadge from '@/components/GrantBadge';
 
 const TWEAK_DEFAULTS = {
   accentColor: "teal",
@@ -721,6 +722,14 @@ export default function Home() {
             </svg>
           </a>
         </div>
+      </section>
+
+      {/* ElevenLabs Grants badge (grant condition, Nov 2026 to Nov 2027) */}
+      <section style={{ padding: '48px 24px', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+        <p style={{ fontSize: 14, color: 'var(--text2)', margin: '0 0 18px' }}>
+          Voice interview practice is supported by
+        </p>
+        <GrantBadge width={250} />
       </section>
 
       <PublicFooter />

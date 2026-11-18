@@ -125,6 +125,7 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - Applied 2026-11-18. `documents` table (kind, filename, file_url, raw_text, job_experience_id, period_label, `source_resume_id`, `deleted_at`) + `modules.source_document_id` FK + private storage bucket `documents` — tracked in `supabase/migrations/20261118_documents.sql`. Users can only read their rows (insert/update/delete revoked; the server writes with the service role), so deleting can't reset the Free document limit.
 - Applied 2026-11-18. `interviews` (+ `prep_opened_at`, cached `practice_questions`) and `practice_answers` — tracked in `supabase/migrations/20261118_interviews.sql`. Own-rows RLS; users UPDATE only the editable interview columns; `practice_answers` are server-written (they count toward practice limits) and keep `interview_id = null` when a round is deleted so deleting can't reset the Free round.
 - Applied 2026-11-18. Sprints — tracked in `supabase/migrations/20261118_sprints.sql`: `users.sprint_ends_at` (service-role only, not in the users column grants), `sprint_purchases` (read-own RLS, no user writes, unique `stripe_session_id`), and `apply_sprint_purchase(user, sku, session, amount)` (service_role only; locks the user row, extends from `greatest(now(), sprint_ends_at)`, idempotent on the session id).
+- Applied 2026-11-18. `interview_sessions` (voice mock interviews) — tracked in `supabase/migrations/20261118_interview_sessions.sql`. Own-rows SELECT and DELETE only; insert/update revoked (the server writes with the service role). The monthly cap counts `ev_voice_session_start` usage events, so deleting a session never resets it.
 
 ## AI models and usage logging (`src/lib/ai.ts`)
 **Haiku everywhere.** Every call resolves to `ANTHROPIC_MODEL_FAST` (Haiku) unless its `action` is
@@ -560,6 +561,47 @@ Public docs page: `/mcp`; listing copy and screenshots: `docs/mcp-listing/`.
   - Testing writes against production data needs care: smoke tests run as the owner account and
     clean up after themselves; the auto-mode classifier blocks modifying SQL on production and
     local servers that hold a token.
+
+## Voice mock interviews (`/interview-prep/voice`, Sprint)
+Funded by the ElevenLabs Startup Grant (33M credits, 12 months from Nov 2026). Plan:
+`claude/voice-interview-prep-plan.md` in the ModuleHire project.
+- **Live agent:** "Hope" (`agent_2701m7r3p6bbefxsy3w0mjth9wca`), configured through the ElevenLabs
+  connector to match `agentDefinition()`: signed-URL auth, audio recording off, 30-day transcript
+  retention, 10 concurrent / 200 a day, Gemini 2.5 Flash, patient turn-taking. Don't use the
+  `/admin/voice` "Create agent" button unless replacing Hope.
+- **Agent:** one ElevenLabs agent, created once from `/admin/voice` (`POST /api/admin/voice`,
+  `agentDefinition()` in `src/lib/voice/interview.ts`): signed-URL auth on, 20-minute hard cap,
+  generic prompt with dynamic variables (`candidate_name`, `job_title`, `company`, `requirements`,
+  `candidate_background`, `interview_guide`, `interview_label`, `length_minutes`). Changing the
+  prompt in code does not update the live agent: edit it in the ElevenLabs dashboard too, or
+  create a new agent and swap `ELEVENLABS_AGENT_ID`.
+- **Env:** `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, optional `VOICE_INTERVIEWS_ENABLED=false`
+  (kill switch), `VOICE_MONTHLY_SESSIONS` (default 8), `ELEVENLABS_AGENT_LLM` (used only when
+  creating the agent).
+- **Flow:** `POST /api/interview/voice` (Sprint access via `hasActiveSprint`, kill switch, monthly cap, consent version, builds
+  context from confirmed modules and the JD's criteria) returns a 15-minute signed URL plus the
+  dynamic variables; the browser runs `Conversation.startSession` from `@elevenlabs/react`
+  (websocket). After hang-up the browser calls `POST /api/interview/voice/[id]/finish`, which
+  polls ElevenLabs for the transcript (checks the conversation's `agent_id` and that it isn't
+  linked to another session), saves it, and scores it with one Haiku call (`scoreInterview`,
+  action `ai_voice_feedback`). `DELETE /api/interview/voice/[id]` deletes our row and the
+  ElevenLabs conversation. ModuleHire never stores audio.
+- **CSP:** `/interview-prep/voice` gets its own CSP in `src/proxy.ts` (no `'strict-dynamic'`,
+  `blob:` and jsDelivr for the SDK's audio worklets, ElevenLabs in `connect-src`), and
+  `Permissions-Policy` allows `microphone=(self)`. A CSP applies per document, so link to the
+  page with a plain `<a>` (full load), never `<Link>`.
+- **Compliance:** grant badge in `PublicFooter.tsx` and on the voice page; consent checkbox stored
+  per session (`consent_version`, `consented_at`; bump `VOICE_CONSENT_VERSION` when the notice
+  changes); privacy policy section 5 (`/privacy#voice`); the interviewer says it's an AI in its
+  first line. Credits are used only inside ModuleHire (no reselling).
+- **Audio autoplay:** the SDK plays the agent through an autoplay `<audio>` element created after
+  connect; browsers block it because the click came several awaits earlier (mic prompt, our API).
+  `startInterviewerAudio()` in `VoiceInterview.tsx` calls `play()` on connect and on each speaking
+  turn, and shows a "Turn on interviewer audio" button if the browser still refuses.
+- **UI:** `VoiceInterview.tsx` + `voice.css` (scoped `.vi`). The live orb reads
+  `getOutputVolume()`/`getInputVolume()` each frame into CSS variables (`--out`, `--in`).
+  `GrantBadge.tsx` swaps the white/dark official badge by theme (`globals.css`).
+- **Events:** `ev_voice_session_start`, `ev_voice_session_end` (`duration_s`), `ev_voice_feedback`.
 
 ## Gotchas
 - **Fonts are bundled** (`src/app/fonts/`, `next/font/local` in `layout.tsx`, how they were built in that folder's README). `next/font/google` intermittently failed Vercel builds with `Can't resolve '@vercel/turbopack-next/internal/font/google/font'`. `--font` and `--mono` come only from the font classes on `<html>`; don't define them in `globals.css`, whose `:root` rule comes later in the CSS and would override them.

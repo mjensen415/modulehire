@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { analyzeJd, fetchJdFromUrl, looksLikeUrl } from '@/lib/analyze-jd-client'
 import SprintButton from '@/components/SprintButton'
+import GrantBadge from '@/components/GrantBadge'
 
 type JobDescriptionSummary = {
   id: string
@@ -216,6 +217,9 @@ export default function InterviewPrepPage() {
           <span className="topbar-title">Interview Prep</span>
           <span className="topbar-sub">— Talking points built from your own experience</span>
         </div>
+        <div className="no-print" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center' }}>
+          <GrantBadge width={150} />
+        </div>
       </div>
 
       <div className="interview-prep-layout" style={{ display: 'flex', height: 'calc(100vh - 56px)', overflow: 'hidden' }}>
@@ -325,6 +329,14 @@ export default function InterviewPrepPage() {
                   {prepGeneratedAt && (
                     <div style={{ fontSize: 12, color: 'var(--text3)' }}>Generated {formatDateTime(prepGeneratedAt)}</div>
                   )}
+                  {/* Plain <a>, not <Link>: the voice page needs its own CSP, which only a full page load applies. */}
+                  <a
+                    href={`/interview-prep/voice?jd=${selectedId}`}
+                    className="btn-ghost no-print"
+                    style={{ display: 'inline-flex', marginTop: 10, fontSize: 12.5, textDecoration: 'none' }}
+                  >
+                    🎙 Practice out loud{!isPro && ' 🔒 Sprint'}
+                  </a>
                 </div>
                 {prep && (
                   <div className="no-print" style={{ display: 'flex', gap: 8, flexShrink: 0 }}>

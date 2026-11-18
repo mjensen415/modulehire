@@ -2386,3 +2386,8 @@ html { overflow-x: hidden; }
     max-width: 100% !important;
   }
 }
+
+/* ElevenLabs Grants badge: white logo on the dark theme, dark logo on the light theme. */
+.grant-badge-on-light { display: none; }
+[data-theme="light"] .grant-badge-on-light { display: inline; }
+[data-theme="light"] .grant-badge-on-dark { display: none; }
