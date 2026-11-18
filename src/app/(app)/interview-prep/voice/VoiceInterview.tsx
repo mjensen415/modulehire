@@ -41,6 +41,17 @@ const chip = (on: boolean): React.CSSProperties => ({
   border: `1px solid ${on ? 'var(--teal)' : 'var(--border2)'}`, color: on ? 'var(--teal)' : 'var(--text3)',
 })
 
+// The SDK plays the interviewer through a hidden <audio> element it creates after connecting and
+// relies on autoplay. Browsers block that when the click that started the call was too long ago
+// (we await the mic prompt and our API first), so the text arrives with no sound. Play it
+// ourselves, and if the browser still refuses, show a button: a click is always allowed.
+async function startInterviewerAudio(): Promise<boolean> {
+  const els = Array.from(document.querySelectorAll('audio')).filter((a) => a.srcObject instanceof MediaStream)
+  if (!els.length) return false
+  const results = await Promise.all(els.map((a) => (a.paused ? a.play().then(() => true, () => false) : Promise.resolve(true))))
+  return results.every(Boolean)
+}
+
 function fmt(s: number) {
   const m = Math.floor(s / 60)
   return `${m}:${String(Math.max(0, s % 60)).padStart(2, '0')}`
@@ -63,6 +74,7 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
   const [viewTranscript, setViewTranscript] = useState<Turn[] | null>(null)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [maxSeconds, setMaxSeconds] = useState(600)
+  const [audioBlocked, setAudioBlocked] = useState(false)
 
   const convRef = useRef<Awaited<ReturnType<typeof Conversation.startSession>> | null>(null)
   const sessionIdRef = useRef<string | null>(null)
@@ -176,6 +188,7 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
     maxSecondsRef.current = data.max_seconds
     setMaxSeconds(data.max_seconds)
     setTurns([])
+    setAudioBlocked(false)
     setElapsed(0)
     setMuted(false)
     try {
@@ -186,6 +199,7 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
         onConnect: ({ conversationId }) => {
           conversationIdRef.current = conversationId
           setPhase('live')
+          setTimeout(() => { startInterviewerAudio().then((ok) => setAudioBlocked(!ok)) }, 300)
           const startedAt = Date.now()
           timerRef.current = setInterval(() => {
             const s = Math.floor((Date.now() - startedAt) / 1000)
@@ -196,7 +210,10 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
         },
         onDisconnect: () => { finish() },
         onError: (message) => { console.error('[voice]', message) },
-        onModeChange: ({ mode }) => setMode(mode),
+        onModeChange: ({ mode }) => {
+          setMode(mode)
+          if (mode === 'speaking') startInterviewerAudio().then((ok) => setAudioBlocked(!ok))
+        },
         onMessage: ({ message, role }) => {
           if (!message?.trim()) return
           setTurns((prev) => [...prev, { role, message }].slice(-40))
@@ -259,6 +276,15 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
           </div>
           {lastAgent && (
             <div style={{ fontSize: 14, color: 'var(--text2)', marginTop: 20, lineHeight: 1.5 }}>&ldquo;{lastAgent.message}&rdquo;</div>
+          )}
+          {audioBlocked && phase === 'live' && (
+            <button
+              className="btn-primary"
+              style={{ marginTop: 20 }}
+              onClick={() => startInterviewerAudio().then((ok) => setAudioBlocked(!ok))}
+            >
+              🔊 Can&apos;t hear the interviewer? Turn on audio
+            </button>
           )}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 24 }}>
             <button className="btn-ghost" onClick={toggleMute} disabled={phase !== 'live'}>{muted ? 'Unmute' : 'Mute'}</button>
