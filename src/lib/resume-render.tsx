@@ -734,7 +734,7 @@ export type CoverLetterConfig = { include: boolean; tone: 'professional' | 'warm
 export const ResumePDFClassic = ({ contact, data, bulletStyle }: { contact: Contact; data: StructuredData; bulletStyle: string }) => {
   const contactLine = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join(' · ')
   const body = { fontSize: 10, fontFamily: 'Times-Roman', lineHeight: 1.5, color: '#333333' }
-  const SectionH = ({ title }: { title: string }) => (
+  const sectionH = ({ title }: { title: string }) => (
     <View style={{ marginTop: 14, marginBottom: 4 }}>
       <Text style={{ fontSize: 10, fontFamily: 'Times-Bold', color: '#111111', textTransform: 'uppercase', letterSpacing: 0.5 }}>{title}</Text>
       <View style={{ borderBottomWidth: 0.75, borderBottomColor: '#333333', marginTop: 2 }} />
@@ -748,13 +748,13 @@ export const ResumePDFClassic = ({ contact, data, bulletStyle }: { contact: Cont
         <View style={{ borderBottomWidth: 1.5, borderBottomColor: '#111111', marginBottom: 14 }} />
         {data.summary ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionH title="Summary" />
+            {sectionH({ title: 'Summary' })}
             <Text style={{ ...body, marginTop: 4 }}>{data.summary}</Text>
           </View>
         ) : null}
         {data.experience?.length ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionH title="Work Experience" />
+            {sectionH({ title: 'Work Experience' })}
             {groupExperienceByCompany(data.experience).map((group, i) => {
               const bullets = (job: ExpEntry) => job.bullets.map((b, j) => (
                 <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
@@ -797,19 +797,19 @@ export const ResumePDFClassic = ({ contact, data, bulletStyle }: { contact: Cont
         ) : null}
         {data.skills ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionH title="Skills" />
+            {sectionH({ title: 'Skills' })}
             <Text style={{ ...body, marginTop: 4 }}>{data.skills}</Text>
           </View>
         ) : null}
         {data.education ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionH title="Education" />
+            {sectionH({ title: 'Education' })}
             <Text style={{ ...body, marginTop: 4 }}>{data.education}</Text>
           </View>
         ) : null}
         {data.awards ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionH title="Awards & Certifications" />
+            {sectionH({ title: 'Awards & Certifications' })}
             <Text style={{ ...body, marginTop: 4 }}>{data.awards}</Text>
           </View>
         ) : null}
@@ -823,7 +823,7 @@ export const ResumePDFTech = ({ contact, data, bulletStyle }: { contact: Contact
   const contactItems = [contact.email, contact.phone, contact.linkedin, contact.location].filter(Boolean).join('  ·  ')
   const BLUE = '#1F6FEB'
   const body = { fontSize: 10, fontFamily: 'Helvetica', lineHeight: 1.5, color: '#333333' }
-  const SectionH = ({ title }: { title: string }) => (
+  const sectionH = ({ title }: { title: string }) => (
     <View style={{ marginTop: 14, marginBottom: 6, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 0.75, borderBottomColor: '#E0E0E0', paddingBottom: 3 }}>
       <Text style={{ fontSize: 11, fontFamily: 'Courier-Bold', color: BLUE, marginRight: 4 }}>#</Text>
       <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#111111', textTransform: 'uppercase', letterSpacing: 0.6 }}>{title}</Text>
@@ -837,13 +837,13 @@ export const ResumePDFTech = ({ contact, data, bulletStyle }: { contact: Contact
         <View style={{ borderBottomWidth: 0.75, borderBottomColor: '#E0E0E0', marginTop: 8, marginBottom: 4 }} />
         {data.summary ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionH title="Summary" />
+            {sectionH({ title: 'Summary' })}
             <Text style={body}>{data.summary}</Text>
           </View>
         ) : null}
         {data.experience?.length ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionH title="Work Experience" />
+            {sectionH({ title: 'Work Experience' })}
             {groupExperienceByCompany(data.experience).map((group, i) => {
               const bullets = (job: ExpEntry) => job.bullets.map((b, j) => (
                 <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
@@ -885,19 +885,19 @@ export const ResumePDFTech = ({ contact, data, bulletStyle }: { contact: Contact
         ) : null}
         {data.skills ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionH title="Skills" />
+            {sectionH({ title: 'Skills' })}
             <Text style={body}>{data.skills}</Text>
           </View>
         ) : null}
         {data.education ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionH title="Education" />
+            {sectionH({ title: 'Education' })}
             <Text style={body}>{data.education}</Text>
           </View>
         ) : null}
         {data.awards ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionH title="Awards & Certifications" />
+            {sectionH({ title: 'Awards & Certifications' })}
             <Text style={body}>{data.awards}</Text>
           </View>
         ) : null}
@@ -910,7 +910,7 @@ export const ResumePDFTech = ({ contact, data, bulletStyle }: { contact: Contact
 export const ResumePDFCombination = ({ contact, data, bulletStyle }: { contact: Contact; data: CombinationData; bulletStyle: string }) => {
   const contactItems = [contact.phone, contact.location, contact.linkedin, contact.email].filter(Boolean).join('  |  ')
   const HEADER = '#C49098', SECTION = '#EDD5D7', DARK = '#3D2B2D'
-  const SectionBanner = ({ title }: { title: string }) => (
+  const sectionBanner = ({ title }: { title: string }) => (
     <View style={{ backgroundColor: SECTION, paddingHorizontal: 10, paddingVertical: 5, marginBottom: 8 }}>
       <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: DARK, textTransform: 'uppercase', letterSpacing: 0.5 }}>{title}</Text>
     </View>
@@ -929,7 +929,7 @@ export const ResumePDFCombination = ({ contact, data, bulletStyle }: { contact: 
           <Text style={{ fontSize: 9, color: '#555555' }}>{contactItems}</Text>
         </View>
         <View style={{ paddingHorizontal: 32, paddingBottom: 32 }}>
-          <SectionBanner title="Relevant Skills" />
+          {sectionBanner({ title: 'Relevant Skills' })}
           {data.skill_sections.map((sec, i) => (
             <View key={i} style={{ marginBottom: 8 }}>
               <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: DARK, marginBottom: 3 }}>{sec.category}</Text>
@@ -942,7 +942,7 @@ export const ResumePDFCombination = ({ contact, data, bulletStyle }: { contact: 
             </View>
           ))}
           <View style={{ marginTop: 10 }}>
-            <SectionBanner title="Work Experience" />
+            {sectionBanner({ title: 'Work Experience' })}
             {groupExperienceByCompany(data.work_experience).map((group, i) => {
               const bullets = (job: ExpEntry) => job.bullets.map((b, j) => (
                 <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
@@ -984,7 +984,7 @@ export const ResumePDFCombination = ({ contact, data, bulletStyle }: { contact: 
           </View>
           {data.education.length > 0 ? (
             <View style={{ marginTop: 8 }}>
-              <SectionBanner title="Education" />
+              {sectionBanner({ title: 'Education' })}
               {data.education.map((e, i) => (
                 <Text key={i} style={{ fontSize: 10, fontFamily: 'Helvetica', color: '#333333', marginBottom: 3 }}>{e.degree} · {e.school} · {e.year}</Text>
               ))}
@@ -992,13 +992,13 @@ export const ResumePDFCombination = ({ contact, data, bulletStyle }: { contact: 
           ) : null}
           {data.skills_list.length > 0 ? (
             <View style={{ marginTop: 10 }}>
-              <SectionBanner title="Skills" />
+              {sectionBanner({ title: 'Skills' })}
               <Text style={{ fontSize: 9.5, color: '#444444', lineHeight: 1.5 }}>{data.skills_list.join('  ·  ')}</Text>
             </View>
           ) : null}
           {data.awards ? (
             <View style={{ marginTop: 10 }}>
-              <SectionBanner title="Awards & Certifications" />
+              {sectionBanner({ title: 'Awards & Certifications' })}
               <Text style={{ fontSize: 9.5, color: '#444444', lineHeight: 1.5 }}>{data.awards}</Text>
             </View>
           ) : null}
@@ -1012,7 +1012,7 @@ export const ResumePDFCombination = ({ contact, data, bulletStyle }: { contact: 
 export const ResumePDFExecutive = ({ contact, data, bulletStyle }: { contact: Contact; data: StructuredData; bulletStyle: string }) => {
   const contactItems = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join('  ·  ')
   const body = { fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.5 }
-  const SectionHead = ({ title }: { title: string }) => (
+  const sectionHead = ({ title }: { title: string }) => (
     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, marginTop: 14 }}>
       <View style={{ width: 16, height: 0.5, backgroundColor: '#1e293b', marginRight: 6 }} />
       <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#1e293b', textTransform: 'uppercase', letterSpacing: 1 }}>{title}</Text>
@@ -1030,13 +1030,13 @@ export const ResumePDFExecutive = ({ contact, data, bulletStyle }: { contact: Co
         <View style={{ paddingHorizontal: 48, paddingBottom: 32 }}>
           {data.summary ? (
             <View>
-              <SectionHead title="Summary" />
+              {sectionHead({ title: 'Summary' })}
               <Text style={body}>{data.summary}</Text>
             </View>
           ) : null}
           {data.experience?.length ? (
             <View>
-              <SectionHead title="Experience" />
+              {sectionHead({ title: 'Experience' })}
               {groupExperienceByCompany(data.experience).map((group, i) => {
                 const bullets = (job: ExpEntry) => job.bullets.map((b, j) => (
                   <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
@@ -1078,19 +1078,19 @@ export const ResumePDFExecutive = ({ contact, data, bulletStyle }: { contact: Co
           ) : null}
           {data.skills ? (
             <View style={{ marginBottom: 10 }}>
-              <SectionHead title="Skills" />
+              {sectionHead({ title: 'Skills' })}
               <Text style={body}>{data.skills}</Text>
             </View>
           ) : null}
           {data.education ? (
             <View style={{ marginBottom: 10 }}>
-              <SectionHead title="Education" />
+              {sectionHead({ title: 'Education' })}
               <Text style={body}>{data.education}</Text>
             </View>
           ) : null}
           {data.awards ? (
             <View style={{ marginBottom: 10 }}>
-              <SectionHead title="Awards & Certifications" />
+              {sectionHead({ title: 'Awards & Certifications' })}
               <Text style={body}>{data.awards}</Text>
             </View>
           ) : null}
@@ -1104,7 +1104,7 @@ export const ResumePDFExecutive = ({ contact, data, bulletStyle }: { contact: Co
 export const ResumePDFMinimal = ({ contact, data, bulletStyle }: { contact: Contact; data: StructuredData; bulletStyle: string }) => {
   const contactItems = [contact.email, contact.phone, contact.location, contact.linkedin].filter(Boolean).join('  ·  ')
   const body = { fontSize: 9.5, fontFamily: 'Helvetica', color: '#444444', lineHeight: 1.6 }
-  const SectionHead = ({ title }: { title: string }) => (
+  const sectionHead = ({ title }: { title: string }) => (
     <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0', marginBottom: 5, marginTop: 16, paddingBottom: 3 }}>
       <Text style={{ fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#aaaaaa', textTransform: 'uppercase', letterSpacing: 1.5 }}>{title}</Text>
     </View>
@@ -1118,13 +1118,13 @@ export const ResumePDFMinimal = ({ contact, data, bulletStyle }: { contact: Cont
         <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#e5e7eb', marginBottom: 4 }} />
         {data.summary ? (
           <View>
-            <SectionHead title="Summary" />
+            {sectionHead({ title: 'Summary' })}
             <Text style={body}>{data.summary}</Text>
           </View>
         ) : null}
         {data.experience?.length ? (
           <View>
-            <SectionHead title="Experience" />
+            {sectionHead({ title: 'Experience' })}
             {groupExperienceByCompany(data.experience).map((group, i) => {
               const bullets = (job: ExpEntry) => job.bullets.map((b, j) => (
                 <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
@@ -1167,19 +1167,19 @@ export const ResumePDFMinimal = ({ contact, data, bulletStyle }: { contact: Cont
         ) : null}
         {data.skills ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionHead title="Skills" />
+            {sectionHead({ title: 'Skills' })}
             <Text style={body}>{data.skills}</Text>
           </View>
         ) : null}
         {data.education ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionHead title="Education" />
+            {sectionHead({ title: 'Education' })}
             <Text style={body}>{data.education}</Text>
           </View>
         ) : null}
         {data.awards ? (
           <View style={{ marginBottom: 10 }}>
-            <SectionHead title="Awards & Certifications" />
+            {sectionHead({ title: 'Awards & Certifications' })}
             <Text style={body}>{data.awards}</Text>
           </View>
         ) : null}
@@ -1193,13 +1193,13 @@ export const ResumePDFTwoColumn = ({ contact, data, bulletStyle }: { contact: Co
   const SIDEBAR = '#f8fafc', ACCENT = '#1d9e75'
   const body = { fontSize: 9.5, fontFamily: 'Helvetica', color: '#333333', lineHeight: 1.5 }
   const sideBody = { fontSize: 9, fontFamily: 'Helvetica', color: '#555555', lineHeight: 1.5 }
-  const SideHead = ({ title }: { title: string }) => (
+  const sideHead = ({ title }: { title: string }) => (
     <View style={{ marginBottom: 4, marginTop: 12 }}>
       <Text style={{ fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#555555', textTransform: 'uppercase', letterSpacing: 1 }}>{title}</Text>
       <View style={{ height: 0.5, backgroundColor: '#cbd5e1', marginTop: 3 }} />
     </View>
   )
-  const MainHead = ({ title }: { title: string }) => (
+  const mainHead = ({ title }: { title: string }) => (
     <View style={{ marginBottom: 5, marginTop: 12 }}>
       <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#555555', textTransform: 'uppercase', letterSpacing: 1 }}>{title}</Text>
       <View style={{ height: 0.5, backgroundColor: '#e5e7eb', marginTop: 3 }} />
@@ -1222,19 +1222,19 @@ export const ResumePDFTwoColumn = ({ contact, data, bulletStyle }: { contact: Co
           {contact.linkedin ? <Text style={{ ...sideBody, marginBottom: 6 }}>{contact.linkedin}</Text> : null}
           {data.skills ? (
             <View>
-              <SideHead title="Skills" />
+              {sideHead({ title: 'Skills' })}
               <Text style={sideBody}>{data.skills}</Text>
             </View>
           ) : null}
           {data.education ? (
             <View>
-              <SideHead title="Education" />
+              {sideHead({ title: 'Education' })}
               <Text style={sideBody}>{data.education}</Text>
             </View>
           ) : null}
           {data.awards ? (
             <View>
-              <SideHead title="Awards" />
+              {sideHead({ title: 'Awards' })}
               <Text style={sideBody}>{data.awards}</Text>
             </View>
           ) : null}
@@ -1243,13 +1243,13 @@ export const ResumePDFTwoColumn = ({ contact, data, bulletStyle }: { contact: Co
         <View style={{ flex: 1, paddingHorizontal: 24, paddingVertical: 28 }}>
           {data.summary ? (
             <View style={{ marginBottom: 8 }}>
-              <MainHead title="Summary" />
+              {mainHead({ title: 'Summary' })}
               <Text style={body}>{data.summary}</Text>
             </View>
           ) : null}
           {data.experience?.length ? (
             <View>
-              <MainHead title="Experience" />
+              {mainHead({ title: 'Experience' })}
               {groupExperienceByCompany(data.experience).map((group, i) => {
                 const bullets = (job: ExpEntry) => job.bullets.map((b, j) => (
                   <View key={j} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 8 }}>
