@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 import { analyzeJd, fetchJdFromUrl, looksLikeUrl } from '@/lib/analyze-jd-client'
 import SprintButton from '@/components/SprintButton'
 

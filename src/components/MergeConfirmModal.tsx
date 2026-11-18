@@ -126,7 +126,6 @@ export default function MergeConfirmModal({
     }
   }
 
-  const dates = (e: MergeExperience) => [e.start_date, e.end_date].filter(Boolean).join(' – ')
 
   return (
     <div

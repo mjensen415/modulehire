@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import PublicNav from '@/components/layout/PublicNav';
 import PublicFooter from '@/components/layout/PublicFooter';
 

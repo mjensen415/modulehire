@@ -577,7 +577,6 @@ export default function JobWorkspacePage() {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     })
 
-  const jobStatusCfg = STATUS_CONFIG[job?.status as Status] ?? STATUS_CONFIG.new
 
   const criterionColumns = criteria
     .filter((c): c is Criterion & { id: string } => !!c.id)

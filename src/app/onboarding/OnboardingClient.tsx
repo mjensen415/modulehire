@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import ResumeBuildProgress, { type ResumeBuildResult } from '@/components/ResumeBuildProgress'
 import { analyzeJd, fetchJdFromUrl, looksLikeUrl } from '@/lib/analyze-jd-client'
 import ReviewQueue from '@/components/ReviewQueue'
@@ -309,7 +310,7 @@ export default function OnboardingClient({
         )}
 
         <div style={{ marginTop: 28, textAlign: 'center', fontSize: 12 }}>
-          <a href="/library" style={{ color: 'var(--text3)' }}>Don&apos;t have a resume file handy? Build your library manually →</a>
+          <Link href="/library" style={{ color: 'var(--text3)' }}>Don&apos;t have a resume file handy? Build your library manually →</Link>
         </div>
       </div>
     )
