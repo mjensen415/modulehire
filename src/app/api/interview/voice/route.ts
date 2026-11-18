@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { isProTier } from '@/lib/plan'
+import { hasActiveSprint, loadSprintUser } from '@/lib/entitlements'
 import { isUuid } from '@/lib/validate'
 import { getSignedUrl, voiceEnabled } from '@/lib/voice/elevenlabs'
 import {
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const jdId = new URL(req.url).searchParams.get('jd_id')
-  const { data: profile } = await supabase.from('users').select('tier').eq('id', user.id).single()
+  const sprint = hasActiveSprint(await loadSprintUser(supabase, user.id))
 
   let q = supabase
     .from('interview_sessions')
@@ -49,7 +49,7 @@ export async function GET(req: Request) {
   const used = await monthlyCount(user.id)
   return NextResponse.json({
     enabled: voiceEnabled(),
-    is_pro: isProTier(profile?.tier),
+    is_pro: sprint, // Sprint access (paid Sprint, beta_pro, or legacy Pro in its paid period)
     monthly_limit: VOICE_MONTHLY_SESSIONS,
     used_this_month: used,
     consent_version: VOICE_CONSENT_VERSION,
@@ -73,8 +73,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Voice interviews are paused right now. Try again later.' }, { status: 503 })
     }
 
-    const { data: profile } = await supabase.from('users').select('tier').eq('id', user.id).single()
-    if (!isProTier(profile?.tier)) return NextResponse.json({ error: 'pro_required' }, { status: 403 })
+    if (!hasActiveSprint(await loadSprintUser(supabase, user.id))) {
+      return NextResponse.json({ error: 'pro_required' }, { status: 403 })
+    }
 
     const body = await req.json().catch(() => ({}))
     const jdId = body?.job_description_id

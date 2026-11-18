@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Conversation, type Mode } from '@elevenlabs/react'
 import type { VoiceFeedback } from '@/lib/voice/interview'
 import GrantBadge from '@/components/GrantBadge'
+import SprintButton from '@/components/SprintButton'
 import './voice.css'
 
 type Job = { id: string; label: string }
@@ -212,7 +213,7 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
       setPhase('setup')
-      return setError(data.error === 'pro_required' ? 'Voice interviews are part of Pro.' : data.error || 'Could not start the interview.')
+      return setError(data.error === 'pro_required' ? 'Voice interviews are part of a Sprint.' : data.error || 'Could not start the interview.')
     }
 
     sessionIdRef.current = data.session_id
@@ -475,7 +476,10 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
     <div className="vi vi-setup">
       <div className="vi-setup-main">
         {!status.is_pro && (
-          <div className="vi-panel vi-callout">Voice mock interviews are part of Pro. <Link href="/pricing">See plans</Link></div>
+          <div className="vi-panel vi-callout vi-callout-sprint">
+            <span>Voice mock interviews are part of a Sprint. Your library, resumes and jobs stay free.</span>
+            <SprintButton returnUrl="/interview-prep/voice" />
+          </div>
         )}
         {!status.enabled && status.is_pro && (
           <div className="vi-panel vi-callout">Voice interviews are paused right now. Check back soon.</div>
@@ -545,7 +549,7 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
           <p className="vi-preview-q">&ldquo;{typeInfo.sample}&rdquo;</p>
           <button className="vi-btn vi-btn-primary vi-start" onClick={start} disabled={!canStart}>Start interview</button>
           <div className="vi-muted vi-left">
-            {status.is_pro ? `${left} of ${status.monthly_limit} interviews left this month` : 'Pro only'}
+            {status.is_pro ? `${left} of ${status.monthly_limit} interviews left this month` : 'Part of a Sprint'}
           </div>
           {!consent && status.is_pro && <div className="vi-fine">Tick the consent box to start.</div>}
           <div className="vi-fine">Headphones help the interviewer hear you clearly.</div>

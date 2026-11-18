@@ -562,9 +562,13 @@ Public docs page: `/mcp`; listing copy and screenshots: `docs/mcp-listing/`.
     clean up after themselves; the auto-mode classifier blocks modifying SQL on production and
     local servers that hold a token.
 
-## Voice mock interviews (`/interview-prep/voice`, Pro)
+## Voice mock interviews (`/interview-prep/voice`, Sprint)
 Funded by the ElevenLabs Startup Grant (33M credits, 12 months from Nov 2026). Plan:
 `claude/voice-interview-prep-plan.md` in the ModuleHire project.
+- **Live agent:** "Hope" (`agent_2701m7r3p6bbefxsy3w0mjth9wca`), configured through the ElevenLabs
+  connector to match `agentDefinition()`: signed-URL auth, audio recording off, 30-day transcript
+  retention, 10 concurrent / 200 a day, Gemini 2.5 Flash, patient turn-taking. Don't use the
+  `/admin/voice` "Create agent" button unless replacing Hope.
 - **Agent:** one ElevenLabs agent, created once from `/admin/voice` (`POST /api/admin/voice`,
   `agentDefinition()` in `src/lib/voice/interview.ts`): signed-URL auth on, 20-minute hard cap,
   generic prompt with dynamic variables (`candidate_name`, `job_title`, `company`, `requirements`,
@@ -574,7 +578,7 @@ Funded by the ElevenLabs Startup Grant (33M credits, 12 months from Nov 2026). P
 - **Env:** `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, optional `VOICE_INTERVIEWS_ENABLED=false`
   (kill switch), `VOICE_MONTHLY_SESSIONS` (default 8), `ELEVENLABS_AGENT_LLM` (used only when
   creating the agent).
-- **Flow:** `POST /api/interview/voice` (Pro, kill switch, monthly cap, consent version, builds
+- **Flow:** `POST /api/interview/voice` (Sprint access via `hasActiveSprint`, kill switch, monthly cap, consent version, builds
   context from confirmed modules and the JD's criteria) returns a 15-minute signed URL plus the
   dynamic variables; the browser runs `Conversation.startSession` from `@elevenlabs/react`
   (websocket). After hang-up the browser calls `POST /api/interview/voice/[id]/finish`, which
@@ -590,6 +594,13 @@ Funded by the ElevenLabs Startup Grant (33M credits, 12 months from Nov 2026). P
   per session (`consent_version`, `consented_at`; bump `VOICE_CONSENT_VERSION` when the notice
   changes); privacy policy section 5 (`/privacy#voice`); the interviewer says it's an AI in its
   first line. Credits are used only inside ModuleHire (no reselling).
+- **Audio autoplay:** the SDK plays the agent through an autoplay `<audio>` element created after
+  connect; browsers block it because the click came several awaits earlier (mic prompt, our API).
+  `startInterviewerAudio()` in `VoiceInterview.tsx` calls `play()` on connect and on each speaking
+  turn, and shows a "Turn on interviewer audio" button if the browser still refuses.
+- **UI:** `VoiceInterview.tsx` + `voice.css` (scoped `.vi`). The live orb reads
+  `getOutputVolume()`/`getInputVolume()` each frame into CSS variables (`--out`, `--in`).
+  `GrantBadge.tsx` swaps the white/dark official badge by theme (`globals.css`).
 - **Events:** `ev_voice_session_start`, `ev_voice_session_end` (`duration_s`), `ev_voice_feedback`.
 
 ## Gotchas

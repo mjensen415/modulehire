@@ -335,7 +335,7 @@ export default function InterviewPrepPage() {
                     className="btn-ghost no-print"
                     style={{ display: 'inline-flex', marginTop: 10, fontSize: 12.5, textDecoration: 'none' }}
                   >
-                    🎙 Practice out loud{!isPro && ' 🔒 Pro'}
+                    🎙 Practice out loud{!isPro && ' 🔒 Sprint'}
                   </a>
                 </div>
                 {prep && (

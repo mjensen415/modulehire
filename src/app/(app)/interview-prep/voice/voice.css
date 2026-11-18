@@ -26,6 +26,7 @@
   padding: 20px 22px;
 }
 .vi-callout { border-color: var(--teal-glow); font-size: 14px; margin-bottom: 18px; }
+.vi-callout-sprint { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 
 /* ─── Buttons ─── */
 .vi-btn {

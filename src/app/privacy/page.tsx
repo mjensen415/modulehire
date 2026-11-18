@@ -96,7 +96,7 @@ export default function PrivacyPage() {
 
           <section id="voice">
             <h2 style={h2}>5. Voice mock interviews</h2>
-            <p style={p}>Pro members can practice interviews out loud with an AI interviewer. This section explains what happens to your voice and what we keep.</p>
+            <p style={p}>Members with a Sprint can practice interviews out loud with an AI interviewer. This section explains what happens to your voice and what we keep.</p>
             <h3 style={h3}>Consent</h3>
             <p style={p}>Before your first session we ask you to confirm that you understand you are talking to an AI, and that your voice will be recorded and processed to run the conversation. We record when you agreed and to which version of this notice. A session does not start without it.</p>
             <h3 style={h3}>What we send and to whom</h3>
