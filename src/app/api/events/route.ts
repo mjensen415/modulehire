@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 // Product measurement for the v2 generate flow, logged to usage_events as ev_<name>.
 // Server-side events (ev_draft_created in /api/jobs/start, ev_export in the download route)
 // log themselves; this takes the ones only the browser sees.
-// classic_open: the old wizard (/generate?classic=1) — it's removed once this shows 7 days of no use.
+// classic_open: kept so old clients don't 400; the classic wizard itself was removed 2026-11-18.
 const CLIENT_EVENTS = new Set(['export_text', 'library_add', 'rail_tab', 'classic_open'])
 
 export async function POST(req: Request) {

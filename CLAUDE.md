@@ -59,9 +59,9 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 
 ### Priority 1 — Core bugs / immediate polish
 1. **Library UX polish** — Editing UX for job experiences, modules, and skills is rough. Need inline editing, add/remove flows, and better empty states. Data loads correctly now; interaction layer needs work.
-2. **Surface parse errors** — `parseModules` swallows job_experience upsert errors. Add `jobSyncError` to return type, surface in API response. Prompt for Code already written.
-3. **Backfill button** — "Sync jobs from modules" in Library sidebar → POST `/api/backfill-job-experiences`. Prompt for Code already written.
-4. **Profile sync UX** — First upload: auto-populate silently (done). Subsequent uploads: show modal "Update your profile from this resume?" with "Don't ask again" checkbox stored in `localStorage['mh-profile-sync-skip']`. Prompt for Code already written.
+2. ~~**Surface parse errors**~~ Done: `jobSyncError` in `parse-modules.ts`, surfaced by `parse-resume`.
+3. ~~**Backfill button**~~ Done: Library calls `POST /api/backfill-job-experiences`.
+4. ~~**Profile sync UX**~~ Done: `/upload` asks on later uploads, `localStorage['mh-profile-sync-skip']`.
 
 ### Priority 2 — ATS score & resume quality
 5. **ATS score improvement** — Current test returned 46/100. The whole point of the app is to get through ATS. Changes needed:
@@ -158,6 +158,11 @@ focused parse calls 6400 because Haiku overran 2048 on long roles and 3200 on ex
 120 for `analyze-jd`, `match-modules` (+ prompt-lab mirror), `match-report`, `interview-prep`,
 `admin/prompt-lab/jd-parse`.
 
+**Spend alarm:** `/api/cron/ai-usage` (daily, `vercel.json`) estimates cost from these rows
+(`src/lib/ai-usage-alarm.ts` holds per-model prices and thresholds) and emails `ALERT_EMAIL`
+(default info@modulehire.com) only when a threshold is crossed. A call without `userId` isn't logged,
+so it isn't counted: pass `{ userId, action }` on every new call site.
+
 `checkOrgDailyScoreCap()` in `src/lib/rate-limit.ts` caps AI-scored applicants at 500/day per org
 (`organizations.tier != 'enterprise'` only), checked before `scoreApplicant()` in the CSV and
 single-upload business routes — bulk scoring now runs on the `quality` tier, several times the
@@ -241,7 +246,7 @@ the source text; `verifiedQuote()` in `parse-modules.ts` keeps it only if it rea
 route that reads modules to use them starts from `getUsableModules()` (`src/lib/usable-modules.ts`:
 `status = 'confirmed'` and not deleted) — match (`match.ts`), match report, `jobs/start`,
 `generate-resume`, the editor's library/swap/fact guard (`resumes/[id]`), rewrite-block, suggestions,
-outreach, interview prep, theme-alignment/auto-select (classic), legacy doc rebuild, and MCP
+outreach, interview prep, legacy doc rebuild, and MCP
 `search_modules`/`update_block`. `/api/my-modules` lists confirmed only. A new route that uses modules
 must go through it.
 - Review queue: `src/components/ReviewQueue.tsx` (top of `/library` as "To review (n)", and
@@ -364,8 +369,10 @@ title) and admin-only tooling (`admin/pipeline`, `admin/prompt-lab`).
 ## Generate v2: paste → draft → edit (`/generate`)
 `/generate` is three states, no wizard: paste a posting (text or link) → Building (~20s,
 `GenerateV2.tsx`, stage list driven by real events) → `/resumes/[id]` open in the editor. The
-old four-step wizard is `ClassicGenerate.tsx` at `/generate?classic=1` for one release (every URL
-it writes keeps `classic=1`; legacy `&step=` links also land there) — remove it after.
+old four-step wizard (`ClassicGenerate.tsx`, `?classic=1`) was removed 2026-11-18 after 45 days with
+no `ev_classic_open`, along with the routes only it used: `auto-select-modules`, `draft-generation`,
+`my-skills`, `suggest-module-rewrite`, `suggest-summary`, `theme-alignment` (the `draft_generations`
+table is left in place, unused).
 `/generate?jd_id=` (Regenerate / Make another version) starts a v2 draft for that JD directly.
 - `POST /api/jobs/start` (`{ raw_text } | { url } | { jd_id }`) streams NDJSON `basics` → `criteria`
   → `match` → `draft_summary`/`draft_job` → `document` → `done`. It calls the analyze-jd,
