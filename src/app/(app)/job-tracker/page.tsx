@@ -208,6 +208,8 @@ export default function JobTrackerPage() {
   const [responsePrompt, setResponsePrompt] = useState<ResponsePrompt | null>(null)
   const [outreach, setOutreach] = useState<{ app: JobApplication; purpose: 'informational' | 'follow_up' } | null>(null)
   const [proGateOpen, setProGateOpen] = useState(false)
+  // Moving a job to Interviewing asks "Add the interview date?" (→ /interviews?app=<id>).
+  const [interviewPrompt, setInterviewPrompt] = useState<JobApplication | null>(null)
 
   const [view, setView] = useState<'board' | 'list'>('board')
   const [archivedOpen, setArchivedOpen] = useState(false)
@@ -305,6 +307,10 @@ export default function JobTrackerPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Could not save application')
       setModalOpen(false)
+      if (form.status === 'interviewing' && editingApp?.status !== 'interviewing') {
+        const saved = (data.application ?? editingApp) as JobApplication | null
+        if (saved?.id) setInterviewPrompt({ ...saved, company: payload.company, title: payload.title })
+      }
       await loadApplications()
     } catch (e) {
       setFormError((e as Error).message)
@@ -346,6 +352,7 @@ export default function JobTrackerPage() {
         body: JSON.stringify(payload),
       })
       if (!res.ok) throw new Error('Could not update status')
+      if (status === 'interviewing' && app.status !== 'interviewing') setInterviewPrompt(app)
       await loadApplications()
     } catch (e) {
       setApplications((apps) => apps.map((a) => (a.id === app.id ? { ...a, status: app.status } : a)))
@@ -866,6 +873,27 @@ export default function JobTrackerPage() {
               >
                 Save
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {interviewPrompt && (
+        <div
+          onClick={() => setInterviewPrompt(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 }}
+        >
+          <div
+            role="dialog"
+            aria-label="Add the interview date"
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 14, padding: 24, width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 12 }}
+          >
+            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Add the interview date?</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>{interviewPrompt.title} · {interviewPrompt.company}. We&apos;ll build a prep page and practice questions for the round.</div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+              <button className="btn-ghost" onClick={() => setInterviewPrompt(null)}>Not now</button>
+              <Link className="btn-primary" style={{ textDecoration: 'none' }} href={`/interviews?app=${interviewPrompt.id}`}>Add the round</Link>
             </div>
           </div>
         </div>

@@ -7,6 +7,7 @@ import ReviewQueue from '@/components/ReviewQueue'
 import HomeHeader from './HomeHeader'
 import TodaySteps from './TodaySteps'
 import McpPromoCard from './McpPromoCard'
+import '@/app/warm.css'
 import './home.css'
 
 // Today home: what's next, at a glance. Replaces the old dashboard (same route; many redirects
@@ -88,7 +89,7 @@ export default async function Home() {
   const brandNew = (anyModules.count ?? 0) === 0 && (docs.data ?? []).length === 0 && (tracking.count ?? 0) === 0 && (jdCount.count ?? 0) === 0
 
   return (
-    <div className="home">
+    <div className="home warm">
       <div className="home-inner">
         <HomeHeader firstName={firstName} summary={brandNew ? "Let's build your library first." : summary} />
 
@@ -109,7 +110,7 @@ export default async function Home() {
             <section className="home-stats" aria-label="At a glance">
               <Link href="/job-tracker" className="home-stat"><span className="home-stat-value">{tracking.count ?? 0}</span><span className="home-stat-label">Jobs you&apos;re tracking</span></Link>
               <Link href="/job-tracker" className="home-stat"><span className="home-stat-value">{appliedMonth.count ?? 0}</span><span className="home-stat-label">Applied this month</span></Link>
-              <div className="home-stat"><span className="home-stat-value">{upcomingCount}</span><span className="home-stat-label">Interviews coming up</span></div>
+              <Link href="/interviews" className="home-stat"><span className="home-stat-value">{upcomingCount}</span><span className="home-stat-label">Interviews coming up</span></Link>
               <Link href="/library" className="home-stat"><span className="home-stat-value">{confirmed.count ?? 0}</span><span className="home-stat-label">Confirmed modules</span></Link>
             </section>
 
@@ -167,22 +168,23 @@ export default async function Home() {
               <section className="home-panel">
                 <div className="home-panel-head">
                   <h2 className="home-panel-title">Interviews</h2>
+                  <Link href="/interviews" className="home-panel-link">All interviews</Link>
                 </div>
                 {(nextInterviews.error || (nextInterviews.data ?? []).length === 0) ? (
-                  <p className="home-panel-empty">No interviews scheduled. When you land one, add it here and we&apos;ll help you prep.</p>
+                  <p className="home-panel-empty">No interviews scheduled. When you land one, <Link href="/interviews" className="home-panel-link">add the round</Link> and we&apos;ll help you prep.</p>
                 ) : (
                   <ul className="home-rows">
                     {(nextInterviews.data ?? []).map(iv => {
                       const app = Array.isArray(iv.job_applications) ? iv.job_applications[0] : iv.job_applications
                       return (
                         <li key={iv.id}>
-                          <div className="home-row">
+                          <Link href={`/interviews/${iv.id}`} className="home-row">
                             <div className="home-row-main">
                               <div className="home-row-title">{iv.round_name}{app?.company ? ` · ${app.company}` : ''}</div>
                               <div className="home-row-sub">{iv.scheduled_at ? shortDate(iv.scheduled_at) : 'Date not set'}{iv.format ? ` · ${iv.format}` : ''}</div>
                             </div>
                             <span className="home-chip">Prep</span>
-                          </div>
+                          </Link>
                         </li>
                       )
                     })}
