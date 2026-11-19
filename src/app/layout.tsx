@@ -41,12 +41,13 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
+      data-theme="light"
       suppressHydrationWarning
       className={`${jakarta.variable} ${mono.variable} h-full antialiased`}
     >
       <head>
         {/* Blocking script — applies saved theme before first paint to prevent flash */}
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('mh-theme')||(window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t)}catch(e){}})()` }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('mh-theme')||'light';document.documentElement.setAttribute('data-theme',t)}catch(e){}})()` }} />
       </head>
       <body className="min-h-full flex flex-col">
         {children}

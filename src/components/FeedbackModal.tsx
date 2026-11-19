@@ -198,7 +198,7 @@ export default function FeedbackModal({ isOpen, onClose }: { isOpen: boolean; on
 
             {error && (
               <div style={{
-                background: 'oklch(0.4 0.18 10 / 0.15)',
+                background: 'color-mix(in srgb, var(--rose) 15%, transparent)',
                 border: '1px solid var(--rose)',
                 borderRadius: 8,
                 padding: '8px 12px',

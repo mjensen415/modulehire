@@ -169,6 +169,17 @@ so it isn't counted: pass `{ userId, action }` on every new call site.
 single-upload business routes — bulk scoring now runs on the `quality` tier, several times the
 cost of Haiku.
 
+## Site palette (`src/app/globals.css` tokens)
+The whole site uses one warm-neutral palette with brand teal as the only accent, in dark (`:root`, the
+default) and light (`[data-theme="light"]`): `--bg/--surface/--border/--text*` are warm neutrals,
+`--teal` is `#5fbfa8` dark / `#1f6f63` light, and amber/indigo/rose/green are toned down. Don't
+hardcode colors: use the tokens, and `color-mix(in srgb, var(--teal) 15%, transparent)` for tints
+(every old `oklch(0.65 0.20 195 / x)` and similar literal was converted to this). `warm.css`'s `--h-*`
+tokens match: card tints are one earthy family (`--h-peach` = clay, `--h-butter` = sand, `--h-sage`,
+`--h-lavender` = pale teal; names are historical). Don't add a second accent or a cool pastel. Left
+alone on purpose: the logo's brand green `#1d9e75`, provider logo colors on sign-in, and the press
+kit (`/press`, approved assets, keeps its navy logo stage). Contrast checked to WCAG AA.
+
 ## Today home (`/dashboard`)
 The route stays `/dashboard` (redirects and links point at it); the sidebar calls it Home. Server
 page `src/app/(app)/dashboard/page.tsx` with warm styles scoped to `.home` in `home.css` (cream /

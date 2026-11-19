@@ -142,7 +142,7 @@ function BusinessLanding() {
             Sign in
           </Link>
           <Link href={SIGNUP_HREF} style={{
-            fontSize: 13, fontWeight: 700, color: '#fff',
+            fontSize: 13, fontWeight: 700, color: 'var(--on-teal)',
             textDecoration: 'none', padding: '8px 16px',
             background: 'var(--teal)', borderRadius: 7,
           }}>
@@ -185,10 +185,10 @@ function BusinessLanding() {
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
           <Link href={SIGNUP_HREF} style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
-            fontSize: 15, fontWeight: 700, color: '#fff',
+            fontSize: 15, fontWeight: 700, color: 'var(--on-teal)',
             textDecoration: 'none', padding: '13px 28px',
             background: 'var(--teal)', borderRadius: 9,
-            boxShadow: '0 8px 28px oklch(0.65 0.20 195 / 0.30)',
+            boxShadow: '0 8px 28px color-mix(in srgb, var(--teal) 30%, transparent)',
           }}>
             Try it free →
           </Link>
@@ -283,7 +283,7 @@ function BusinessLanding() {
         <div style={{ textAlign: 'center', marginTop: 52 }}>
           <Link href={SIGNUP_HREF} style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
-            fontSize: 14, fontWeight: 700, color: '#fff',
+            fontSize: 14, fontWeight: 700, color: 'var(--on-teal)',
             textDecoration: 'none', padding: '12px 26px',
             background: 'var(--teal)', borderRadius: 8,
           }}>
@@ -401,10 +401,10 @@ function BusinessLanding() {
         </p>
         <Link href={SIGNUP_HREF} style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
-          fontSize: 15, fontWeight: 700, color: '#fff',
+          fontSize: 15, fontWeight: 700, color: 'var(--on-teal)',
           textDecoration: 'none', padding: '14px 32px',
           background: 'var(--teal)', borderRadius: 9,
-          boxShadow: '0 8px 28px oklch(0.65 0.20 195 / 0.30)',
+          boxShadow: '0 8px 28px color-mix(in srgb, var(--teal) 30%, transparent)',
         }}>
           Get started free →
         </Link>

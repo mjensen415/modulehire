@@ -107,7 +107,7 @@ function OutputResume() {
         display:'flex', gap:4, flexWrap:'wrap'
       }}>
         <div className="output-badge">tailored.pdf</div>
-        <div className="output-badge" style={{background:'oklch(0.72 0.18 58 / 0.12)', color:'var(--amber)', borderColor:'oklch(0.72 0.18 58 / 0.3)'}}>ready.docx</div>
+        <div className="output-badge" style={{background:'color-mix(in srgb, var(--amber) 12%, transparent)', color:'var(--amber)', borderColor:'color-mix(in srgb, var(--amber) 30%, transparent)'}}>ready.docx</div>
       </div>
     </div>
   );
@@ -123,13 +123,13 @@ function ArrowsSVG() {
     <svg className="arrows-svg" viewBox="0 0 1200 480" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <marker id="arrowTeal" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-          <path d="M0,0 L6,3 L0,6 Z" fill="oklch(0.65 0.20 195)" opacity="0.9"/>
+          <path d="M0,0 L6,3 L0,6 Z" fill="var(--teal)" opacity="0.9"/>
         </marker>
         <marker id="arrowAmber" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-          <path d="M0,0 L6,3 L0,6 Z" fill="oklch(0.72 0.18 58)" opacity="0.9"/>
+          <path d="M0,0 L6,3 L0,6 Z" fill="var(--amber)" opacity="0.9"/>
         </marker>
         <marker id="arrowIndigo" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-          <path d="M0,0 L6,3 L0,6 Z" fill="oklch(0.62 0.18 270)" opacity="0.9"/>
+          <path d="M0,0 L6,3 L0,6 Z" fill="var(--indigo)" opacity="0.9"/>
         </marker>
       </defs>
 
@@ -156,9 +156,9 @@ function ArrowsSVG() {
         markerEnd="url(#arrowIndigo)" />
 
       {/* origin dots — anchored inside source panel */}
-      <circle className="arrow-dot" cx="200" cy="150" r="2.5" fill="oklch(0.65 0.20 195)" />
-      <circle className="arrow-dot" cx="200" cy="240" r="2.5" fill="oklch(0.72 0.18 58)" style={{animationDelay:'0.4s'}} />
-      <circle className="arrow-dot" cx="200" cy="320" r="2.5" fill="oklch(0.62 0.18 270)" style={{animationDelay:'0.8s'}} />
+      <circle className="arrow-dot" cx="200" cy="150" r="2.5" fill="var(--teal)" />
+      <circle className="arrow-dot" cx="200" cy="240" r="2.5" fill="var(--amber)" style={{animationDelay:'0.4s'}} />
+      <circle className="arrow-dot" cx="200" cy="320" r="2.5" fill="var(--indigo)" style={{animationDelay:'0.8s'}} />
     </svg>
   );
 }
@@ -201,17 +201,23 @@ export default function Home() {
   const [tweaksVisible, setTweaksVisible] = useState(false);
 
   useEffect(() => {
+    // Teal is the theme's own accent, so leave --teal alone (setting it to var(--teal) is a cycle
+    // and blanks every teal button). Other accents override it until this page unmounts, so the
+    // override never follows the visitor into the rest of the site.
     const accentMap: Record<string, string> = {
-      teal: 'oklch(0.65 0.20 195)',
-      amber: 'oklch(0.72 0.18 58)',
-      indigo: 'oklch(0.62 0.18 270)',
+      amber: 'var(--amber)',
+      indigo: 'var(--indigo)',
     };
-    document.documentElement.style.setProperty('--teal', accentMap[tweaks.accentColor] || accentMap.teal);
+    const root = document.documentElement;
+    const override = accentMap[tweaks.accentColor];
+    if (override) root.style.setProperty('--teal', override);
+    else root.style.removeProperty('--teal');
 
     const allAnimated = document.querySelectorAll('.scan-line, .arrow-path, .arrow-dot') as NodeListOf<HTMLElement>;
     allAnimated.forEach(el => {
       el.style.animationPlayState = tweaks.showAnimations ? 'running' : 'paused';
     });
+    return () => { root.style.removeProperty('--teal'); };
   }, [tweaks]);
 
   function handleUpdate(updates: Partial<typeof TWEAK_DEFAULTS>) {
@@ -243,7 +249,7 @@ export default function Home() {
           <em style={{
             fontStyle: 'normal',
             display: 'inline',
-            background: 'linear-gradient(135deg, oklch(0.65 0.20 195), oklch(0.72 0.20 220))',
+            background: 'linear-gradient(135deg, var(--teal), color-mix(in srgb, var(--teal) 70%, var(--surface)))',
             WebkitBackgroundClip: 'text',
             backgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
@@ -494,7 +500,7 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <div style={{ flex: '1 1 50%', background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.15)', borderRadius: 8, padding: '10px 12px', minWidth: 0 }}>
+                  <div style={{ flex: '1 1 50%', background: 'color-mix(in srgb, var(--amber) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--amber) 15%, transparent)', borderRadius: 8, padding: '10px 12px', minWidth: 0 }}>
                     <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--amber)', textTransform: 'uppercase', marginBottom: 6 }}>
                       Gaps to prep for
                     </div>
@@ -693,7 +699,7 @@ export default function Home() {
           }}>
             {[
               { name: 'Jordan M.', score: 91, color: '#1d9e75' },
-              { name: 'Casey T.', score: 74, color: '#f59e0b' },
+              { name: 'Casey T.', score: 74, color: 'var(--amber)' },
               { name: 'Robin K.', score: 43, color: 'var(--text3)' },
             ].map(({ name, score, color }) => (
               <div key={name} style={{
@@ -712,7 +718,7 @@ export default function Home() {
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               padding: '14px 32px', borderRadius: 9,
-              background: 'var(--teal)', color: '#fff',
+              background: 'var(--teal)', color: 'var(--on-teal)',
               fontWeight: 700, fontSize: 15, textDecoration: 'none',
             }}
           >

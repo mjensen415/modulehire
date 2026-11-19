@@ -14,9 +14,9 @@
 .home-stat { border-radius: 16px; padding: 16px 18px 18px; border: 1px solid var(--h-line); text-decoration: none; display: flex; flex-direction: column; gap: 6px; transition: transform 0.15s ease, border-color 0.15s ease; }
 .home-stat:hover { transform: translateY(-1px); border-color: var(--h-line-strong); }
 .home-stat:nth-child(1) { background: var(--h-peach); }
-.home-stat:nth-child(2) { background: var(--h-sage); }
-.home-stat:nth-child(3) { background: var(--h-lavender); }
-.home-stat:nth-child(4) { background: var(--h-butter); }
+.home-stat:nth-child(2) { background: var(--h-butter); }
+.home-stat:nth-child(3) { background: var(--h-sage); }
+.home-stat:nth-child(4) { background: var(--h-lavender); }
 .home-stat-value { font-family: var(--h-serif); font-size: 34px; line-height: 1; font-weight: 500; }
 .home-stat-label { font-size: 13px; color: var(--h-muted); font-weight: 600; }
 

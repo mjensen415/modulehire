@@ -43,9 +43,9 @@ export default function Modules() {
               </div>
 
               <svg style={{ position: 'absolute', left: 140, right: 150, top: 0, bottom: 0, width: 'calc(100% - 290px)', height: '100%', overflow: 'visible' }} viewBox="0 0 120 340" preserveAspectRatio="none">
-                <path d="M 0 120 C 40 120, 80 90, 120 80" fill="none" stroke="oklch(0.65 0.20 195)" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.7" style={{ animation: 'dashFlow 2s linear infinite' }} />
-                <path d="M 0 170 C 40 170, 80 170, 120 170" fill="none" stroke="oklch(0.72 0.18 58)" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.7" style={{ animation: 'dashFlow 2.2s linear infinite 0.4s' }} />
-                <path d="M 0 220 C 40 220, 80 255, 120 260" fill="none" stroke="oklch(0.62 0.18 270)" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.7" style={{ animation: 'dashFlow 1.8s linear infinite 0.8s' }} />
+                <path d="M 0 120 C 40 120, 80 90, 120 80" fill="none" stroke="var(--teal)" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.7" style={{ animation: 'dashFlow 2s linear infinite' }} />
+                <path d="M 0 170 C 40 170, 80 170, 120 170" fill="none" stroke="var(--amber)" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.7" style={{ animation: 'dashFlow 2.2s linear infinite 0.4s' }} />
+                <path d="M 0 220 C 40 220, 80 255, 120 260" fill="none" stroke="var(--indigo)" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.7" style={{ animation: 'dashFlow 1.8s linear infinite 0.8s' }} />
               </svg>
 
               <div className="ev-modules" style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)' }}>

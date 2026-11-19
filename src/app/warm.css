@@ -3,10 +3,12 @@
    :root is the dark theme in this app; [data-theme="light"] is light. */
 .warm {
   --h-bg: #1c1814; --h-card: #25201b; --h-card2: #2c261f;
-  --h-ink: #f2e9dc; --h-muted: #b5a691; --h-faint: #85786a;
+  --h-ink: #f2e9dc; --h-muted: #b5a691; --h-faint: #9a8b7a;
   --h-line: rgba(242, 233, 220, 0.09); --h-line-strong: rgba(242, 233, 220, 0.18);
-  --h-peach: #4a3324; --h-sage: #2c3a2b; --h-lavender: #332f48; --h-butter: #463c1f;
-  --h-accent: #e3a072; --h-accent-ink: #1c1814; --h-good: #8fc28a;
+  /* Card tints: one earthy family plus a pale brand teal. The names are historical:
+     peach = clay, butter = sand, lavender = teal mint (it used to be the one cool pastel). */
+  --h-peach: #45301f; --h-sage: #2c3628; --h-lavender: #203a34; --h-butter: #40361f;
+  --h-accent: #5fbfa8; --h-accent-ink: #1c1814; --h-good: #8fc28a;
   --h-serif: ui-serif, 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
   background: var(--h-bg);
   color: var(--h-ink);
@@ -15,10 +17,10 @@
 }
 [data-theme="light"] .warm {
   --h-bg: #f7f1e6; --h-card: #fffcf6; --h-card2: #fbf5ea;
-  --h-ink: #2b2219; --h-muted: #6e604f; --h-faint: #9a8b78;
+  --h-ink: #2b2219; --h-muted: #5c4f40; --h-faint: #7a6b58;
   --h-line: rgba(70, 48, 22, 0.1); --h-line-strong: rgba(70, 48, 22, 0.22);
-  --h-peach: #fbe0cb; --h-sage: #dcead6; --h-lavender: #e6e0f6; --h-butter: #f9ecc1;
-  --h-accent: #b9572a; --h-accent-ink: #fffcf6; --h-good: #3f7a3a;
+  --h-peach: #f3e3d5; --h-sage: #e3eadc; --h-lavender: #dcebe5; --h-butter: #f1e8d3;
+  --h-accent: #1f6f63; --h-accent-ink: #fffcf6; --h-good: #3f7a3a;
 }
 /* Full bleed: the shell's padding would frame the cream ground. Keeps the mobile tab-bar gap. */
 .app-main:has(> .warm) { padding: 0 0 var(--home-bottom-gap, 0) 0 !important; }

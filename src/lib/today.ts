@@ -121,6 +121,10 @@ export async function computeTodaySteps(supabase: SupabaseClient, userId: string
   // 4. Resume built but not applied: a tailored resume for a posting the user hasn't applied to.
   const appliedJds = new Set(appRows.filter(a => a.status !== 'saved' && a.job_description_id).map(a => a.job_description_id))
   const jdById = new Map(jdRows.map(j => [j.id, j]))
+  // The same posting can exist as two job_descriptions rows (pasted twice, or from before the
+  // raw_text_hash dedupe), so collapse by company + title; resumeByJd is newest-first, so the
+  // newest resume wins.
+  const seenPostings = new Set<string>()
   for (const [jdId, resumeId] of resumeByJd) {
     if (appliedJds.has(jdId)) continue
     const app = appRows.find(a => a.job_description_id === jdId)
@@ -128,6 +132,9 @@ export async function computeTodaySteps(supabase: SupabaseClient, userId: string
     const jd = jdById.get(jdId)
     const title = app?.title || jd?.extracted_job_title || 'this role'
     const company = app?.company || jd?.extracted_company || 'the company'
+    const postingKey = `${company}|${title}`.toLowerCase().replace(/\s+/g, ' ').trim()
+    if (seenPostings.has(postingKey)) continue
+    seenPostings.add(postingKey)
     steps.push({ key: `apply:${jdId}`, priority: 4, title: `Apply to ${title} at ${company}`, href: `/resumes/${resumeId}` })
   }
 
