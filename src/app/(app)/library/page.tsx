@@ -1407,7 +1407,7 @@ export default function LibraryPage() {
                   <button
                     onClick={saveModuleEdit}
                     disabled={savingModule || !editModuleTitle.trim()}
-                    style={{ fontSize: 13, padding: '8px 20px', borderRadius: 8, border: 'none', background: 'var(--teal)', color: '#fff', cursor: savingModule ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', fontWeight: 600, opacity: (!editModuleTitle.trim() || savingModule) ? 0.6 : 1 }}
+                    style={{ fontSize: 13, padding: '8px 20px', borderRadius: 8, border: 'none', background: 'var(--teal)', color: 'var(--on-teal)', cursor: savingModule ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)', fontWeight: 600, opacity: (!editModuleTitle.trim() || savingModule) ? 0.6 : 1 }}
                   >
                     {savingModule ? 'Saving…' : 'Save changes'}
                   </button>

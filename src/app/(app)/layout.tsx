@@ -1,5 +1,4 @@
 import '@/app/globals.css';
-import '@/app/app-theme.css';
 import { redirect } from 'next/navigation';
 import AppSidebar from '@/components/layout/AppSidebar';
 import { accessEndsAt, hasActiveSprint } from '@/lib/entitlements';

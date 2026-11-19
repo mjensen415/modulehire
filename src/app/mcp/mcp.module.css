@@ -88,7 +88,7 @@
   border: 1px solid var(--border2);
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 30px 80px -30px oklch(0.65 0.20 195 / 0.35), 0 0 0 1px var(--border);
+  box-shadow: 0 30px 80px -30px color-mix(in srgb, var(--teal) 35%, transparent), 0 0 0 1px var(--border);
 }
 .demoChrome {
   display: flex;
@@ -113,7 +113,7 @@
   border-radius: 999px;
   padding: 4px 10px;
 }
-.connectedDot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 3px oklch(0.65 0.20 195 / 0.25); }
+.connectedDot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 25%, transparent); }
 .demoBody {
   height: 420px;
   overflow: hidden;
@@ -153,7 +153,7 @@
 .toolChipHead { display: flex; align-items: center; gap: 10px; }
 .toolChipMark {
   width: 22px; height: 22px; border-radius: 6px;
-  background: var(--teal); color: #fff;
+  background: var(--teal); color: var(--on-teal);
   font-family: var(--mono); font-size: 9px; font-weight: 800;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
@@ -171,7 +171,7 @@
 
 .moduleCard {
   margin-top: 10px;
-  border: 1px solid oklch(0.65 0.20 195 / 0.3);
+  border: 1px solid color-mix(in srgb, var(--teal) 30%, transparent);
   background: var(--teal-dim);
   border-radius: 8px;
   padding: 10px 12px;
@@ -179,7 +179,7 @@
 .moduleTags { display: flex; gap: 6px; margin-bottom: 6px; }
 .moduleTags span {
   font-family: var(--mono); font-size: 10px; color: var(--teal);
-  border: 1px solid oklch(0.65 0.20 195 / 0.4); border-radius: 999px; padding: 1px 8px;
+  border: 1px solid color-mix(in srgb, var(--teal) 40%, transparent); border-radius: 999px; padding: 1px 8px;
 }
 .moduleTitle { font-size: 13.5px; font-weight: 700; margin-bottom: 3px; }
 .moduleBody { font-size: 12.5px; color: var(--text2); line-height: 1.5; }
@@ -220,7 +220,7 @@
 .resumeLineHl { background: var(--amber-dim); color: var(--text) !important; animation: popIn 0.35s ease; }
 .resumeActions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
 .fakeBtnPrimary, .fakeBtn { font-size: 12px; font-weight: 700; border-radius: 6px; padding: 6px 12px; }
-.fakeBtnPrimary { background: var(--teal); color: #fff; }
+.fakeBtnPrimary { background: var(--teal); color: var(--on-teal); }
 .fakeBtn { border: 1px solid var(--border2); color: var(--text2); }
 
 .composer {
@@ -241,7 +241,7 @@
   display: flex; align-items: center; justify-content: center;
   background: var(--border2); color: var(--text3); transition: background 0.2s, color 0.2s;
 }
-.sendBtnOn { background: var(--teal); color: #fff; }
+.sendBtnOn { background: var(--teal); color: var(--on-teal); }
 .demoControls {
   display: flex;
   align-items: center;
@@ -372,7 +372,7 @@
 /* ─── Plans ─── */
 .planGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; max-width: 760px; margin: 0 auto; }
 .planCard { background: var(--surface); border: 1px solid var(--border2); border-radius: 14px; padding: 24px; }
-.planPro { border-color: var(--teal-glow); box-shadow: 0 0 0 1px var(--teal-dim), 0 20px 50px -30px oklch(0.65 0.20 195 / 0.5); }
+.planPro { border-color: var(--teal-glow); box-shadow: 0 0 0 1px var(--teal-dim), 0 20px 50px -30px color-mix(in srgb, var(--teal) 50%, transparent); }
 .planName { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 14px; }
 .planPrice { margin-bottom: 14px; font-size: 14px; font-weight: 600; color: var(--text); }
 .planList { list-style: none; display: grid; gap: 10px; }

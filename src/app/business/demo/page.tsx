@@ -31,7 +31,7 @@ export default function BusinessDemoPage() {
             ← Overview
           </Link>
           <Link href="/signin?signup=1&next=/business" style={{
-            fontSize: 13, fontWeight: 700, color: '#fff', textDecoration: 'none',
+            fontSize: 13, fontWeight: 700, color: 'var(--on-teal)', textDecoration: 'none',
             padding: '8px 14px', background: 'var(--teal)', borderRadius: 7,
           }}>
             Try it with your own job →

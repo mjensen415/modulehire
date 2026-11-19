@@ -28,7 +28,7 @@ export default function UnderstandingModules() {
       </div>
 
       <div className="step-block">
-        <div className="step-block-num" style={{ background: 'oklch(0.72 0.18 58)', color: 'var(--bg)' }}>C</div>
+        <div className="step-block-num" style={{ background: 'var(--amber)', color: 'var(--bg)' }}>C</div>
         <div className="step-block-body">
           <h3>Content</h3>
           <p>The body of the module — a paragraph or two describing the work you did in this specific domain, at this specific company. Written in first-person past tense. The output resume uses this content almost verbatim, with light rewording to match the JD's language.</p>
@@ -36,7 +36,7 @@ export default function UnderstandingModules() {
       </div>
 
       <div className="step-block">
-        <div className="step-block-num" style={{ background: 'oklch(0.62 0.18 270)', color: 'var(--bg)' }}>M</div>
+        <div className="step-block-num" style={{ background: 'var(--indigo)', color: 'var(--bg)' }}>M</div>
         <div className="step-block-body">
           <h3>Metadata</h3>
           <p>Each module carries a source company, job title, date range, employment type, weight, type, and a set of tags. This metadata powers the matching engine — it's what lets the system know a module is relevant to a VP-level community role at a growth-stage company, for example.</p>

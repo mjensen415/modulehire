@@ -86,7 +86,7 @@ export default function EditModuleForm({ module: initial, pinnedElsewhere }: { m
   return (
     <div style={{ paddingTop: 8 }}>
       {error && (
-        <div style={{ background: 'oklch(0.4 0.18 10 / 0.15)', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)', marginBottom: 20 }}>
+        <div style={{ background: 'color-mix(in srgb, var(--rose) 15%, transparent)', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)', marginBottom: 20 }}>
           {error}
         </div>
       )}
