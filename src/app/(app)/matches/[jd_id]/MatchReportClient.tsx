@@ -39,7 +39,7 @@ export default function MatchReportClient({
 
   if (error) {
     return (
-      <div style={{ background: 'var(--rose-dim, oklch(0.4 0.18 10 / 0.15))', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)' }}>
+      <div style={{ background: 'var(--rose-dim, color-mix(in srgb, var(--rose) 15%, transparent))', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)' }}>
         {error}
       </div>
     )

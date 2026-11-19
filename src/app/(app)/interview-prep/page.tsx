@@ -303,7 +303,7 @@ export default function InterviewPrepPage() {
         {/* RIGHT — prep document */}
         <div ref={mainPanelRef} className="interview-prep-main" style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
           {error && (
-            <div className="no-print" style={{ background: 'oklch(0.4 0.18 10 / 0.15)', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)', marginBottom: 20, maxWidth: 680 }}>
+            <div className="no-print" style={{ background: 'color-mix(in srgb, var(--rose) 15%, transparent)', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)', marginBottom: 20, maxWidth: 680 }}>
               {error}
             </div>
           )}

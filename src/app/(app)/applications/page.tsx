@@ -25,7 +25,7 @@ const STATUS_CONFIG: Record<Status, { label: string; color: string; bg: string }
   viewed:    { label: 'Viewed',    color: 'var(--amber)',  bg: 'var(--amber-dim)' },
   interview: { label: 'Interview', color: 'var(--indigo)', bg: 'var(--indigo-dim)' },
   offer:     { label: 'Offer',     color: 'var(--green)',  bg: 'var(--green-dim)' },
-  rejected:  { label: 'Rejected',  color: 'var(--rose)',   bg: 'oklch(0.4 0.18 10 / 0.12)' },
+  rejected:  { label: 'Rejected',  color: 'var(--rose)',   bg: 'color-mix(in srgb, var(--rose) 12%, transparent)' },
 }
 
 function formatDate(iso: string) {
@@ -192,7 +192,7 @@ export default function ApplicationsPage() {
 
       <div className="dash-content">
         {error && (
-          <div style={{ background: 'oklch(0.4 0.18 10 / 0.15)', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)', marginBottom: 16 }}>
+          <div style={{ background: 'color-mix(in srgb, var(--rose) 15%, transparent)', border: '1px solid var(--rose)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--rose)', marginBottom: 16 }}>
             {error}
           </div>
         )}
