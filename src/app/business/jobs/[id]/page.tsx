@@ -420,7 +420,10 @@ export default function JobWorkspacePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       })
-      if (!res.ok) throw new Error('Could not update job status')
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error ?? 'Could not update job status')
+      }
       return true
     } catch (e) {
       setJob({ ...job, status: previous })

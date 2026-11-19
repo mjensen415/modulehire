@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getOrgRole } from '@/lib/business/org-access'
+import { canActivateJob, getOrgPlan, activeJobLimitMessage, UPGRADE_CODE } from '@/lib/business/plan'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -64,6 +65,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const allowed = ['draft', 'active', 'paused', 'closed']
       if (!allowed.includes(body.status)) {
         return NextResponse.json({ error: `status must be one of: ${allowed.join(', ')}` }, { status: 400 })
+      }
+      if (body.status === 'active' && !(await canActivateJob(supabase, existing.org_id, id))) {
+        const plan = await getOrgPlan(supabase, existing.org_id)
+        return NextResponse.json({ error: activeJobLimitMessage(plan), code: UPGRADE_CODE }, { status: 402 })
       }
       update.status = body.status
     }

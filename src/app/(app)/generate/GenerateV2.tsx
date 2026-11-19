@@ -51,7 +51,7 @@ const looksLikeUrl = (text: string) => /^https?:\/\/\S+$/i.test(text.trim())
 
 // v2: paste a posting → Building → the resume, open for editing on /resumes/[id].
 // No wizard: modules are picked for you, and everything the old Match step did lives in the
-// editor's rail. /generate?classic=1 still serves the old flow for one release.
+// editor's rail.
 export default function GenerateV2({ initialJdId }: { initialJdId: string | null }) {
   const router = useRouter()
   const [phase, setPhase] = useState<Phase>('paste')
