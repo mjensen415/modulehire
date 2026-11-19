@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { resolveAuth } from '@/lib/supabase/resolve-auth'
-import { validateExternalUrl } from '@/lib/url-validation'
+import { safeFetchText, validateExternalUrl } from '@/lib/url-validation'
 import { checkAndLog } from '@/lib/rate-limit'
 
 export const maxDuration = 30
@@ -30,34 +30,35 @@ export async function POST(req: Request) {
     )
   }
 
-  let html: string
-  try {
-    const res = await fetch(check.url.toString(), {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; ModuleHire/1.0)',
-        Accept: 'text/html,application/xhtml+xml',
-      },
-      signal: AbortSignal.timeout(15000),
-      redirect: 'manual', // don't follow redirects (would re-open SSRF)
-    })
-    if (res.status >= 300 && res.status < 400) {
-      return NextResponse.json({ error: 'URL redirected — please paste the final URL directly.' }, { status: 422 })
-    }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-
-    const contentType = res.headers.get('content-type') ?? ''
-    if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
-      return NextResponse.json({ error: 'URL did not return an HTML page.' }, { status: 422 })
-    }
-
-    const buf = await res.arrayBuffer()
-    if (buf.byteLength > MAX_HTML_BYTES) {
-      return NextResponse.json({ error: 'Page too large.' }, { status: 422 })
-    }
-    html = new TextDecoder().decode(buf)
-  } catch {
-    return NextResponse.json({ error: 'Could not fetch URL.' }, { status: 422 })
+  // safeFetchText re-checks the address it actually connects to (DNS rebinding), follows
+  // up to 3 redirects with each hop re-validated, and stops reading past the size cap.
+  const fetched = await safeFetchText(check.url, {
+    maxBytes: MAX_HTML_BYTES,
+    timeoutMs: 15000,
+    maxRedirects: 3,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; ModuleHire/1.0)',
+      Accept: 'text/html,application/xhtml+xml',
+    },
+  })
+  if (!fetched.ok) {
+    const error =
+      fetched.reason === 'blocked' ? 'That URL points somewhere we can\'t fetch from.'
+      : fetched.reason === 'too_large' ? 'Page too large.'
+      : fetched.reason === 'too_many_redirects' ? 'URL redirected too many times. Please paste the final URL directly.'
+      : 'Could not fetch URL.'
+    return NextResponse.json({ error }, { status: fetched.reason === 'blocked' ? 400 : 422 })
   }
+  if (fetched.finalUrl.hostname.endsWith('linkedin.com')) {
+    return NextResponse.json(
+      { error: 'LinkedIn blocks automated access. Please copy and paste the job description text directly.' },
+      { status: 422 }
+    )
+  }
+  if (!fetched.contentType.includes('text/html') && !fetched.contentType.includes('application/xhtml')) {
+    return NextResponse.json({ error: 'URL did not return an HTML page.' }, { status: 422 })
+  }
+  const html = fetched.body
 
   // Strip tags, collapse whitespace
   const text = html

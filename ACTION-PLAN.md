@@ -44,12 +44,12 @@ _This is the phase that actually gates the launch. Right now open signup = unbou
 
 ## Phase 2 — Payment integrity (this week, ~half day)
 
-- [ ] **P2.1 — Make the Stripe webhook idempotent** _(closes #3, Medium)_
+- [x] **P2.1 — Make the Stripe webhook idempotent** _(closes #3, Medium)_ ✅ 2026-11-18: `stripe_events` table (service role only, `supabase/migrations/20261118_stripe_events.sql`, applied); the webhook claims `event.id` first and acks duplicates with `{ duplicate: true }`.
   - Steps: create `stripe_events(id text primary key, type text, processed_at timestamptz default now())`; at the top of the handler, `insert ... on conflict do nothing`; if no row was inserted, return 200 without processing.
   - Done when: replaying the same `checkout.session.completed` event grants credits exactly once (test with Stripe CLI `stripe trigger` / resend).
   - Effort: 2 hrs.
 
-- [ ] **P2.2 — Fail loud on credit-grant errors** _(closes #4, Medium)_
+- [x] **P2.2 — Fail loud on credit-grant errors** _(closes #4, Medium)_ ✅ 2026-11-18: credit RPC, user plan and org tier write failures throw; the handler releases the claim and returns 500 so Stripe retries. Unresolvable users still 200 (a retry can't fix them). Alerting still waits on P3.1.
   - Steps: in the one-time-purchase branch, if `increment_resume_credits` returns an error, return a non-2xx so Stripe retries (safe now that P2.1 makes retries idempotent); log + alert.
   - Done when: a simulated RPC failure causes a Stripe retry rather than a silent `{ ok: true }`; the failure is visible in your error tracker (P3.1).
   - Effort: 1 hr. Depends on: P2.1.
@@ -65,7 +65,7 @@ _You currently have no way to know a paid credit was dropped or that AI calls ar
   - Done when: a thrown error in an API route shows up in Sentry with an alert.
   - Effort: 2 hrs.
 
-- [ ] **P3.2 — AI cost + abuse guardrail**
+- [x] **P3.2 — AI cost + abuse guardrail** ✅ 2026-11-18: `/api/cron/ai-usage` (daily 16:00 UTC) estimates spend from `usage_events.metadata` tokens (`src/lib/ai-usage-alarm.ts`) and emails `ALERT_EMAIL` (default info@modulehire.com) when 24h > $10, > 3x the 7-day average and > $2, or one user > $2 / 300 calls. `?force=1` with the cron bearer always emails. Still set a budget alert in the Anthropic console: unlogged calls (no userId) aren't counted.
   - Steps: set a budget alert in the Anthropic/OpenAI console; add a daily check on `usage_events` (count of AI actions/day, top users) — either a scheduled query or a small cron route. Alert on spikes.
   - Done when: an abnormal spike in generations/day triggers a notification.
   - Effort: 2 hrs. (Can be a scheduled task once built.)
@@ -74,12 +74,12 @@ _You currently have no way to know a paid credit was dropped or that AI calls ar
 
 ## Phase 4 — Cleanup & hardening (backlog, non-blocking)
 
-- [ ] **P4.1 — Consolidate checkout routes** _(closes #5, Medium)_
+- [x] **P4.1 — Consolidate checkout routes** _(closes #5, Medium)_ ✅ Done by the Sprints PR (#20): `/api/checkout` and `/api/checkout/overage` were removed; `/api/billing/checkout` is the only personal checkout.
   - Steps: confirm nothing calls `/api/checkout` (grep client + logs); delete it; remove the legacy branch in the webhook once no in-flight sessions use the old metadata shape.
   - Done when: one checkout route remains; webhook legacy path removed; payments still work end to end.
   - Effort: 1–2 hrs.
 
-- [ ] **P4.2 — Close the DNS-rebinding TOCTOU in `fetch-jd-url`** _(closes #9, Low)_
+- [x] **P4.2 — Close the DNS-rebinding TOCTOU in `fetch-jd-url`** _(closes #9, Low)_ ✅ 2026-11-18: `safeFetchText` (`src/lib/url-validation.ts`) checks the address at connect time via a guarded `lookup`, checks every DNS answer, blocks IPv4-mapped IPv6/CGNAT/multicast/reserved ranges, follows up to 3 re-validated redirects (http→https links used to fail) and stops reading past the size cap.
   - Steps: resolve DNS once, verify the address is public, fetch the pinned IP with the original Host header (or use an SSRF-safe agent).
   - Done when: validation and fetch cannot resolve to different IPs.
   - Effort: 1–2 hrs.

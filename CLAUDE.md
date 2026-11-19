@@ -59,9 +59,9 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 
 ### Priority 1 — Core bugs / immediate polish
 1. **Library UX polish** — Editing UX for job experiences, modules, and skills is rough. Need inline editing, add/remove flows, and better empty states. Data loads correctly now; interaction layer needs work.
-2. **Surface parse errors** — `parseModules` swallows job_experience upsert errors. Add `jobSyncError` to return type, surface in API response. Prompt for Code already written.
-3. **Backfill button** — "Sync jobs from modules" in Library sidebar → POST `/api/backfill-job-experiences`. Prompt for Code already written.
-4. **Profile sync UX** — First upload: auto-populate silently (done). Subsequent uploads: show modal "Update your profile from this resume?" with "Don't ask again" checkbox stored in `localStorage['mh-profile-sync-skip']`. Prompt for Code already written.
+2. ~~**Surface parse errors**~~ Done: `jobSyncError` in `parse-modules.ts`, surfaced by `parse-resume`.
+3. ~~**Backfill button**~~ Done: Library calls `POST /api/backfill-job-experiences`.
+4. ~~**Profile sync UX**~~ Done: `/upload` asks on later uploads, `localStorage['mh-profile-sync-skip']`.
 
 ### Priority 2 — ATS score & resume quality
 5. **ATS score improvement** — Current test returned 46/100. The whole point of the app is to get through ATS. Changes needed:
@@ -127,6 +127,8 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - Applied 2026-11-18. Sprints — tracked in `supabase/migrations/20261118_sprints.sql`: `users.sprint_ends_at` (service-role only, not in the users column grants), `sprint_purchases` (read-own RLS, no user writes, unique `stripe_session_id`), and `apply_sprint_purchase(user, sku, session, amount)` (service_role only; locks the user row, extends from `greatest(now(), sprint_ends_at)`, idempotent on the session id).
 - Applied 2026-11-18. `interview_sessions` (voice mock interviews) — tracked in `supabase/migrations/20261118_interview_sessions.sql`. Own-rows SELECT and DELETE only; insert/update revoked (the server writes with the service role). The monthly cap counts `ev_voice_session_start` usage events, so deleting a session never resets it.
 
+- Applied 2026-11-18. `stripe_events (id text pk, type, processed_at)`, RLS on, no grants to anon/authenticated — tracked in `supabase/migrations/20261118_stripe_events.sql`. `/api/stripe/webhook` inserts `event.id` before processing (duplicate = 200, skipped); on a handler error it deletes the row and returns 500 so Stripe retries. Write failures in the handler must throw, not log, or the retry never happens.
+
 ## AI models and usage logging (`src/lib/ai.ts`)
 **Haiku everywhere.** Every call resolves to `ANTHROPIC_MODEL_FAST` (Haiku) unless its `action` is
 listed in the `SONNET_FEATURES` env var (comma-separated, or `all`), which opts that one feature into
@@ -156,6 +158,11 @@ focused parse calls 6400 because Haiku overran 2048 on long roles and 3200 on ex
 `business/applicants/upload`, `business/applicants/[id]/rescore`, `business/applicants/[id]/ai-check`;
 120 for `analyze-jd`, `match-modules` (+ prompt-lab mirror), `match-report`, `interview-prep`,
 `admin/prompt-lab/jd-parse`.
+
+**Spend alarm:** `/api/cron/ai-usage` (daily, `vercel.json`) estimates cost from these rows
+(`src/lib/ai-usage-alarm.ts` holds per-model prices and thresholds) and emails `ALERT_EMAIL`
+(default info@modulehire.com) only when a threshold is crossed. A call without `userId` isn't logged,
+so it isn't counted: pass `{ userId, action }` on every new call site.
 
 `checkOrgDailyScoreCap()` in `src/lib/rate-limit.ts` caps AI-scored applicants at 500/day per org
 (`organizations.tier != 'enterprise'` only), checked before `scoreApplicant()` in the CSV and
@@ -240,7 +247,7 @@ the source text; `verifiedQuote()` in `parse-modules.ts` keeps it only if it rea
 route that reads modules to use them starts from `getUsableModules()` (`src/lib/usable-modules.ts`:
 `status = 'confirmed'` and not deleted) — match (`match.ts`), match report, `jobs/start`,
 `generate-resume`, the editor's library/swap/fact guard (`resumes/[id]`), rewrite-block, suggestions,
-outreach, interview prep, theme-alignment/auto-select (classic), legacy doc rebuild, and MCP
+outreach, interview prep, legacy doc rebuild, and MCP
 `search_modules`/`update_block`. `/api/my-modules` lists confirmed only. A new route that uses modules
 must go through it.
 - Review queue: `src/components/ReviewQueue.tsx` (top of `/library` as "To review (n)", and
@@ -363,8 +370,10 @@ title) and admin-only tooling (`admin/pipeline`, `admin/prompt-lab`).
 ## Generate v2: paste → draft → edit (`/generate`)
 `/generate` is three states, no wizard: paste a posting (text or link) → Building (~20s,
 `GenerateV2.tsx`, stage list driven by real events) → `/resumes/[id]` open in the editor. The
-old four-step wizard is `ClassicGenerate.tsx` at `/generate?classic=1` for one release (every URL
-it writes keeps `classic=1`; legacy `&step=` links also land there) — remove it after.
+old four-step wizard (`ClassicGenerate.tsx`, `?classic=1`) was removed 2026-11-18 after 45 days with
+no `ev_classic_open`, along with the routes only it used: `auto-select-modules`, `draft-generation`,
+`my-skills`, `suggest-module-rewrite`, `suggest-summary`, `theme-alignment` (the `draft_generations`
+table is left in place, unused).
 `/generate?jd_id=` (Regenerate / Make another version) starts a v2 draft for that JD directly.
 - `POST /api/jobs/start` (`{ raw_text } | { url } | { jd_id }`) streams NDJSON `basics` → `criteria`
   → `match` → `draft_summary`/`draft_job` → `document` → `done`. It calls the analyze-jd,
@@ -490,6 +499,25 @@ insights; a 90-day Sprint pools 3x. When it ends the account is on Free limits; 
   sentence (`LIMIT_MESSAGES`) and a "Start a 30-day Sprint" button; existing data is never hidden.
 - Test: `scripts/smoke/part6-sprints.ts` (signs `checkout.session.completed` locally with
   `STRIPE_WEBHOOK_SECRET`; local `.env.local` has live Stripe keys, so no Checkout session is created).
+
+## ModuleHire for Business: plans and billing
+`organizations.tier` is the org entitlement (check constraint: `starter|growth|enterprise`). Shown as Free / Team / Enterprise;
+limits live in `src/lib/business/plan.ts` (`BUSINESS_PLANS`): Free = 1 active posting + 25 scored applicants per UTC calendar
+month, Team ($49/mo, Stripe product `mh_business_team`, price env `STRIPE_PRICE_BUSINESS_TEAM`) = unlimited postings + 500/month,
+Enterprise = unlimited (set by hand; billing events never change it). Monthly usage = `applicants` with `scored_at` this month.
+- Gates (402, `code: business_plan_limit`): new posting and PATCH to `active` (`canActivateJob`); upload, CSV (scores until the
+  allowance runs out, then skips rows), applicant rescore and posting rescore (`remainingMonthlyScores`). Posting rescore also
+  got `rl_biz_job_rescore` (10/hour) and the 500/day org cap; it had no limit before.
+- One owned org per account (`POST /api/business/organizations` 409s), so extra orgs can't multiply the Free allowance.
+- Checkout `POST /api/business/billing/checkout` (owner only, the org's own Stripe customer, `metadata.kind = 'business'` +
+  `org_id` on session and subscription). The Stripe webhook calls `handleBusinessEvent` (`src/lib/business/billing-webhook.ts`)
+  **first**; business events never reach the user-plan code (which would otherwise grant the buyer personal Pro). Portal:
+  `POST /api/business/billing/portal`, default portal config (cancel at period end, no plan switching).
+- Settings shows plan + usage from `GET /api/business/billing/usage`. `scoreApplicant` takes `userId` so `ai_biz_score` cost logs.
+- Public pages: `/business` (landing + pricing; CTAs are relative `/signin?signup=1&next=/business` so signup stays on the
+  business host and lands in org onboarding) and `/business/demo` (static fictional data in `demo/demo-data.ts`, no AI, exempt
+  in middleware). Onboarding's optional "what are you hiring for" answer is stored as `ev_biz_feedback`:
+  `select created_at, metadata from usage_events where action = 'ev_biz_feedback' order by 1 desc;`
 
 ## Press kit (`/press`)
 Public page in `src/app/press/`; files in `public/press/` (how to rebuild the logos and zip: that folder's `README.md`). Copy, facts and the founder bio are approved text, so don't change claims without Matt's sign-off, and keep `modulehire-press-kit.txt` and the zip in step with the page.
