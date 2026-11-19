@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { isUuid } from '@/lib/validate'
 import { deleteConversation } from '@/lib/voice/elevenlabs'
+import { normalizeFeedback, stripAudioTags } from '@/lib/voice/feedback'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -18,7 +19,12 @@ export async function GET(_req: Request, { params }: RouteContext) {
     .eq('id', id)
     .single()
   if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  return NextResponse.json(data)
+  const transcript = (Array.isArray(data.transcript) ? data.transcript : []) as Array<{ message?: string }>
+  return NextResponse.json({
+    ...data,
+    transcript: transcript.map((t) => ({ ...t, message: stripAudioTags(t.message ?? '') })),
+    feedback: normalizeFeedback(data.feedback),
+  })
 }
 
 // DELETE — removes our row and the conversation on ElevenLabs' side.

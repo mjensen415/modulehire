@@ -7,6 +7,7 @@ import { getActiveProfileId } from '@/lib/profile'
 import { getUsableModules } from '@/lib/usable-modules'
 import { sanitizeCriteria } from '@/lib/dimensions'
 import type { ElTranscriptTurn } from './elevenlabs'
+import { normalizeFeedback, stripAudioTags } from './feedback'
 
 export const VOICE_CONSENT_VERSION = '2026-11-18'
 export const VOICE_MONTHLY_SESSIONS = Number(process.env.VOICE_MONTHLY_SESSIONS ?? 8)
@@ -228,7 +229,7 @@ const FEEDBACK_SCHEMA = {
 export function transcriptText(turns: ElTranscriptTurn[]): string {
   return turns
     .filter((t) => t.message && t.message.trim())
-    .map((t) => `${t.role === 'agent' ? 'INTERVIEWER' : 'CANDIDATE'}: ${t.message!.trim()}`)
+    .map((t) => `${t.role === 'agent' ? 'INTERVIEWER' : 'CANDIDATE'}: ${stripAudioTags(t.message!)}`)
     .join('\n')
 }
 
@@ -255,10 +256,12 @@ ${text.slice(0, 40_000)}
 
 Score each main question the interviewer asked (skip small talk and logistics). Score 1-5: 5 = specific, structured, relevant, with a clear result. overall_score is 0-100 across the whole interview. Use module titles exactly as written in the library. Flag numbers or achievements the candidate stated that no module supports, so they can either add them to the library or stop saying them.`
 
-  return aiCompleteJson<VoiceFeedback>(
+  const raw = await aiCompleteJson<VoiceFeedback>(
     [{ role: 'user', content: prompt }],
     FEEDBACK_SCHEMA,
     3000,
     { tier: 'quality', action: 'ai_voice_feedback', userId },
   )
+  // Coerce to the shape the page renders (string arrays sometimes come back as one string).
+  return normalizeFeedback(raw)
 }
