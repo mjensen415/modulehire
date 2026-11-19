@@ -84,7 +84,8 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 
 ---
 
-## Known DB migrations (applied to Supabase, NOT yet in schema.sql — add before any fresh deploys)
+## DB migrations log
+`supabase/schema.sql` matches production as of 2026-11-18 (regenerated from a prod dump; how to redo it is in its header). The entries below explain why each change was made.
 - `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS phone text, linkedin_url text, location text;`
 - `ALTER TABLE public.generated_resumes ADD COLUMN IF NOT EXISTS ats_score integer;`
 - `job_experiences` table with unique constraint `job_experiences_user_company_title_start_key` on (user_id, company, title, start_date)

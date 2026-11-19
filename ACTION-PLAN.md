@@ -84,7 +84,7 @@ _You currently have no way to know a paid credit was dropped or that AI calls ar
   - Done when: validation and fetch cannot resolve to different IPs.
   - Effort: 1–2 hrs.
 
-- [ ] **P4.3 — Reconcile migrations with `schema.sql`** _(ops, from audit)_
+- [x] **P4.3 — Reconcile migrations with `schema.sql`** _(ops, from audit)_ ✅ 2026-11-18: `schema.sql` rebuilt from a prod dump (public schema + auth trigger + storage buckets/policies); a scratch `supabase db reset` with only that file dumps identically to prod and has the same anon/authenticated privileges.
   - Steps: add the prod-only migrations noted in `CLAUDE.md` (`resume_credits` column, `increment_resume_credits` fn incl. the P0.3 search_path, RLS policies on the four newer tables) into `supabase/migrations` / `schema.sql`. Verify a clean clone reproduces prod schema.
   - Done when: a fresh `supabase db reset` produces a schema matching production.
   - Effort: 2–3 hrs. **Do before any fresh deploy.**
