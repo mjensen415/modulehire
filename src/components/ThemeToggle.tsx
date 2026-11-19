@@ -9,6 +9,7 @@ export default function ThemeToggle() {
     const stored = localStorage.getItem('mh-theme') as 'dark' | 'light' | null
     // Light (warm cream) is the default; dark only when the visitor picked it.
     const initial = stored ?? 'light'
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- theme comes from localStorage, only available after mount
     setTheme(initial)
     document.documentElement.setAttribute('data-theme', initial)
   }, [])

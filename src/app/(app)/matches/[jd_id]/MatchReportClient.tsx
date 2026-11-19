@@ -22,7 +22,6 @@ export default function MatchReportClient({
 
   useEffect(() => {
     if (initialReport) return
-    setLoading(true)
     fetch('/api/match-report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

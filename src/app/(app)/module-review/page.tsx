@@ -263,6 +263,7 @@ export default function ModuleReview() {
     if (!raw) { router.replace('/upload'); return }
     sessionStorage.removeItem('pendingModules')
     const { resume_id, modules: mods } = JSON.parse(raw) as { resume_id: string; modules: Module[] }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the one-time sessionStorage handoff, only available after mount
     setResumeId(resume_id)
     setModules(mods.map(m => ({ ...m, pinned: m.pinned ?? false, _discarded: false, _isNew: false })))
     setLoaded(true)

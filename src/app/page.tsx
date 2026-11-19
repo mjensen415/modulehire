@@ -163,42 +163,8 @@ function ArrowsSVG() {
   );
 }
 
-function TweaksPanel({ visible, tweaks, onUpdate }: any) {
-  return (
-    <div className={`tweaks-panel ${visible ? 'visible' : ''}`}>
-      <div className="tweaks-title">Tweaks</div>
-
-      <div className="tweak-row">
-        <span className="tweak-label">Accent color</span>
-        <select className="tweak-select" value={tweaks.accentColor}
-          onChange={e => onUpdate({accentColor: e.target.value})}>
-          <option value="teal">Electric Teal</option>
-          <option value="amber">Warm Amber</option>
-          <option value="indigo">Deep Indigo</option>
-        </select>
-      </div>
-
-      <div className="tweak-row">
-        <span className="tweak-label">Animations</span>
-        <div className={`tweak-toggle ${tweaks.showAnimations ? 'on' : ''}`}
-          onClick={() => onUpdate({showAnimations: !tweaks.showAnimations})} />
-      </div>
-
-      <div className="tweak-row">
-        <span className="tweak-label">Module count</span>
-        <select className="tweak-select" value={tweaks.moduleCount}
-          onChange={e => onUpdate({moduleCount: parseInt(e.target.value)})}>
-          <option value={2}>2 modules</option>
-          <option value={3}>3 modules</option>
-        </select>
-      </div>
-    </div>
-  );
-}
-
 export default function Home() {
-  const [tweaks, setTweaks] = useState(TWEAK_DEFAULTS);
-  const [tweaksVisible, setTweaksVisible] = useState(false);
+  const [tweaks] = useState(TWEAK_DEFAULTS);
 
   useEffect(() => {
     // Teal is the theme's own accent, so leave --teal alone (setting it to var(--teal) is a cycle
@@ -219,11 +185,6 @@ export default function Home() {
     });
     return () => { root.style.removeProperty('--teal'); };
   }, [tweaks]);
-
-  function handleUpdate(updates: Partial<typeof TWEAK_DEFAULTS>) {
-    const next = {...tweaks, ...updates};
-    setTweaks(next);
-  }
 
   const modules = [
     {color:'teal', domain:'Security & Infrastructure'},
@@ -596,7 +557,7 @@ export default function Home() {
           Stop rewriting.<br/>Start reassembling.
         </h2>
         <p className="bottom-cta-sub">
-          Your experience doesn't change. The story you tell does. ModuleHire Labs makes every application feel like it was made just for that role.
+          Your experience doesn&apos;t change. The story you tell does. ModuleHire Labs makes every application feel like it was made just for that role.
         </p>
         <div style={{
           maxWidth: 560,
@@ -614,7 +575,7 @@ export default function Home() {
             margin: '0 0 12px',
             fontStyle: 'italic',
           }}>
-            "It has been interesting this time around with the amount of noise about whether bespoke resumes are too polished or assumed to be fake. I have been using Claude to create resumes, which has been way better than ChatGPT, but they still tilt toward a level of puffery that I don't really like. Your setup lets the examples and data do the talking, which is more my speed."
+            &quot;It has been interesting this time around with the amount of noise about whether bespoke resumes are too polished or assumed to be fake. I have been using Claude to create resumes, which has been way better than ChatGPT, but they still tilt toward a level of puffery that I don&apos;t really like. Your setup lets the examples and data do the talking, which is more my speed.&quot;
           </p>
           <p style={{
             fontSize: 13,

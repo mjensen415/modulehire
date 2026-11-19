@@ -20,7 +20,7 @@ export default function UploadResume() {
         <div className="callout-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="8" cy="8" r="6" /><path d="M8 5v3M8 11h.01" /></svg>
         </div>
-        <div className="callout-text"><strong>Best results:</strong> Upload the version of your resume that's most complete — the one you've added to over the years rather than the one trimmed for a specific job. The parser extracts every skill domain it can find, so more source material means a richer library.</div>
+        <div className="callout-text"><strong>Best results:</strong> Upload the version of your resume that&apos;s most complete — the one you&apos;ve added to over the years rather than the one trimmed for a specific job. The parser extracts every skill domain it can find, so more source material means a richer library.</div>
       </div>
 
       <h2>What happens during parsing</h2>
@@ -60,7 +60,7 @@ export default function UploadResume() {
       </div>
 
       <h2>After upload</h2>
-      <p>Once parsing completes, you'll land on the module review screen. Every module is marked <span className="inline-code">needs-review</span> by default. Work through them, edit the content where the AI missed something, and mark each one as approved. You don't have to review everything before generating — the system will use whatever's in your library.</p>
+      <p>Once parsing completes, you&apos;ll land on the module review screen. Every module is marked <span className="inline-code">needs-review</span> by default. Work through them, edit the content where the AI missed something, and mark each one as approved. You don&apos;t have to review everything before generating — the system will use whatever&apos;s in your library.</p>
 
       <div className="docs-nav-footer" style={{ display: 'flex', justifyContent: 'space-between' }}>
         <Link href="/docs" className="docs-nav-btn">

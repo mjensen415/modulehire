@@ -32,7 +32,7 @@ export default function Docs() {
         <div className="step-block-num">2</div>
         <div className="step-block-body">
           <h3>Review your modules</h3>
-          <p>After parsing, you'll see your modules grouped by source job. Each module has a domain label, content, and source tag. Review each one — edit, split, or merge as needed. Click <strong>Save library →</strong> when you're satisfied.</p>
+          <p>After parsing, you&apos;ll see your modules grouped by source job. Each module has a domain label, content, and source tag. Review each one — edit, split, or merge as needed. Click <strong>Save library →</strong> when you&apos;re satisfied.</p>
         </div>
       </div>
 

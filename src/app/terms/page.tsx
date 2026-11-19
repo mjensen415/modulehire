@@ -154,13 +154,6 @@ const h2: React.CSSProperties = {
   margin: '0 0 12px',
 }
 
-const h3: React.CSSProperties = {
-  fontSize: 15,
-  fontWeight: 600,
-  color: 'var(--text)',
-  margin: '20px 0 8px',
-}
-
 const p: React.CSSProperties = {
   fontSize: 15,
   color: 'var(--text2)',

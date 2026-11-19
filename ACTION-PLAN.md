@@ -84,12 +84,12 @@ _You currently have no way to know a paid credit was dropped or that AI calls ar
   - Done when: validation and fetch cannot resolve to different IPs.
   - Effort: 1–2 hrs.
 
-- [ ] **P4.3 — Reconcile migrations with `schema.sql`** _(ops, from audit)_
+- [x] **P4.3 — Reconcile migrations with `schema.sql`** _(ops, from audit)_ ✅ 2026-11-18: `schema.sql` rebuilt from a prod dump (public schema + auth trigger + storage buckets/policies); a scratch `supabase db reset` with only that file dumps identically to prod and has the same anon/authenticated privileges.
   - Steps: add the prod-only migrations noted in `CLAUDE.md` (`resume_credits` column, `increment_resume_credits` fn incl. the P0.3 search_path, RLS policies on the four newer tables) into `supabase/migrations` / `schema.sql`. Verify a clean clone reproduces prod schema.
   - Done when: a fresh `supabase db reset` produces a schema matching production.
   - Effort: 2–3 hrs. **Do before any fresh deploy.**
 
-- [ ] **P4.5 — Clean up lint violations surfaced by the Next 16.2.10 bump** _(tech debt, non-blocking)_
+- [x] **P4.5 — Clean up lint violations surfaced by the Next 16.2.10 bump** _(tech debt, non-blocking)_ ✅ 2026-11-18: `npm run lint` reports 0 errors, 0 warnings (was 123 errors, 17 warnings). Scoped disables carry a reason; see the PR.
   - Context: `eslint-config-next@16.2.10` promoted newer `react-hooks` rules to errors (`react-hooks/error-boundaries` on react-pdf JSX in try/catch in `generate-resume/route.tsx`; `set-state-in-effect` elsewhere). **These do NOT block deploys** — Next 16 no longer runs ESLint during `next build` — but `npm run lint` now reports them.
   - Steps: run `npm run lint`, triage; wrap the react-pdf rendering so JSX isn't constructed inside try/catch, and resolve remaining set-state-in-effect cases.
   - Done when: `npm run lint` is clean (or intentional cases have scoped disables).

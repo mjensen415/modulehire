@@ -220,7 +220,7 @@ export default function MyInfoPage() {
                 value={profile?.email ?? ''}
                 disabled
               />
-              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Set by your login — can't be changed here</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Set by your login — can&apos;t be changed here</div>
             </div>
 
             {/* Phone */}

@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import PublicNav from '@/components/layout/PublicNav';
 import PublicFooter from '@/components/layout/PublicFooter';
 
@@ -11,7 +10,7 @@ export default function Modules() {
         <div className="hero-glow"></div>
         <div className="eyebrow">The Module System</div>
         <h1 className="page-headline">One job. Multiple stories.</h1>
-        <p className="page-sub">Your experience doesn't fit in a single role description. Modules let every skill stand alone.</p>
+        <p className="page-sub">Your experience doesn&apos;t fit in a single role description. Modules let every skill stand alone.</p>
       </section>
 
       <section className="concept-section">
@@ -20,7 +19,7 @@ export default function Modules() {
             <h2>Traditional resumes flatten your career.</h2>
             <p>A chronological list treats every job as a single story — one title, one description, one narrative. But your 4-year role at that startup contained security work, hiring decisions, vendor negotiations, and documentation projects. All of that got compressed into three bullet points.</p>
             <p>ModuleHire Labs extracts the skill dimensions within each role, treating them as independent assets. Each module is a complete skill story — with context, evidence, and themes — that can be deployed in any combination.</p>
-            <p>Your library grows with every resume you upload. By the time you're applying to ten roles, your modules are battle-tested and your output is always specific, never generic.</p>
+            <p>Your library grows with every resume you upload. By the time you&apos;re applying to ten roles, your modules are battle-tested and your output is always specific, never generic.</p>
           </div>
           <div>
             <div className="extract-visual">
@@ -172,7 +171,7 @@ export default function Modules() {
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M10 2l2.5 5 5.5.8-4 3.9.9 5.5L10 14.5l-4.9 2.7.9-5.5-4-3.9 5.5-.8z" /></svg>
             </div>
             <div className="type-name">Skill</div>
-            <p className="type-desc">A capability you've demonstrated across multiple roles. Not tied to a single job — drawn from patterns across your career. Strong signal for roles that ask for depth.</p>
+            <p className="type-desc">A capability you&apos;ve demonstrated across multiple roles. Not tied to a single job — drawn from patterns across your career. Strong signal for roles that ask for depth.</p>
           </div>
           <div className="type-card">
             <div className="type-icon indigo">
