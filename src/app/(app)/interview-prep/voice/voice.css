@@ -288,3 +288,4 @@
   .vi-orb .vi-orb-core { animation: none !important; }
   .vi-ring-fill { transition: none; }
 }
+.vi-history-row > button:first-child > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }

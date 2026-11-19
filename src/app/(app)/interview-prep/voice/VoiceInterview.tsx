@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Conversation, type Mode } from '@elevenlabs/react'
 import type { VoiceFeedback } from '@/lib/voice/interview'
+import { normalizeFeedback, stripAudioTags } from '@/lib/voice/feedback'
 import GrantBadge from '@/components/GrantBadge'
 import SprintButton from '@/components/SprintButton'
 import './voice.css'
@@ -105,9 +106,9 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
     if (!res.ok) return
     const data = await res.json()
     setActiveSessionId(id)
-    setFeedback(data.feedback ?? null)
-    setFeedbackNote(data.feedback ? '' : data.status === 'failed' ? 'Scoring failed for this session.' : 'This session was too short to score. Answer at least two questions next time.')
-    setViewTranscript((data.transcript ?? []).filter((t: Turn) => t.message))
+    setFeedback(normalizeFeedback(data.feedback))
+    setFeedbackNote(normalizeFeedback(data.feedback) ? '' : data.status === 'failed' ? 'Scoring failed for this session.' : 'This session was too short to score. Answer at least two questions next time.')
+    setViewTranscript((data.transcript ?? []).map((t: Turn) => ({ ...t, message: stripAudioTags(t.message ?? '') })).filter((t: Turn) => t.message))
     setPhase('feedback')
   }
 
@@ -176,7 +177,7 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
         setFeedback(null)
         setFeedbackNote(data.error || 'Could not score this interview.')
       } else {
-        setFeedback(data.feedback ?? null)
+        setFeedback(normalizeFeedback(data.feedback))
         setFeedbackNote(data.note ?? '')
       }
       setViewTranscript(null)
@@ -249,8 +250,9 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
           if (mode === 'speaking') startInterviewerAudio().then((ok) => setAudioBlocked(!ok))
         },
         onMessage: ({ message, role }) => {
-          if (!message?.trim()) return
-          setTurns((prev) => [...prev, { role, message }].slice(-40))
+          const text = stripAudioTags(message ?? '')
+          if (!text) return
+          setTurns((prev) => [...prev, { role, message: text }].slice(-40))
         },
       })
       if (!conversationIdRef.current) conversationIdRef.current = convRef.current.getId()
@@ -285,7 +287,10 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
   if (!status) return <div className="vi"><p className="vi-muted">Loading…</p></div>
 
   const left = Math.max(0, status.monthly_limit - status.used_this_month)
-  const history = status.sessions.filter((s) => !jdId || s.job_description_id === jdId)
+  // Every past interview, not only the selected job's: filtering by job hid sessions run against
+  // another posting (the page opens on the newest posting).
+  const history = status.sessions
+  const jobLabel = (id: string | null) => jobs.find((j) => j.id === id)?.label ?? 'A removed job'
   const job = jobs.find((j) => j.id === jdId)
   const typeInfo = TYPES.find((t) => t.key === type) ?? TYPES[1]
 
@@ -557,11 +562,12 @@ export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: 
 
         {history.length > 0 && (
           <div className="vi-history">
-            <h3>Past interviews for this job</h3>
+            <h3>Past interviews</h3>
             {history.map((s) => (
               <div key={s.id} className="vi-history-row">
                 <button type="button" onClick={() => openSession(s.id)}>
                   <span>{TYPE_LABEL[s.interview_type] ?? s.interview_type}</span>
+                  <span className="vi-muted">{jobLabel(s.job_description_id)}</span>
                   <span className="vi-muted">
                     {new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     {s.duration_s ? `, ${Math.max(1, Math.round(s.duration_s / 60))} min` : ''}

@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { isUuid } from '@/lib/validate'
 import { waitForConversation } from '@/lib/voice/elevenlabs'
 import { buildSessionContext, isInterviewType, scoreInterview } from '@/lib/voice/interview'
+import { normalizeFeedback, stripAudioTags } from '@/lib/voice/feedback'
 
 export const maxDuration = 120
 
@@ -25,7 +26,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     .eq('id', id)
     .single()
   if (!session || session.user_id !== user.id) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (session.status === 'scored') return NextResponse.json({ status: 'scored', feedback: session.feedback })
+  if (session.status === 'scored') return NextResponse.json({ status: 'scored', feedback: normalizeFeedback(session.feedback) })
 
   const body = await req.json().catch(() => ({}))
   const conversationId: string | null = session.el_conversation_id ?? (typeof body?.conversation_id === 'string' ? body.conversation_id : null)
@@ -50,7 +51,7 @@ export async function POST(req: Request, { params }: RouteContext) {
 
     const transcript = (conv.transcript ?? []).map((t) => ({
       role: t.role,
-      message: t.message ?? '',
+      message: stripAudioTags(t.message ?? ''),
       time_in_call_secs: t.time_in_call_secs,
     }))
     const duration = conv.metadata?.call_duration_secs ?? null
