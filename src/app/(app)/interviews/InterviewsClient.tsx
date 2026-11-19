@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { voiceHref } from '@/lib/voice/round-type'
 
 type App = { id: string; company: string; title: string; status: string; job_description_id: string | null }
 type Person = { name: string; title: string | null }
@@ -50,6 +51,11 @@ export default function InterviewsClient({ initialAppId }: { initialAppId: strin
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
+  const [sprint, setSprint] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    fetch('/api/me').then(r => r.json()).then(d => setSprint(!!d?.sprint_active)).catch(() => setSprint(null))
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -143,8 +149,40 @@ export default function InterviewsClient({ initialAppId }: { initialAppId: strin
           <h1 className="warm-h1">Every round, prepped</h1>
           <p className="warm-sub">Add a round, see who you&apos;ll meet, and practice answers before you go in.</p>
         </div>
-        {!adding && <button type="button" className="warm-btn" onClick={() => { setDraft(EMPTY); setAdding('email') }}>Add a round</button>}
       </header>
+
+      {!adding && (
+        <section className="iv-start" aria-label="Get ready for an interview">
+          <button type="button" className="iv-tile" onClick={() => { setDraft(EMPTY); setEmailText(''); setAdding('email') }}>
+            <span className="iv-tile-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="m4 7 8 6 8-6" /></svg>
+            </span>
+            <span className="iv-tile-title">Add a recruiter email</span>
+            <span className="iv-tile-sub">Paste the scheduling email. We pull out the round, the date and who you&apos;ll meet, and you check it before it saves.</span>
+            <span className="iv-tile-cta">Paste the email →</span>
+          </button>
+
+          {/* Plain <a>, not <Link>: the voice page needs its own CSP, which only a full page load applies. */}
+          <a className="iv-tile iv-tile-voice" href={voiceHref(null)}>
+            <span className="iv-orb" aria-hidden="true">
+              <span className="iv-orb-ring" /><span className="iv-orb-ring" />
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+            </span>
+            <span className="iv-tile-badges">
+              <span className="iv-pill">New</span>
+              {sprint === false && <span className="iv-pill iv-pill-quiet">Sprint</span>}
+            </span>
+            <span className="iv-tile-title">Set up a mock interview</span>
+            <span className="iv-tile-sub">Practice out loud with an AI interviewer who has read the posting and your library. Hang up and get a scored report on every answer.</span>
+            <span className="iv-tile-cta">Start practicing →</span>
+          </a>
+        </section>
+      )}
+      {!adding && (
+        <button type="button" className="warm-link iv-manual" onClick={() => { setDraft(EMPTY); setAdding('manual') }}>
+          Or enter a round&apos;s details yourself
+        </button>
+      )}
 
       {error && <div className="warm-error" role="alert">{error}</div>}
 
@@ -222,7 +260,7 @@ export default function InterviewsClient({ initialAppId }: { initialAppId: strin
       ) : interviews.length === 0 && !adding ? (
         <section className="warm-card">
           <h2 className="warm-h2">No interviews yet</h2>
-          <p className="warm-sub">When a company asks to talk, add the round here, or paste their email and we&apos;ll fill it in.</p>
+          <p className="warm-sub">When a company asks to talk, paste their email above and we&apos;ll fill in the round. Not scheduled yet? A mock interview is a good way to warm up.</p>
         </section>
       ) : (
         (['upcoming', 'past'] as const).map(which => groups[which].length > 0 && (

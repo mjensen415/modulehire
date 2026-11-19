@@ -9,6 +9,7 @@ import '../interviews.css'
 import PracticeRound, { type PastAnswer } from './PracticeRound'
 import BuildPrepButton from './BuildPrepButton'
 import RoundWhen from './RoundWhen'
+import { voiceHref, voiceTypeForRound } from '@/lib/voice/round-type'
 
 export default async function InterviewPrepPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -53,6 +54,21 @@ export default async function InterviewPrepPage({ params }: { params: Promise<{ 
           <p className="warm-sub"><RoundWhen iso={iv.scheduled_at} />{iv.format ? ` · ${iv.format}` : ''}</p>
           {iv.notes && <p className="warm-sub" style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}>{iv.notes}</p>}
         </div>
+
+        {/* Plain <a>, not <Link>: the voice page needs its own CSP, which only a full page load applies. */}
+        <a className="iv-voice-banner" href={voiceHref(app?.job_description_id, iv.round_name)}>
+          <span className="iv-orb" aria-hidden="true">
+            <span className="iv-orb-ring" /><span className="iv-orb-ring" />
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+          </span>
+          <span className="iv-voice-text">
+            <span className="iv-tile-title">Practice this round out loud</span>
+            <span className="iv-tile-sub">
+              A {({ recruiter_screen: 'recruiter screen', behavioral: 'hiring manager interview', deep_dive: 'role deep dive' } as const)[voiceTypeForRound(iv.round_name)]} with an AI interviewer{app ? ` who knows the ${app.company} posting` : ''}. You get a scored report when you hang up.
+            </span>
+          </span>
+          <span className="iv-voice-cta">{paid ? 'Start mock interview' : 'Sprint feature'} →</span>
+        </a>
 
         <section className="warm-card">
           <h2 className="warm-h2">Who you&apos;ll meet</h2>
