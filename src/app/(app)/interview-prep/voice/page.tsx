@@ -2,14 +2,14 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import VoiceInterview from './VoiceInterview'
 
-type Props = { searchParams: Promise<{ jd?: string; session?: string }> }
+type Props = { searchParams: Promise<{ jd?: string; session?: string; type?: string }> }
 
 export default async function VoiceInterviewPage({ searchParams }: Props) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/signin?next=/interview-prep/voice')
 
-  const { jd, session } = await searchParams
+  const { jd, session, type } = await searchParams
   const { data: jds } = await supabase
     .from('job_descriptions')
     .select('id, extracted_job_title, extracted_company')
@@ -34,6 +34,7 @@ export default async function VoiceInterviewPage({ searchParams }: Props) {
           }))}
           initialJdId={jd ?? null}
           initialSessionId={session ?? null}
+          initialType={type ?? null}
         />
       </div>
     </>

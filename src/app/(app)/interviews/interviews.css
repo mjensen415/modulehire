@@ -44,3 +44,39 @@
   .iv-person { grid-template-columns: 1fr; }
   .ivp-scores { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Start tiles on /interviews and the voice banner on /interviews/[id] */
+.iv-start { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.iv-tile { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; text-align: left; font: inherit; color: var(--h-ink); text-decoration: none; cursor: pointer; background: var(--h-card); border: 1px solid var(--h-line); border-radius: 20px; padding: 22px 22px 20px; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; overflow: hidden; }
+.iv-tile:hover { transform: translateY(-2px); border-color: var(--h-line-strong); box-shadow: 0 10px 28px -14px rgba(0,0,0,.35); }
+.iv-tile:focus-visible, .iv-voice-banner:focus-visible { outline: 2px solid var(--h-accent); outline-offset: 3px; }
+.iv-tile-icon { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--h-card2); color: var(--h-ink); }
+.iv-tile-title { font-family: var(--h-serif); font-size: 21px; line-height: 1.2; margin-top: 6px; }
+.iv-tile-sub { font-size: 13.5px; line-height: 1.5; color: var(--h-muted); }
+.iv-tile-cta { margin-top: auto; padding-top: 8px; font-size: 13.5px; font-weight: 700; color: var(--h-accent); }
+.iv-tile-voice { border-color: color-mix(in srgb, var(--h-accent) 45%, var(--h-line)); background:
+  radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--h-accent) 22%, transparent) 0%, transparent 60%),
+  linear-gradient(160deg, color-mix(in srgb, var(--h-accent) 9%, var(--h-card)) 0%, var(--h-card) 70%); }
+.iv-tile-voice:hover { border-color: var(--h-accent); box-shadow: 0 14px 34px -14px color-mix(in srgb, var(--h-accent) 60%, transparent); }
+.iv-tile-badges { position: absolute; top: 20px; right: 20px; display: flex; gap: 6px; }
+.iv-pill { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; background: var(--h-accent); color: var(--h-accent-ink); }
+.iv-pill-quiet { background: var(--h-card2); color: var(--h-muted); }
+.iv-orb { position: relative; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--h-accent); color: var(--h-accent-ink); flex-shrink: 0; }
+.iv-orb > svg { position: relative; z-index: 1; }
+.iv-orb-ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--h-accent); opacity: 0; animation: iv-ripple 2.6s ease-out infinite; }
+.iv-orb-ring + .iv-orb-ring { animation-delay: 1.3s; }
+@keyframes iv-ripple { 0% { transform: scale(1); opacity: .55; } 100% { transform: scale(1.9); opacity: 0; } }
+.iv-manual { align-self: flex-start; background: none; border: none; padding: 0; font: inherit; font-size: 13px; cursor: pointer; margin-top: -8px; }
+.iv-voice-banner { display: flex; align-items: center; gap: 16px; text-decoration: none; color: var(--h-ink); border: 1px solid color-mix(in srgb, var(--h-accent) 45%, var(--h-line)); border-radius: 18px; padding: 18px 20px; background:
+  radial-gradient(90% 140% at 100% 0%, color-mix(in srgb, var(--h-accent) 20%, transparent) 0%, transparent 60%),
+  color-mix(in srgb, var(--h-accent) 7%, var(--h-card)); transition: border-color .18s ease, box-shadow .18s ease; }
+.iv-voice-banner:hover { border-color: var(--h-accent); box-shadow: 0 12px 30px -16px color-mix(in srgb, var(--h-accent) 60%, transparent); }
+.iv-voice-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.iv-voice-text .iv-tile-title { margin-top: 0; font-size: 19px; }
+.iv-voice-cta { flex-shrink: 0; font-size: 13.5px; font-weight: 700; padding: 9px 16px; border-radius: 999px; background: var(--h-accent); color: var(--h-accent-ink); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .iv-orb-ring { animation: none; } .iv-tile, .iv-tile:hover { transform: none; transition: none; } }
+@media (max-width: 640px) {
+  .iv-start { grid-template-columns: 1fr; }
+  .iv-voice-banner { flex-wrap: wrap; }
+  .iv-voice-cta { width: 100%; text-align: center; }
+}

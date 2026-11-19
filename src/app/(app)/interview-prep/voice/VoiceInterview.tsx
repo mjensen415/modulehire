@@ -60,10 +60,10 @@ function scoreTone(n: number) {
 
 type Conv = Awaited<ReturnType<typeof Conversation.startSession>>
 
-export default function VoiceInterview({ jobs, initialJdId, initialSessionId }: { jobs: Job[]; initialJdId: string | null; initialSessionId: string | null }) {
+export default function VoiceInterview({ jobs, initialJdId, initialSessionId, initialType }: { jobs: Job[]; initialJdId: string | null; initialSessionId: string | null; initialType?: string | null }) {
   const [status, setStatus] = useState<StatusResp | null>(null)
   const [jdId, setJdId] = useState<string>(initialJdId && jobs.some((j) => j.id === initialJdId) ? initialJdId : jobs[0]?.id ?? '')
-  const [type, setType] = useState<string>('behavioral')
+  const [type, setType] = useState<string>(initialType && TYPES.some((t) => t.key === initialType) ? initialType : 'behavioral')
   const [length, setLength] = useState<10 | 20>(10)
   const [consent, setConsent] = useState(false)
   const [phase, setPhase] = useState<Phase>('setup')

@@ -638,6 +638,7 @@ Funded by the ElevenLabs Startup Grant (33M credits, 12 months from Nov 2026). P
   connect; browsers block it because the click came several awaits earlier (mic prompt, our API).
   `startInterviewerAudio()` in `VoiceInterview.tsx` calls `play()` on connect and on each speaking
   turn, and shows a "Turn on interviewer audio" button if the browser still refuses.
+- **Entry points:** `/interviews` opens with two tiles, "Add a recruiter email" (the paste flow) and "Set up a mock interview" (plain `<a>` to the voice page; a "Sprint" pill shows for Free users via `/api/me`). Each round's prep page (`/interviews/[id]`) has a "Practice this round out loud" banner that passes `?jd=` and `?type=` (`voiceTypeForRound()` in `src/lib/voice/round-type.ts` maps the round name to recruiter_screen / behavioral / deep_dive). The old `/interview-prep` page keeps its "Practice out loud" button.
 - **UI:** `VoiceInterview.tsx` + `voice.css` (scoped `.vi`). The live orb reads
   `getOutputVolume()`/`getInputVolume()` each frame into CSS variables (`--out`, `--in`).
   `GrantBadge.tsx` swaps the white/dark official badge by theme (`globals.css`).
