@@ -338,30 +338,33 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─── INTERVIEW PREP SPOTLIGHT ─── */}
+      {/* ─── VOICE INTERVIEW SPOTLIGHT ─── */}
       <section style={{ maxWidth: 1100, margin: '0 auto', padding: '80px 24px' }}>
         <div className="interview-prep-spotlight" style={{ display: 'flex', gap: 48, alignItems: 'center' }}>
 
-          {/* Left — copy */}
+          {/* Left: copy */}
           <div style={{ flex: '1 1 50%', minWidth: 0 }}>
             <div style={{
               fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--teal)',
               letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 14, fontWeight: 500,
             }}>
-              New: Interview Prep
+              New: Voice mock interviews
             </div>
             <h2 style={{ fontSize: 'clamp(28px,4vw,40px)', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.15, marginBottom: 18 }}>
               Stop winging your interviews.
             </h2>
-            <p style={{ fontSize: 16, color: 'var(--text2)', lineHeight: 1.65, maxWidth: 420, marginBottom: 22 }}>
-              After you generate your resume, ModuleHire can build a full talking points document for the interview — matched to your actual modules and the job description you already uploaded.
+            <p style={{ fontSize: 16, color: 'var(--text2)', lineHeight: 1.65, maxWidth: 440, marginBottom: 22 }}>
+              Practice out loud with an AI interviewer that has read the job posting and your library.
+              When you hang up, you get a written report on every answer: what landed, what was vague,
+              and which of your own wins you forgot to mention.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
               {[
-                'Your opening pitch, drafted for you',
-                'Talking point for every key requirement',
-                'Questions worth asking',
-                'Gaps to be ready for',
+                'Recruiter screen, hiring manager, or role deep dive',
+                'Real follow-up questions when an answer is vague',
+                'Every answer scored, with a STAR check',
+                'Flags claims your library can’t back up',
+                'Talking points doc for the same job, built in',
               ].map((item) => (
                 <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 14, color: 'var(--text2)' }}>
                   <span style={{ color: 'var(--teal)', fontWeight: 700, flexShrink: 0 }}>✓</span>
@@ -369,13 +372,15 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center',
-              background: 'var(--amber-dim)', color: 'var(--amber)',
-              fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
-              marginBottom: 18,
-            }}>
-              Sprint feature
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center',
+                background: 'var(--amber-dim)', color: 'var(--amber)',
+                fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
+              }}>
+                Sprint feature
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--text3)' }}>Voice powered by ElevenLabs</span>
             </div>
             <div>
               <Link href="/signin?signup=1" style={{ fontSize: 14, color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>
@@ -384,100 +389,88 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Right — prep doc mockup */}
-          <div style={{ flex: '1 1 50%', minWidth: 0 }}>
+          {/* Right: live call + feedback report mockup (sample data) */}
+          <div style={{ flex: '1 1 50%', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Call card */}
             <div style={{
               background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 14,
-              overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
+              padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14,
+              boxShadow: '0 18px 48px rgba(0,0,0,0.18)',
             }}>
-              {/* Doc header */}
+              <div style={{
+                width: 42, height: 42, borderRadius: '50%', flexShrink: 0,
+                background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+              }} aria-hidden="true">
+                {[10, 18, 13, 20, 9].map((h, i) => (
+                  <span key={i} style={{ width: 3, height: h, borderRadius: 2, background: 'var(--teal)' }} />
+                ))}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 3 }}>
+                  Hiring manager (behavioral) · Senior Product Manager · 12:48
+                </div>
+                <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.45 }}>
+                  &ldquo;Tell me about a time a launch slipped. What did you personally change?&rdquo;
+                </div>
+              </div>
+              <span style={{
+                fontSize: 11, fontWeight: 700, color: 'var(--rose)', background: 'var(--rose-dim)',
+                padding: '3px 9px', borderRadius: 20, flexShrink: 0,
+              }}>● Live</span>
+            </div>
+
+            {/* Feedback report */}
+            <div style={{
+              background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 14,
+              overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.22)',
+            }}>
               <div style={{
                 padding: '14px 18px', borderBottom: '1px solid var(--border)', background: 'var(--bg2)',
-                display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
               }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
-                    Senior Product Manager — Stripe
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                    Interview prep · Generated just now
-                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Your feedback report</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>7 questions · ready when you hang up</div>
                 </div>
-                <div style={{
-                  fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700,
-                  background: 'var(--teal-dim)', color: 'var(--teal)',
-                  padding: '3px 9px', borderRadius: 20, flexShrink: 0,
-                }}>
-                  Sprint
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--teal)', lineHeight: 1, letterSpacing: '-0.03em' }}>78</div>
+                  <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>out of 100</div>
                 </div>
               </div>
 
-              {/* Doc body */}
-              <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-                {/* Pitch */}
-                <div style={{ background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 8, padding: '12px 14px' }}>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--teal)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>
-                    Your pitch
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6 }}>
-                    I&apos;m a PM with 5 years building developer-facing products at scale. At Figma I owned the API platform — grew adoption 3× in 18 months.
-                  </div>
+              <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Q3 · The launch that slipped</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber)', flexShrink: 0 }}>3 / 5</div>
                 </div>
-
-                {/* Talking points */}
-                {[
-                  {
-                    label: 'Cross-functional leadership',
-                    angle: 'Led 3 eng teams across 2 time zones at Figma',
-                    point: 'Lead with the API v2 launch — shipped on time despite a 6-week scope change.',
-                  },
-                  {
-                    label: 'Data-driven prioritization',
-                    angle: 'Built a 0-to-1 analytics practice from scratch',
-                    point: 'Mention the North Star metric you defined and how it changed the roadmap.',
-                  },
-                ].map((tp) => (
-                  <div key={tp.label} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 13px' }}>
-                    <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 4 }}>{tp.label}</div>
-                    <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Your angle: {tp.angle}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text2)', lineHeight: 1.5 }}>{tp.point}</div>
-                  </div>
-                ))}
-
-                {/* Questions / Gaps */}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <div style={{ flex: '1 1 50%', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', minWidth: 0 }}>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 6 }}>
-                      Ask them
-                    </div>
-                    {[
-                      'How does eng and PM share the roadmap?',
-                      'What does a great first 90 days look like?',
-                    ].map((q) => (
-                      <div key={q} style={{ display: 'flex', gap: 5, fontSize: 11, color: 'var(--text2)', marginBottom: 4, lineHeight: 1.4 }}>
-                        <span style={{ color: 'var(--teal)', flexShrink: 0 }}>→</span>
-                        {q}
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ flex: '1 1 50%', background: 'color-mix(in srgb, var(--amber) 5%, transparent)', border: '1px solid color-mix(in srgb, var(--amber) 15%, transparent)', borderRadius: 8, padding: '10px 12px', minWidth: 0 }}>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--amber)', textTransform: 'uppercase', marginBottom: 6 }}>
-                      Gaps to prep for
-                    </div>
-                    {[
-                      'No direct payments experience',
-                      'Limited enterprise background',
-                    ].map((g) => (
-                      <div key={g} style={{ display: 'flex', gap: 5, fontSize: 11, color: 'var(--text2)', marginBottom: 4, lineHeight: 1.4 }}>
-                        <span style={{ color: 'var(--amber)', flexShrink: 0 }}>⚠</span>
-                        {g}
-                      </div>
-                    ))}
-                  </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {[['Situation', true], ['Task', true], ['Action', true], ['Result', false]].map(([l, ok]) => (
+                    <span key={l as string} style={{
+                      fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20,
+                      background: ok ? 'var(--teal-dim)' : 'var(--rose-dim)',
+                      color: ok ? 'var(--teal)' : 'var(--rose)',
+                    }}>{ok ? '✓' : '✗'} {l as string}</span>
+                  ))}
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.55 }}>
+                  <strong style={{ color: 'var(--text)' }}>Better answer:</strong> you never said how it ended.
+                  Close with the result.
+                </div>
+                <div style={{
+                  fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.5,
+                  background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)', borderRadius: 8, padding: '9px 12px',
+                }}>
+                  <strong style={{ color: 'var(--teal)' }}>From your library:</strong> &ldquo;Cut release cycle from
+                  6 weeks to 2&rdquo; fits here and you didn&apos;t use it.
+                </div>
+                <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.5 }}>
+                  <strong style={{ color: 'var(--amber)' }}>Check this:</strong> &ldquo;grew revenue 40%&rdquo; isn&apos;t
+                  in any of your modules. Add it or stop saying it.
                 </div>
               </div>
             </div>
+            <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center' }}>Sample report</div>
           </div>
         </div>
       </section>
