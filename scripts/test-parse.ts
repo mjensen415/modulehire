@@ -10,7 +10,7 @@ import { createClient } from '@supabase/supabase-js'
 import * as fs from 'fs'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
-import axios from 'axios'
+import axios, { type Method, type RawAxiosRequestHeaders } from 'axios'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -42,12 +42,13 @@ async function main() {
     } else if (authError) {
       throw authError;
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string } | null;
     // User already exists — look them up by email
-    const isEmailExists = err?.code === 'email_exists' || (err?.message ?? '').toLowerCase().includes('already');
+    const isEmailExists = e?.code === 'email_exists' || (e?.message ?? '').toLowerCase().includes('already');
     if (isEmailExists) {
       const { data: users } = await supabase.auth.admin.listUsers()
-      const existing = users?.users.find((u: any) => u.email === 'test@modulehire.dev')
+      const existing = users?.users.find((u) => u.email === 'test@modulehire.dev')
       userId = existing?.id;
     } else {
       console.error("Could not get or create test user", err);
@@ -94,9 +95,9 @@ async function main() {
   // Ollama can be slow — use axios with a 10-minute timeout to avoid undici headersTimeout
   const slowFetch = async (url: string, init: RequestInit & { body?: string }) => {
     const res = await axios({
-      method: (init.method ?? 'GET') as any,
+      method: (init.method ?? 'GET') as Method,
       url,
-      headers: init.headers as any,
+      headers: init.headers as RawAxiosRequestHeaders,
       data: init.body,
       timeout: 600_000,
       validateStatus: () => true,
@@ -198,7 +199,7 @@ async function main() {
   const matchData = await matchRes.json()
   const topModules = matchData.recommendations?.slice(0, 5) || [];
   console.log(`✓ Top ${topModules.length} ranked modules:`);
-  topModules.forEach((mod: any, index: number) => {
+  topModules.forEach((mod: { module_id: string; match_score: number; justification: string }, index: number) => {
     console.log(`${index + 1}. Module ID: ${mod.module_id} (Score: ${mod.match_score})`);
     console.log(`   Justification: ${mod.justification}`);
   });

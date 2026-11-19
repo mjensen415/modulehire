@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { createClient as createSupabaseBrowser } from '@/lib/supabase/client'
 import MergeConfirmModal from '@/components/MergeConfirmModal'
 import { isDimension, DIMENSIONS, DIMENSION_LABELS, type Dimension } from '@/lib/dimensions'
@@ -91,7 +91,6 @@ const SKILL_GROUPS: { key: SkillCategory; label: string }[] = [
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function LibraryPage() {
-  const router = useRouter()
   const supabase = useMemo(() => createSupabaseBrowser(), [])
   const [jobs, setJobs] = useState<Job[]>([])
   const [modules, setModules] = useState<Module[]>([])

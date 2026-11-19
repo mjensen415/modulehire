@@ -55,7 +55,7 @@ export default function TagsAndThemes() {
       </div>
 
       <h2>Company stage</h2>
-      <p>Each module can be tagged with one or more company stages: <span className="inline-code">startup</span>, <span className="inline-code">growth</span>, <span className="inline-code">enterprise</span>, or <span className="inline-code">any</span>. This helps surface stage-relevant experience — a hiring manager at a 20-person startup doesn't need to read about your enterprise procurement experience, and vice versa.</p>
+      <p>Each module can be tagged with one or more company stages: <span className="inline-code">startup</span>, <span className="inline-code">growth</span>, <span className="inline-code">enterprise</span>, or <span className="inline-code">any</span>. This helps surface stage-relevant experience — a hiring manager at a 20-person startup doesn&apos;t need to read about your enterprise procurement experience, and vice versa.</p>
 
       <h2>Editing tags</h2>
       <p>Open any module in the library editor. Themes, role types, and company stage are all editable as multi-select fields. Add or remove tags, then save. The change applies to future generations immediately — existing generated resumes are not affected.</p>

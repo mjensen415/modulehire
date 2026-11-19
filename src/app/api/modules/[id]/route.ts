@@ -26,7 +26,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
 
     if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     return NextResponse.json({ module: data })
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Request failed' }, { status: 500 })
   }
 }

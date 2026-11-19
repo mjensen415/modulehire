@@ -56,9 +56,8 @@ function ResumeParseAnimation() {
     // timeline: 0–1 (looping every CYCLE ms)
     const CYCLE = 4000
 
-    let startTime = performance.now()
+    const startTime = performance.now()
 
-    function lerp(a: number, b: number, t: number) { return a + (b - a) * t }
     function clamp01(v: number) { return Math.max(0, Math.min(1, v)) }
     function ease(t: number) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t }
 
@@ -159,7 +158,6 @@ function ResumeParseAnimation() {
 
       // Phase 4 (0.5–0.8): cards stagger in
       const cardsFadeStart = 0.5
-      const cardsFadeEnd = 0.8
 
       // Phase 5 (0.85–1.0): everything fades out
       const globalFadeOut = ease(clamp01((t - 0.85) / 0.15))
@@ -397,6 +395,7 @@ function ResumeUpload({ kindPicker }: { kindPicker: React.ReactNode }) {
   // page state (Next.js App Router). Without this, stage can be 'done' on return,
   // hiding the upload zone and preventing a second upload until full page reload.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset on mount so a Back-button restore shows the upload zone again
     setStage('idle')
     setErrorMessage('')
     setModuleCount(0)

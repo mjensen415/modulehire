@@ -75,8 +75,6 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
   // Rotate the status line while building (slower and without the fade for reduced motion).
   useEffect(() => {
     if (phase !== 'building') return
-    setLineOrder(shuffled(STATUS_LINES))
-    setLineIdx(0)
     const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     const t = setInterval(() => setLineIdx(i => i + 1), reduced ? 5000 : 3200)
     return () => clearInterval(t)
@@ -105,6 +103,8 @@ export default function GenerateV2({ initialJdId }: { initialJdId: string | null
     abortRef.current = controller
     lastBodyRef.current = body
     setDraft({ summary: null, jobs: [] })
+    setLineOrder(shuffled(STATUS_LINES))
+    setLineIdx(0)
     setPhase('building')
     setElapsed(0)
     setError(null)

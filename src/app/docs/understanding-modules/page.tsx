@@ -11,11 +11,11 @@ export default function UnderstandingModules() {
         <span style={{ color: 'var(--text2)' }}>Understanding modules</span>
       </div>
       <h1>Understanding modules</h1>
-      <p className="docs-lead">A module is a single skill domain from a single job, written as a self-contained paragraph. It's the core unit of everything ModuleHire does.</p>
+      <p className="docs-lead">A module is a single skill domain from a single job, written as a self-contained paragraph. It&apos;s the core unit of everything ModuleHire does.</p>
 
       <h2>Why modules instead of a full resume?</h2>
-      <p>A traditional resume forces you to commit to one story. If you apply for a community-focused role and a product-focused role on the same day, you're either writing two resumes from scratch or sending the wrong one. Modules solve this by separating your experience into its parts — so the right combination can be assembled for any role in seconds.</p>
-      <p>Think of your module library as a content bank. Each module is a piece of writing about something you've actually done. When you apply to a job, the system selects the 6–10 pieces that best match the role and assembles them into a coherent document.</p>
+      <p>A traditional resume forces you to commit to one story. If you apply for a community-focused role and a product-focused role on the same day, you&apos;re either writing two resumes from scratch or sending the wrong one. Modules solve this by separating your experience into its parts — so the right combination can be assembled for any role in seconds.</p>
+      <p>Think of your module library as a content bank. Each module is a piece of writing about something you&apos;ve actually done. When you apply to a job, the system selects the 6–10 pieces that best match the role and assembles them into a coherent document.</p>
 
       <h2>Anatomy of a module</h2>
 
@@ -31,7 +31,7 @@ export default function UnderstandingModules() {
         <div className="step-block-num" style={{ background: 'oklch(0.72 0.18 58)', color: 'var(--bg)' }}>C</div>
         <div className="step-block-body">
           <h3>Content</h3>
-          <p>The body of the module — a paragraph or two describing the work you did in this specific domain, at this specific company. Written in first-person past tense. The output resume uses this content almost verbatim, with light rewording to match the JD's language.</p>
+          <p>The body of the module — a paragraph or two describing the work you did in this specific domain, at this specific company. Written in first-person past tense. The output resume uses this content almost verbatim, with light rewording to match the JD&apos;s language.</p>
         </div>
       </div>
 
@@ -39,7 +39,7 @@ export default function UnderstandingModules() {
         <div className="step-block-num" style={{ background: 'oklch(0.62 0.18 270)', color: 'var(--bg)' }}>M</div>
         <div className="step-block-body">
           <h3>Metadata</h3>
-          <p>Each module carries a source company, job title, date range, employment type, weight, type, and a set of tags. This metadata powers the matching engine — it's what lets the system know a module is relevant to a VP-level community role at a growth-stage company, for example.</p>
+          <p>Each module carries a source company, job title, date range, employment type, weight, type, and a set of tags. This metadata powers the matching engine — it&apos;s what lets the system know a module is relevant to a VP-level community role at a growth-stage company, for example.</p>
         </div>
       </div>
 
@@ -57,7 +57,7 @@ export default function UnderstandingModules() {
       </div>
 
       <h2>Your module library over time</h2>
-      <p>The library grows as you upload more resumes or add modules manually. Older modules stay in the library indefinitely — they won't appear in generated resumes unless the matching engine selects them. As your career evolves, you can update content, adjust weights, or archive modules you no longer want included.</p>
+      <p>The library grows as you upload more resumes or add modules manually. Older modules stay in the library indefinitely — they won&apos;t appear in generated resumes unless the matching engine selects them. As your career evolves, you can update content, adjust weights, or archive modules you no longer want included.</p>
 
       <div className="docs-nav-footer" style={{ display: 'flex', justifyContent: 'space-between' }}>
         <Link href="/docs/upload-resume" className="docs-nav-btn">

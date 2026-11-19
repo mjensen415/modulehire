@@ -11,14 +11,14 @@ export default function ModuleMatching() {
         <span style={{ color: 'var(--text2)' }}>Module matching</span>
       </div>
       <h1>Module matching</h1>
-      <p className="docs-lead">Matching is the step that turns your library and a job description into a ranked stack. Here's how the scoring works and how to influence it.</p>
+      <p className="docs-lead">Matching is the step that turns your library and a job description into a ranked stack. Here&apos;s how the scoring works and how to influence it.</p>
 
       <h2>How scoring works</h2>
-      <p>The matching engine compares each module in your library against the extracted JD profile — themes, role type, seniority, and key phrases. Each module receives a match score from 0 to 100. The score reflects how well the module's tags and content align with what the role is looking for.</p>
-      <p>Anchor modules always receive a score of 100 regardless of tag overlap — they're always in the stack. Strong modules are included when their score is 65 or higher. Supporting modules are included only at 80 or higher.</p>
+      <p>The matching engine compares each module in your library against the extracted JD profile — themes, role type, seniority, and key phrases. Each module receives a match score from 0 to 100. The score reflects how well the module&apos;s tags and content align with what the role is looking for.</p>
+      <p>Anchor modules always receive a score of 100 regardless of tag overlap — they&apos;re always in the stack. Strong modules are included when their score is 65 or higher. Supporting modules are included only at 80 or higher.</p>
 
       <h2>The recommended stack</h2>
-      <p>After scoring, the engine selects a recommended stack of 6–10 modules ordered by relevance. This is what gets passed to the generation step by default. You can modify the stack before generating — add modules that were ranked out, remove ones that don't feel right for this application.</p>
+      <p>After scoring, the engine selects a recommended stack of 6–10 modules ordered by relevance. This is what gets passed to the generation step by default. You can modify the stack before generating — add modules that were ranked out, remove ones that don&apos;t feel right for this application.</p>
 
       <div className="callout">
         <div className="callout-icon">
@@ -28,9 +28,9 @@ export default function ModuleMatching() {
       </div>
 
       <h2>Improving match quality</h2>
-      <p>If the matching results don't feel right — wrong modules surfacing, key ones being left out — the most effective fixes are:</p>
-      <p><strong>Fix the module's tags.</strong> A module that's clearly relevant but scoring low is usually missing a theme or has the wrong role type. Open the module editor, add the relevant themes, and re-run matching.</p>
-      <p><strong>Check the JD extraction.</strong> If the extracted themes don't match what the role is actually about, the scores will be off across the board. Go back to the JD review screen and correct the themes before re-running.</p>
+      <p>If the matching results don&apos;t feel right — wrong modules surfacing, key ones being left out — the most effective fixes are:</p>
+      <p><strong>Fix the module&apos;s tags.</strong> A module that&apos;s clearly relevant but scoring low is usually missing a theme or has the wrong role type. Open the module editor, add the relevant themes, and re-run matching.</p>
+      <p><strong>Check the JD extraction.</strong> If the extracted themes don&apos;t match what the role is actually about, the scores will be off across the board. Go back to the JD review screen and correct the themes before re-running.</p>
       <p><strong>Adjust weight.</strong> If a module is consistently left out of stacks where it belongs, raise it from supporting to strong, or from strong to anchor.</p>
 
       <h2>Career narrative variant</h2>
@@ -44,7 +44,7 @@ export default function ModuleMatching() {
       </div>
 
       <h2>Re-running matching</h2>
-      <p>You can re-run matching against a saved JD at any time from the generation history. This is useful when you've edited modules or updated tags after the initial run. The new stack may differ from the original — review it before generating.</p>
+      <p>You can re-run matching against a saved JD at any time from the generation history. This is useful when you&apos;ve edited modules or updated tags after the initial run. The new stack may differ from the original — review it before generating.</p>
 
       <div className="docs-nav-footer" style={{ display: 'flex', justifyContent: 'space-between' }}>
         <Link href="/docs/job-description-input" className="docs-nav-btn">

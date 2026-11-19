@@ -14,13 +14,13 @@ export default function JobDescriptionInput() {
       <p className="docs-lead">The job description is the other half of the equation. What you give it here determines which modules get selected and how the output resume is framed.</p>
 
       <h2>Paste vs. URL</h2>
-      <p>The input screen has two tabs: <strong>Paste</strong> and <strong>URL</strong>. Paste is always available — copy the job description from wherever you found it and drop it in. The URL tab fetches the page content directly, which is faster if you're working from a job board link.</p>
+      <p>The input screen has two tabs: <strong>Paste</strong> and <strong>URL</strong>. Paste is always available — copy the job description from wherever you found it and drop it in. The URL tab fetches the page content directly, which is faster if you&apos;re working from a job board link.</p>
 
       <div className="callout">
         <div className="callout-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="8" cy="8" r="6" /><path d="M8 5v3M8 11h.01" /></svg>
         </div>
-        <div className="callout-text"><strong>More is better.</strong> Include the full JD — responsibilities, qualifications, the company blurb, all of it. The more text the system has, the more accurately it can extract themes and phrases. Don't trim it down before pasting.</div>
+        <div className="callout-text"><strong>More is better.</strong> Include the full JD — responsibilities, qualifications, the company blurb, all of it. The more text the system has, the more accurately it can extract themes and phrases. Don&apos;t trim it down before pasting.</div>
       </div>
 
       <h2>What gets extracted</h2>
@@ -32,13 +32,13 @@ export default function JobDescriptionInput() {
       <p><strong>Key phrases</strong> — 5–10 exact phrases from the JD text. These are mirrored into the generated resume to help with ATS matching and to signal alignment to the hiring team.</p>
 
       <h2>Reviewing the extraction</h2>
-      <p>After analysis, you'll see a summary of the extracted profile before matching runs. Review it — the AI is generally accurate, but occasionally misclassifies seniority or misses a dominant theme. You can edit any field before proceeding.</p>
+      <p>After analysis, you&apos;ll see a summary of the extracted profile before matching runs. Review it — the AI is generally accurate, but occasionally misclassifies seniority or misses a dominant theme. You can edit any field before proceeding.</p>
 
       <div className="callout amber">
         <div className="callout-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M8 2L1 14h14L8 2zM8 7v3M8 12h.01" /></svg>
         </div>
-        <div className="callout-text"><strong>Check the phrases.</strong> The extracted phrases are used verbatim in the output. If any of them are boilerplate ("competitive salary," "equal opportunity employer") rather than role-specific language, remove them before generating.</div>
+        <div className="callout-text"><strong>Check the phrases.</strong> The extracted phrases are used verbatim in the output. If any of them are boilerplate (&quot;competitive salary,&quot; &quot;equal opportunity employer&quot;) rather than role-specific language, remove them before generating.</div>
       </div>
 
       <h2>Saving JDs</h2>

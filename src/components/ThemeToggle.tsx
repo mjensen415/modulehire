@@ -8,6 +8,7 @@ export default function ThemeToggle() {
   useEffect(() => {
     const stored = localStorage.getItem('mh-theme') as 'dark' | 'light' | null
     const initial = stored ?? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- theme comes from localStorage/matchMedia, only available after mount
     setTheme(initial)
     document.documentElement.setAttribute('data-theme', initial)
   }, [])
