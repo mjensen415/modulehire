@@ -1,8 +1,12 @@
 'use client'
 
+// Postings list. Styles: business.css (.biz-*) plus the bp-jobs/bp-menu rules in ./[id]/posting.css.
+
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { providerLabel } from '@/lib/business/ats/registry'
+import './[id]/posting.css'
 
 type Job = {
   id: string
@@ -10,13 +14,15 @@ type Job = {
   status: string
   applicant_count: number
   created_at: string
+  extracted_company?: string | null
+  external_source?: string | null
 }
 
-const STATUS_COLORS: Record<string, { color: string; bg: string }> = {
-  draft: { color: 'var(--text3)', bg: 'var(--bg3)' },
-  active: { color: 'var(--teal)', bg: 'var(--teal-dim)' },
-  paused: { color: 'var(--amber)', bg: 'var(--amber-dim)' },
-  closed: { color: 'var(--text3)', bg: 'var(--bg3)' },
+const STATUS_CHIP: Record<string, { label: string; chip: string }> = {
+  draft: { label: 'Draft', chip: '' },
+  active: { label: 'Active', chip: 'teal' },
+  paused: { label: 'Paused', chip: 'sand' },
+  closed: { label: 'Closed', chip: '' },
 }
 
 function formatDate(iso: string) {
@@ -62,14 +68,22 @@ export default function BusinessJobsPage() {
 
   useEffect(() => {
     if (!menuOpen) return
+    function close() {
+      setMenuOpen(null)
+      setConfirmDeleteId(null)
+    }
     function handleOutsideClick(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(null)
-        setConfirmDeleteId(null)
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) close()
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') close()
     }
     document.addEventListener('click', handleOutsideClick)
-    return () => document.removeEventListener('click', handleOutsideClick)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('click', handleOutsideClick)
+      document.removeEventListener('keydown', handleKey)
+    }
   }, [menuOpen])
 
   async function handleArchive(jobId: string) {
@@ -107,166 +121,132 @@ export default function BusinessJobsPage() {
     }
   }
 
+  const openCount = jobs.filter((j) => j.status !== 'closed').length
+  const closedCount = jobs.length - openCount
+
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>Jobs</h1>
-        <Link href="/business/jobs/new" className="btn-primary" style={{ textDecoration: 'none' }}>
-          + New job
-        </Link>
-      </div>
+    <div className="biz-inner">
+      <header className="biz-head">
+        <div>
+          <h1 className="biz-h1">Postings</h1>
+          <p className="biz-sub">
+            {loading
+              ? 'Loading your postings.'
+              : jobs.length === 0
+                ? 'No postings yet.'
+                : `${openCount} open${closedCount ? `, ${closedCount} closed` : ''}.`}
+          </p>
+        </div>
+        <div className="biz-actions">
+          <Link href="/business/jobs/new" className="biz-btn">+ New posting</Link>
+        </div>
+      </header>
 
       {error && (
-        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#ef4444', marginBottom: 16 }}>
-          {error}
+        <div className="bp-error" role="alert">
+          <span>{error}</span>
+          <button type="button" className="bp-x" onClick={() => setError('')} aria-label="Dismiss error">×</button>
         </div>
       )}
 
-      {loading ? (
-        <div style={{ color: 'var(--text3)', fontSize: 13.5 }}>Loading…</div>
-      ) : jobs.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', border: '1px dashed var(--border2)', borderRadius: 12 }}>
-          <p style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 16 }}>No jobs yet.</p>
-          <Link href="/business/jobs/new" className="btn-primary" style={{ display: 'inline-flex', textDecoration: 'none' }}>
-            + New job
-          </Link>
+      <section aria-labelledby="jobs-h" className="biz-card">
+        <div className="biz-card-head">
+          <h2 id="jobs-h" className="biz-h2">All postings</h2>
+          {jobs.length > 0 && <span className="biz-muted" style={{ fontSize: 13 }}>Newest first</span>}
         </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {jobs.map((job) => {
-            const statusCfg = STATUS_COLORS[job.status] ?? STATUS_COLORS.draft
-            const isMenuOpen = menuOpen === job.id
-            return (
-              <div key={job.id} style={{ position: 'relative' }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 16,
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 10,
-                    padding: '14px 18px',
-                  }}
-                >
-                  <Link
-                    href={`/business/jobs/${job.id}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 16,
-                      flex: 1,
-                      minWidth: 0,
-                      textDecoration: 'none',
-                      color: 'var(--text)',
-                    }}
-                  >
-                    <div style={{ flex: 1, fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {job.title}
-                    </div>
-                    <span style={{
-                      fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20,
-                      color: statusCfg.color, background: statusCfg.bg, textTransform: 'capitalize',
-                    }}>
-                      {job.status}
-                    </span>
-                    <span style={{ fontSize: 12, color: 'var(--text3)', width: 100, textAlign: 'right' }}>
-                      {job.applicant_count} applicant{job.applicant_count === 1 ? '' : 's'}
-                    </span>
-                    <span style={{ fontSize: 12, color: 'var(--text3)', width: 90, textAlign: 'right' }}>
-                      {formatDate(job.created_at)}
-                    </span>
-                    <span style={{ color: 'var(--text3)' }}>→</span>
-                  </Link>
 
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      setConfirmDeleteId(null)
-                      setMenuOpen(isMenuOpen ? null : job.id)
-                    }}
-                    aria-label="Job actions"
-                    style={{
-                      background: 'none', border: 'none', padding: '6px 8px', borderRadius: 6,
-                      color: 'var(--text3)', cursor: 'pointer', fontSize: 16, lineHeight: 1,
-                      transition: 'all 0.15s', flexShrink: 0,
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg3)'; e.currentTarget.style.color = 'var(--text)' }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text3)' }}
-                  >
-                    ···
-                  </button>
-                </div>
-
-                {isMenuOpen && (
-                  <div
-                    ref={menuRef}
-                    style={{
-                      position: 'absolute', right: 8, top: 36, zIndex: 10,
-                      background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 8,
-                      minWidth: 140, padding: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-                    }}
-                  >
-                    {confirmDeleteId === job.id ? (
-                      <div style={{ padding: 8 }}>
-                        <div style={{ fontSize: 11.5, color: 'var(--text2)', marginBottom: 8, lineHeight: 1.4 }}>
-                          Delete? This removes all applicants.
+        {loading ? (
+          <div aria-busy="true" aria-label="Loading postings">
+            {[0, 1, 2].map((i) => <div key={i} className="bp-skel" style={{ opacity: 1 - i * 0.25 }} />)}
+          </div>
+        ) : jobs.length === 0 ? (
+          <div className="biz-empty">
+            <h2>Post your first job</h2>
+            <p>Paste the job description, set what matters, then upload applicants or import them from your ATS. We score and rank every one.</p>
+            <Link href="/business/jobs/new" className="biz-btn">+ Create a posting</Link>
+          </div>
+        ) : (
+          <div className="biz-table-wrap" style={{ overflow: 'visible' }}>
+            <table className="biz-table bp-jobs-table">
+              <thead>
+                <tr>
+                  <th scope="col">Posting</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" className="bp-col-wide">Source</th>
+                  <th scope="col">Applicants</th>
+                  <th scope="col" className="bp-col-wide">Opened</th>
+                  <th scope="col"><span className="bp-sr">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {jobs.map((job) => {
+                  const cfg = STATUS_CHIP[job.status] ?? { label: job.status, chip: '' }
+                  const isMenuOpen = menuOpen === job.id
+                  const source = providerLabel(job.external_source)
+                  return (
+                    <tr key={job.id}>
+                      <td>
+                        <Link href={`/business/jobs/${job.id}`} className="biz-row-link">{job.title}</Link>
+                        {job.extracted_company && <div className="bp-jobs-sub">{job.extracted_company}</div>}
+                      </td>
+                      <td><span className={`biz-chip ${cfg.chip}`}>{cfg.label}</span></td>
+                      <td className="bp-col-wide">
+                        {source ? <span className="biz-chip">{source}</span> : <span className="biz-faint">–</span>}
+                      </td>
+                      <td>{job.applicant_count ?? 0}</td>
+                      <td className="bp-col-wide biz-muted">{formatDate(job.created_at)}</td>
+                      <td>
+                        <div className="bp-menu-wrap" ref={isMenuOpen ? menuRef : undefined}>
+                          <button
+                            type="button"
+                            className="bp-kebab"
+                            aria-label={`Actions for ${job.title}`}
+                            aria-haspopup="menu"
+                            aria-expanded={isMenuOpen}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setConfirmDeleteId(null)
+                              setMenuOpen(isMenuOpen ? null : job.id)
+                            }}
+                          >
+                            ···
+                          </button>
+                          {isMenuOpen && (
+                            <div className="bp-menu" role="menu">
+                              {confirmDeleteId === job.id ? (
+                                <>
+                                  <div className="bp-menu-note">Delete this posting? This removes all its applicants.</div>
+                                  <button type="button" role="menuitem" className="bp-menu-item danger" onClick={() => handleDelete(job.id)} disabled={busyId === job.id}>
+                                    {busyId === job.id ? 'Deleting…' : 'Yes, delete'}
+                                  </button>
+                                  <button type="button" role="menuitem" className="bp-menu-item" onClick={() => setConfirmDeleteId(null)}>
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  {job.status !== 'closed' && (
+                                    <button type="button" role="menuitem" className="bp-menu-item" onClick={() => handleArchive(job.id)} disabled={busyId === job.id}>
+                                      {busyId === job.id ? 'Archiving…' : 'Archive posting'}
+                                    </button>
+                                  )}
+                                  <button type="button" role="menuitem" className="bp-menu-item danger" onClick={() => setConfirmDeleteId(job.id)}>
+                                    Delete posting
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        <button
-                          onClick={() => handleDelete(job.id)}
-                          disabled={busyId === job.id}
-                          style={{
-                            width: '100%', textAlign: 'left', background: 'none', border: 'none',
-                            color: '#ef4444', fontSize: 12.5, fontWeight: 600, padding: '6px 8px',
-                            cursor: 'pointer', borderRadius: 6, fontFamily: 'var(--font)',
-                          }}
-                        >
-                          {busyId === job.id ? 'Deleting…' : 'Yes, delete'}
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteId(null)}
-                          style={{
-                            width: '100%', textAlign: 'left', background: 'none', border: 'none',
-                            color: 'var(--text3)', fontSize: 12.5, padding: '6px 8px',
-                            cursor: 'pointer', borderRadius: 6, fontFamily: 'var(--font)',
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => handleArchive(job.id)}
-                          disabled={busyId === job.id}
-                          style={{
-                            width: '100%', textAlign: 'left', background: 'none', border: 'none',
-                            color: 'var(--text2)', fontSize: 12.5, padding: '8px 10px',
-                            cursor: 'pointer', borderRadius: 6, fontFamily: 'var(--font)',
-                          }}
-                        >
-                          {busyId === job.id ? 'Archiving…' : 'Archive job'}
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteId(job.id)}
-                          style={{
-                            width: '100%', textAlign: 'left', background: 'none', border: 'none',
-                            color: '#ef4444', fontSize: 12.5, padding: '8px 10px',
-                            cursor: 'pointer', borderRadius: 6, fontFamily: 'var(--font)',
-                          }}
-                        >
-                          Delete job
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   )
 }
