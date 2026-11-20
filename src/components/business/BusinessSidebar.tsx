@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
-// Charcoal sidebar for ModuleHire for Business. Styles: src/app/business/business.css (.biz-side).
+// Charcoal sidebar for ModuleHire for Business. An <aside>, not <nav>: globals.css styles every
+// <nav> as the fixed 60px marketing top bar. Styles: src/app/business/business.css (.biz-side).
 
 function IconHouse() {
   return (
@@ -118,7 +119,7 @@ export default function BusinessSidebar({ userEmail }: { userEmail: string | nul
   const pct = usage?.limit ? Math.min(100, Math.round((usage.used / usage.limit) * 100)) : 0
 
   return (
-    <nav className="biz-side" aria-label="Business">
+    <aside className="biz-side" role="navigation" aria-label="Business">
       <div className="biz-brand">
         <BizMark />
         <span className="biz-brand-name">ModuleHire</span>
@@ -185,6 +186,6 @@ export default function BusinessSidebar({ userEmail }: { userEmail: string | nul
           ← Personal app
         </Link>
       </div>
-    </nav>
+    </aside>
   )
 }
