@@ -3,6 +3,8 @@ import Link from 'next/link'
 import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import { BUSINESS_PLANS, TEAM_PRICE_LABEL } from '@/lib/business/plan'
+import '@/app/warm.css'
+import './landing.css'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
@@ -34,401 +36,215 @@ export default async function BusinessPage() {
   return <BusinessLanding />
 }
 
-function Step({ n, title, body }: { n: string; title: string; body: string }) {
+type Pip = 0 | 1 | 2 | 3 | 4 | 5
+
+function Pips({ n }: { n: Pip }) {
   return (
-    <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-      <div style={{
-        width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
-        background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 15, fontWeight: 800, color: 'var(--teal)',
-      }}>
-        {n}
-      </div>
-      <div>
-        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>{title}</div>
-        <div style={{ fontSize: 13.5, color: 'var(--text2)', lineHeight: 1.65 }}>{body}</div>
-      </div>
+    <div className="bl-pips" role="img" aria-label={`${n} of 5`}>
+      {[0, 1, 2, 3, 4].map((i) => <span key={i} className={i < n ? 'on' : undefined} />)}
     </div>
   )
 }
 
-function Callout({ icon, title, body }: { icon: string; title: string; body: string }) {
+function Mark() {
   return (
-    <div style={{
-      background: 'var(--surface)', border: '1px solid var(--border)',
-      borderRadius: 14, padding: '22px 24px',
-    }}>
-      <div style={{ fontSize: 26, marginBottom: 12 }}>{icon}</div>
-      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>{title}</div>
-      <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.65 }}>{body}</div>
-    </div>
+    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+      <rect x="2" y="14" width="10" height="10" rx="2" fill="#1f6f63" />
+      <rect x="14" y="14" width="10" height="10" rx="2" fill="#5fbfa8" />
+      <rect x="8" y="2" width="10" height="10" rx="2" fill="#1f6f63" opacity="0.55" />
+    </svg>
   )
 }
 
-function PriceCard({ name, price, cadence, features, cta, highlight }: {
-  name: string; price: string; cadence: string; features: string[]; cta: { label: string; href: string }; highlight?: boolean
-}) {
-  return (
-    <div style={{
-      background: 'var(--bg)', borderRadius: 16, padding: '28px 26px',
-      border: highlight ? '2px solid var(--teal)' : '1px solid var(--border)',
-      display: 'flex', flexDirection: 'column',
-    }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: highlight ? 'var(--teal)' : 'var(--text2)', marginBottom: 10 }}>{name}</div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 18 }}>
-        <span style={{ fontSize: 38, fontWeight: 900, color: 'var(--text)', letterSpacing: '-0.04em' }}>{price}</span>
-        <span style={{ fontSize: 13, color: 'var(--text3)' }}>{cadence}</span>
-      </div>
-      <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 9, flex: 1 }}>
-        {features.map((f) => (
-          <li key={f} style={{ fontSize: 13.5, color: 'var(--text2)', lineHeight: 1.5, display: 'flex', gap: 8 }}>
-            <span style={{ color: 'var(--teal)' }}>✓</span><span>{f}</span>
-          </li>
-        ))}
-      </ul>
-      <Link href={cta.href} style={{
-        textAlign: 'center', fontSize: 14, fontWeight: 700, textDecoration: 'none', padding: '11px 18px', borderRadius: 8,
-        color: highlight ? '#fff' : 'var(--text)', background: highlight ? 'var(--teal)' : 'transparent',
-        border: highlight ? 'none' : '1px solid var(--border2)',
-      }}>
-        {cta.label}
-      </Link>
-    </div>
-  )
-}
+// Sample rows for the ranking grid. Fictional people; weights match score-applicant.ts
+// (dealbreaker 3x, must-have 2x, nice-to-have 1x; a missed dealbreaker caps the score at 25).
+const SAMPLE: { rank: string; name: string; head: string; db: boolean; ds: Pip; rs: Pip; fin: Pip; score: number; lead?: boolean }[] = [
+  { rank: '1', name: 'Priya Raman', head: 'Design systems lead', db: true, ds: 5, rs: 4, fin: 2, score: 94, lead: true },
+  { rank: '2', name: 'Daniel Okafor', head: 'Fintech product design', db: true, ds: 4, rs: 3, fin: 5, score: 89 },
+  { rank: '3', name: 'Sofia Lindqvist', head: 'Agency to in-house', db: true, ds: 4, rs: 4, fin: 1, score: 86 },
+  { rank: '–', name: 'Alex Rivera', head: 'Visual designer, 3 years', db: false, ds: 3, rs: 3, fin: 0, score: 25 },
+]
 
 function BusinessLanding() {
+  const year = new Date().getFullYear()
   return (
-    <div style={{ fontFamily: 'var(--font)' }}>
-
-      {/* Nav */}
-      <nav style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '18px 48px', borderBottom: '1px solid var(--border)',
-        position: 'sticky', top: 0, background: 'var(--bg)', zIndex: 10,
-      }}>
-        <div>
-          <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>
-            ModuleHire
-          </span>
-          <span style={{
-            marginLeft: 8, fontSize: 10, fontWeight: 700, color: 'var(--teal)',
-            fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.08em',
-            background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)',
-            padding: '2px 7px', borderRadius: 5,
-          }}>
-            for Business
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Link href={DEMO_HREF} style={{
-            fontSize: 13, fontWeight: 600, color: 'var(--text2)',
-            textDecoration: 'none', padding: '7px 10px',
-          }}>
-            Demo
+    <div className="warm bl">
+      <nav className="bl-nav" aria-label="Main">
+        <div className="bl-wrap bl-nav-in">
+          <Link href="/business" className="bl-brand">
+            <Mark />
+            <span className="bl-brand-name">ModuleHire</span>
+            <span className="bl-tag">BUSINESS</span>
           </Link>
-          <Link href="#pricing" style={{
-            fontSize: 13, fontWeight: 600, color: 'var(--text2)',
-            textDecoration: 'none', padding: '7px 10px',
-          }}>
-            Pricing
-          </Link>
-          <Link href={SIGNIN_HREF} style={{
-            fontSize: 13, fontWeight: 600, color: 'var(--text2)',
-            textDecoration: 'none', padding: '7px 14px',
-            border: '1px solid var(--border2)', borderRadius: 7,
-          }}>
-            Sign in
-          </Link>
-          <Link href={SIGNUP_HREF} style={{
-            fontSize: 13, fontWeight: 700, color: 'var(--on-teal)',
-            textDecoration: 'none', padding: '8px 16px',
-            background: 'var(--teal)', borderRadius: 7,
-          }}>
-            Get started free →
-          </Link>
+          <div className="bl-links">
+            <Link href="#how-it-works" className="bl-link">How it works</Link>
+            <Link href={DEMO_HREF} className="bl-link">Demo</Link>
+            <Link href="#pricing" className="bl-link">Pricing</Link>
+            <Link href={SIGNIN_HREF} className="bl-link">Sign in</Link>
+            <Link href={SIGNUP_HREF} className="bl-btn">Start free</Link>
+          </div>
         </div>
       </nav>
 
-      {/* Hero */}
-      <section style={{
-        maxWidth: 780, margin: '0 auto', padding: '96px 32px 80px',
-        textAlign: 'center',
-      }}>
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 7,
-          background: 'var(--teal-dim)', border: '1px solid var(--teal-glow)',
-          borderRadius: 20, padding: '5px 14px', marginBottom: 32,
-          fontSize: 12, fontWeight: 700, color: 'var(--teal)',
-        }}>
-          <span>✦</span>
-          <span>AI-powered applicant screening</span>
-        </div>
+      <main className="bl-wrap">
+        <header className="bl-hero">
+          <h1 className="bl-h1">Rank your whole pipeline in minutes.</h1>
+          <p className="bl-lede">
+            Every applicant scored against what the job actually needs, with the line from their resume that earned each point.
+          </p>
+          <div className="bl-cta-row">
+            <Link href={SIGNUP_HREF} className="bl-btn bl-btn-lg">Start free</Link>
+            <Link href={DEMO_HREF} className="bl-btn bl-btn-ghost bl-btn-lg">See a live demo</Link>
+          </div>
+          <p className="bl-small">Free plan, no credit card. The demo needs no account.</p>
+        </header>
 
-        <h1 style={{
-          fontSize: 'clamp(36px, 5vw, 58px)', fontWeight: 900,
-          color: 'var(--text)', letterSpacing: '-0.04em', lineHeight: 1.08,
-          marginBottom: 22,
-        }}>
-          Stop drowning in resumes.<br />
-          <span style={{ color: 'var(--teal)' }}>Start hiring smarter.</span>
-        </h1>
-
-        <p style={{
-          fontSize: 18, color: 'var(--text2)', lineHeight: 1.65,
-          maxWidth: 560, margin: '0 auto 40px', fontWeight: 400,
-        }}>
-          Paste a job description, set your criteria, and get every applicant scored and ranked, with the evidence behind each score.
-        </p>
-
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <Link href={SIGNUP_HREF} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            fontSize: 15, fontWeight: 700, color: 'var(--on-teal)',
-            textDecoration: 'none', padding: '13px 28px',
-            background: 'var(--teal)', borderRadius: 9,
-            boxShadow: '0 8px 28px color-mix(in srgb, var(--teal) 30%, transparent)',
-          }}>
-            Try it free →
-          </Link>
-          <Link href={DEMO_HREF} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            fontSize: 15, fontWeight: 600, color: 'var(--text2)',
-            textDecoration: 'none', padding: '13px 28px',
-            border: '1px solid var(--border2)', borderRadius: 9,
-          }}>
-            See a live demo
-          </Link>
-        </div>
-
-        <p style={{ fontSize: 12, color: 'var(--text3)', marginTop: 20 }}>
-          Free plan, no credit card · The demo needs no account
-        </p>
-      </section>
-
-      {/* Score preview strip */}
-      <section style={{
-        background: 'var(--surface)', borderTop: '1px solid var(--border)',
-        borderBottom: '1px solid var(--border)', padding: '36px 48px',
-        overflow: 'hidden',
-      }}>
-        <div style={{
-          maxWidth: 900, margin: '0 auto',
-          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16,
-        }}>
-          {[
-            { name: 'Alex M.', headline: 'Senior Product Manager · 8 yrs', score: 91, bar: '#1d9e75' },
-            { name: 'Jordan K.', headline: 'Product Manager · 4 yrs', score: 74, bar: '#f59e0b' },
-            { name: 'Taylor R.', headline: 'Associate PM · 2 yrs', score: 43, bar: '#ef4444' },
-          ].map((a) => (
-            <div key={a.name} style={{
-              background: 'var(--bg)', border: '1px solid var(--border)',
-              borderRadius: 12, padding: '16px 18px',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <div>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>{a.name}</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 2 }}>{a.headline}</div>
-                </div>
-                <div style={{
-                  fontSize: 20, fontWeight: 900, color: a.bar,
-                  letterSpacing: '-0.03em', lineHeight: 1,
-                }}>
-                  {a.score}
-                </div>
-              </div>
-              <div style={{ height: 5, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ width: `${a.score}%`, height: '100%', background: a.bar, borderRadius: 3 }} />
+        <section id="how-it-works" aria-labelledby="how-h" className="bl-section">
+          <h2 id="how-h" className="bl-eyebrow">How it works</h2>
+          <div className="bl-steps">
+            <div className="bl-step">
+              <span className="bl-step-n">1</span>
+              <h3>Paste the job</h3>
+              <p>We pull out the requirements. You set what each one is worth, and add your own.</p>
+              <div className="bl-weights">
+                <div className="bl-weight"><span className="bl-chip db">Dealbreaker</span>5+ years product design</div>
+                <div className="bl-weight"><span className="bl-chip must">Must have</span>Built a design system</div>
+                <div className="bl-weight"><span className="bl-chip must">Must have</span>Customer research</div>
+                <div className="bl-weight"><span className="bl-chip nice">Nice to have</span>Fintech or payments</div>
               </div>
             </div>
-          ))}
-        </div>
-        <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--text3)', marginTop: 16 }}>
-          Sample candidates. <Link href={DEMO_HREF} style={{ color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>Open the demo</Link> to see the full breakdown and evidence.
-        </p>
-      </section>
-
-      {/* How it works */}
-      <section id="how-it-works" style={{ maxWidth: 680, margin: '0 auto', padding: '80px 32px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 52 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--teal)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>
-            How it works
-          </div>
-          <h2 style={{ fontSize: 32, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.03em', lineHeight: 1.15 }}>
-            From job description to ranked shortlist in three steps
-          </h2>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
-          <Step
-            n="1"
-            title="Paste your job description"
-            body="Drop in a job description and ModuleHire extracts your scoring criteria. Promote anything to a dealbreaker, demote what doesn't matter, add custom signals. Your rubric, not ours."
-          />
-          <div style={{ borderLeft: '1px dashed var(--border2)', height: 24, marginLeft: 20 }} />
-          <Step
-            n="2"
-            title="Upload applicants in bulk or one at a time"
-            body="CSV batch upload for large pipelines or drag-and-drop individual PDFs and Word docs. Each resume is parsed, extracted, and queued for scoring automatically."
-          />
-          <div style={{ borderLeft: '1px dashed var(--border2)', height: 24, marginLeft: 20 }} />
-          <Step
-            n="3"
-            title="Review ranked candidates with full AI evidence"
-            body="Every applicant gets a score from 0–100, broken down by criterion. See exactly what evidence the AI found, or didn't, so you can trust the ranking or override it."
-          />
-        </div>
-
-        <div style={{ textAlign: 'center', marginTop: 52 }}>
-          <Link href={SIGNUP_HREF} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            fontSize: 14, fontWeight: 700, color: 'var(--on-teal)',
-            textDecoration: 'none', padding: '12px 26px',
-            background: 'var(--teal)', borderRadius: 8,
-          }}>
-            Start screening smarter →
-          </Link>
-        </div>
-      </section>
-
-      {/* Why ModuleHire for Business */}
-      <section style={{
-        background: 'var(--surface)', borderTop: '1px solid var(--border)',
-        borderBottom: '1px solid var(--border)', padding: '80px 48px',
-      }}>
-        <div style={{ maxWidth: 900, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 48 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--teal)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>
-              Why teams switch
+            <div className="bl-step">
+              <span className="bl-step-n">2</span>
+              <h3>Bring in applicants</h3>
+              <p>Connect your ATS, drop in an export, or upload resumes. Nothing to re-key.</p>
+              <div className="bl-pills">
+                {['Greenhouse', 'Lever', 'Ashby', 'Workable', 'BambooHR'].map((p) => <span key={p} className="bl-pill">{p}</span>)}
+                <span className="bl-pill sand">CSV or Excel export</span>
+              </div>
+              <p className="bl-small">Candidates who opted out of AI review in Greenhouse are never imported.</p>
             </div>
-            <h2 style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.03em' }}>
-              Built for hiring teams, not HR software vendors
-            </h2>
+            <div className="bl-step dark">
+              <span className="bl-step-n">3</span>
+              <h3>Get a ranked list</h3>
+              <p>Scores from 0 to 100, best first. Each one shows its evidence and can post back to your ATS.</p>
+              <div className="bl-mini">
+                <div className="bl-mini-row"><span className="bl-mini-score top">94</span>Priya Raman</div>
+                <div className="bl-mini-row"><span className="bl-mini-score">89</span>Daniel Okafor</div>
+                <div className="bl-mini-row"><span className="bl-mini-score">86</span>Sofia Lindqvist</div>
+              </div>
+            </div>
           </div>
+        </section>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-            <Callout
-              icon="🎯"
-              title="Your criteria, not a black box"
-              body="You define what matters: dealbreakers, must-haves, nice-to-haves. The AI scores against your rubric, not a generic model of what 'good' looks like."
-            />
-            <Callout
-              icon="⚡"
-              title="Minutes, not weeks"
-              body="Upload a whole batch at once and every applicant is scored while you get on with your day. No first-pass resume skim, no missed candidates."
-            />
-            <Callout
-              icon="📋"
-              title="Evidence you can stand behind"
-              body="Every score comes with quoted evidence from the resume. When a hiring manager asks why someone scored 82, you can show them exactly why."
-            />
-            <Callout
-              icon="🔁"
-              title="One pipeline for every role"
-              body="Run multiple job postings simultaneously. Each has its own criteria, applicant list, and scoring, kept completely separate."
-            />
-            <Callout
-              icon="🤝"
-              title="Track every candidate"
-              body="Add notes and move applicants through Shortlisted, Interviewing and Offered, all from one ranked list."
-            />
-            <Callout
-              icon="🔒"
-              title="Your data stays yours"
-              body="Applicant data is stored securely and scoped to your organization. No third-party sharing, no data used to train models."
-            />
+        <section aria-labelledby="rank-h" className="bl-section">
+          <h2 id="rank-h" className="bl-h2">See why each candidate ranks where they do.</h2>
+          <p className="bl-h2-sub">Each criterion is scored on its own, so you see the whole field at a glance, not one resume at a time.</p>
+          <div className="bl-grid-card">
+            <table className="bl-grid">
+              <caption className="sr-only">Sample candidates ranked by score, with each criterion&apos;s result</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Rank</th>
+                  <th scope="col">Candidate</th>
+                  <th scope="col"><small className="db">Dealbreaker</small>5+ yrs design</th>
+                  <th scope="col"><small className="must">Must have</small>Design system</th>
+                  <th scope="col"><small className="must">Must have</small>Research</th>
+                  <th scope="col"><small>Nice to have</small>Fintech</th>
+                  <th scope="col">Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {SAMPLE.map((r) => (
+                  <tr key={r.name} className={r.lead ? 'lead' : !r.db ? 'out' : undefined}>
+                    <td className="bl-rank">{r.rank}</td>
+                    <td><div className="bl-name">{r.name}</div><div className="bl-head">{r.head}</div></td>
+                    <td>{r.db ? <span className="bl-met">Met</span> : <span className="bl-missed">Missed</span>}</td>
+                    <td><Pips n={r.ds} /></td>
+                    <td><Pips n={r.rs} /></td>
+                    <td><Pips n={r.fin} /></td>
+                    <td><span className={`bl-score${r.lead ? ' top' : !r.db ? ' capped' : ''}`}>{r.score}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
-      </section>
-
-      {/* Pricing */}
-      <section id="pricing" style={{ maxWidth: 820, margin: '0 auto', padding: '88px 32px 0' }}>
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--teal)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>
-            Pricing
+          <p className="bl-note">Sample candidates. <Link href={DEMO_HREF} className="warm-link">Open the demo</Link> for the full breakdown and evidence.</p>
+          <div className="bl-explain">
+            <div className="bl-ex clay">
+              <strong>Dealbreakers are a gate</strong>
+              <span>Miss one and the score is capped at 25, so a strong resume for the wrong role never jumps the line. They&apos;re hidden by default.</span>
+            </div>
+            <div className="bl-ex teal">
+              <strong>Weights you control</strong>
+              <span>Dealbreakers count three times, must-haves twice, nice-to-haves once. Change a weight, rescore, and the list re-ranks.</span>
+            </div>
+            <div className="bl-ex sand">
+              <strong>Evidence, not vibes</strong>
+              <span>Every score quotes the resume line behind it, so when a hiring manager asks why someone scored 82, you can show them.</span>
+            </div>
           </div>
-          <h2 style={{ fontSize: 30, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.03em' }}>
-            Start free. Upgrade when you&apos;re hiring for real.
-          </h2>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
-          <PriceCard
-            name="Free"
-            price="$0"
-            cadence="forever"
-            features={[
-              `${BUSINESS_PLANS.starter.activeJobs} active job posting`,
-              `${BUSINESS_PLANS.starter.monthlyScores} scored applicants a month`,
-              'Custom criteria and dealbreakers',
-              'Quoted evidence for every score',
-            ]}
-            cta={{ label: 'Start free', href: SIGNUP_HREF }}
-          />
-          <PriceCard
-            name="Team"
-            price={TEAM_PRICE_LABEL}
-            cadence="per month"
-            highlight
-            features={[
-              'Unlimited active job postings',
-              `${BUSINESS_PLANS.growth.monthlyScores} scored applicants a month`,
-              'Everything in Free',
-              'Cancel any time',
-            ]}
-            cta={{ label: 'Start free, upgrade in Settings', href: SIGNUP_HREF }}
-          />
-        </div>
-        <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--text3)', marginTop: 20 }}>
-          Hiring at higher volume?{' '}
-          <a href="mailto:info@modulehire.com?subject=ModuleHire%20for%20Business" style={{ color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>
-            Talk to us
-          </a>
-          .
-        </p>
-      </section>
+        </section>
 
-      {/* Bottom CTA */}
-      <section style={{ maxWidth: 600, margin: '0 auto', padding: '96px 32px', textAlign: 'center' }}>
-        <h2 style={{
-          fontSize: 34, fontWeight: 900, color: 'var(--text)',
-          letterSpacing: '-0.03em', lineHeight: 1.12, marginBottom: 18,
-        }}>
-          Ready to find your best candidates faster?
-        </h2>
-        <p style={{ fontSize: 16, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 36 }}>
-          Set up your organization, post a job, and upload your first batch of applicants on the free plan.
-        </p>
-        <Link href={SIGNUP_HREF} style={{
-          display: 'inline-flex', alignItems: 'center', gap: 8,
-          fontSize: 15, fontWeight: 700, color: 'var(--on-teal)',
-          textDecoration: 'none', padding: '14px 32px',
-          background: 'var(--teal)', borderRadius: 9,
-          boxShadow: '0 8px 28px color-mix(in srgb, var(--teal) 30%, transparent)',
-        }}>
-          Get started free →
-        </Link>
-        <p style={{ fontSize: 12.5, color: 'var(--text3)', marginTop: 16 }}>
-          Already have an account?{' '}
-          <Link href={SIGNIN_HREF} style={{ color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}>
-            Sign in →
-          </Link>
-        </p>
-      </section>
+        <section aria-labelledby="trust-h" className="bl-section">
+          <h2 id="trust-h" className="bl-h2">Built for hiring teams.</h2>
+          <div className="bl-trust">
+            <div className="bl-trust-item"><strong>One pipeline per role</strong><span>Each posting has its own criteria, applicants and scores, kept separate.</span></div>
+            <div className="bl-trust-item"><strong>Track every candidate</strong><span>Notes and stages from New to Offered, all from the ranked list.</span></div>
+            <div className="bl-trust-item"><strong>Your ATS stays in charge</strong><span>Scores post back as notes. Nothing in your ATS is moved or changed.</span></div>
+            <div className="bl-trust-item"><strong>Your data stays yours</strong><span>Applicant data is scoped to your organization and never used to train AI models.</span></div>
+          </div>
+        </section>
 
-      {/* Footer */}
-      <footer style={{
-        borderTop: '1px solid var(--border)', padding: '24px 48px',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      }}>
-        <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-          © {new Date().getFullYear()} ModuleHire · For Business
+        <section id="pricing" aria-labelledby="price-h" className="bl-section">
+          <p className="bl-eyebrow">Pricing</p>
+          <h2 id="price-h" className="bl-h2">Start free. Upgrade when you&apos;re hiring for real.</h2>
+          <div className="bl-prices">
+            <div className="bl-price">
+              <span className="bl-price-name">Free</span>
+              <span className="bl-price-amt">$0<small>forever</small></span>
+              <ul>
+                <li>{BUSINESS_PLANS.starter.activeJobs} active job posting</li>
+                <li>{BUSINESS_PLANS.starter.monthlyScores} scored applicants a month</li>
+                <li>Custom criteria and dealbreakers</li>
+                <li>ATS import and file export import</li>
+              </ul>
+              <Link href={SIGNUP_HREF} className="bl-btn bl-btn-ghost">Start free</Link>
+            </div>
+            <div className="bl-price hi">
+              <span className="bl-price-name">Team</span>
+              <span className="bl-price-amt">{TEAM_PRICE_LABEL}<small>per month</small></span>
+              <ul>
+                <li>Unlimited active job postings</li>
+                <li>{BUSINESS_PLANS.growth.monthlyScores} scored applicants a month</li>
+                <li>Everything in Free</li>
+                <li>Cancel any time</li>
+              </ul>
+              <Link href={SIGNUP_HREF} className="bl-btn">Start free, upgrade in Settings</Link>
+            </div>
+          </div>
+          <p className="bl-note">
+            Hiring at higher volume?{' '}
+            <a href="mailto:info@modulehire.com?subject=ModuleHire%20for%20Business" className="warm-link">Talk to us</a>.
+          </p>
+        </section>
+
+        <section className="bl-final" aria-labelledby="final-h">
+          <div>
+            <div id="final-h" className="bl-final-h">Try it on your next posting.</div>
+            <p>
+              Free: {BUSINESS_PLANS.starter.activeJobs} posting and {BUSINESS_PLANS.starter.monthlyScores} scored applicants a month. Team: {TEAM_PRICE_LABEL}/month for {BUSINESS_PLANS.growth.monthlyScores}.
+            </p>
+          </div>
+          <Link href={SIGNUP_HREF} className="bl-btn bl-btn-lg">Start free</Link>
+        </section>
+      </main>
+
+      <footer className="bl-foot">
+        <div className="bl-wrap bl-foot-in">
+          <span>© {year} ModuleHire · For Business</span>
+          <a href="https://modulehire.com">ModuleHire for job seekers</a>
         </div>
-        <a href="https://modulehire.com" style={{ fontSize: 12, color: 'var(--text3)', textDecoration: 'none' }}>
-          ← ModuleHire for job seekers
-        </a>
       </footer>
-
     </div>
   )
 }
