@@ -53,6 +53,10 @@ function scoreClass(score: number | undefined) {
   return 'lo'
 }
 
+function weekAgoMs() {
+  return Date.now() - 7 * 24 * 60 * 60 * 1000
+}
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
@@ -99,7 +103,7 @@ export default async function BusinessDashboardPage() {
   const jobRows = (jobs ?? []) as JobRow[]
   const appRows = (applicants ?? []) as ApplicantRow[]
   const openJobs = jobRows.filter((j) => j.status !== 'closed')
-  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+  const weekAgo = weekAgoMs()
 
   type JobStats = { top?: number; stages: Record<string, number>; sources: Map<string, number>; recent: number; total: number }
   const byJob = new Map<string, JobStats>()
