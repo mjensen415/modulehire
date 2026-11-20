@@ -9,9 +9,9 @@ type CriterionType = 'skill' | 'experience'
 type Criterion = { key: string; label: string; weight: Weight; description?: string; criterionType: CriterionType; minYears?: number }
 
 const WEIGHT_OPTIONS: Array<{ value: Weight; label: string; color: string; bg: string }> = [
-  { value: 'dealbreaker', label: '⚠ Dealbreaker', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
-  { value: 'must_have', label: 'Must have', color: 'var(--teal)', bg: 'var(--teal-dim)' },
-  { value: 'nice_to_have', label: 'Nice to have', color: 'var(--text3)', bg: 'var(--bg3)' },
+  { value: 'dealbreaker', label: 'Dealbreaker', color: 'var(--biz-clay-ink)', bg: 'var(--h-peach)' },
+  { value: 'must_have', label: 'Must have', color: 'var(--biz-teal-ink)', bg: 'var(--h-lavender)' },
+  { value: 'nice_to_have', label: 'Nice to have', color: 'var(--h-faint)', bg: 'var(--h-card2)' },
 ]
 
 let keyCounter = 0
@@ -122,7 +122,7 @@ export default function NewJobPage() {
       const themes: string[] = data.job.extracted_themes ?? []
       setCriteria(themes.map((theme: string) => ({ key: nextKey(), label: theme, weight: 'must_have' as Weight, criterionType: 'skill' as CriterionType })))
       if (data.job.extraction_failed || themes.length === 0) {
-        setError('We couldn\'t automatically extract criteria from this job description — add them manually below.')
+        setError('We couldn\'t automatically extract criteria from this job description. Add them manually below.')
       }
       setStep(2)
     } catch (e) {
@@ -224,8 +224,8 @@ export default function NewJobPage() {
   const successCount = uploadFiles.filter((f) => f.status === 'done').length
 
   return (
-    <div style={{ maxWidth: 680 }}>
-      <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', marginBottom: 4, letterSpacing: '-0.02em' }}>
+    <div className="biz-inner" style={{ maxWidth: 680, margin: 0, gap: 0 }}>
+      <h1 className="biz-h1" style={{ marginBottom: 16 }}>
         {step === 1 ? 'Create a job posting' : step === 2 ? 'Set your scoring criteria' : 'Upload applicants'}
       </h1>
 
@@ -245,15 +245,15 @@ export default function NewJobPage() {
                   width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 11, fontWeight: 700,
-                  background: done || active ? 'var(--teal)' : 'var(--bg3)',
-                  color: done || active ? '#fff' : 'var(--text3)',
-                  border: `2px solid ${done || active ? 'var(--teal)' : 'var(--border2)'}`,
+                  background: done || active ? 'var(--h-accent)' : 'var(--h-card2)',
+                  color: done || active ? 'var(--h-accent-ink)' : 'var(--h-faint)',
+                  border: `2px solid ${done || active ? 'var(--h-accent)' : 'var(--h-line-strong)'}`,
                 }}>
                   {done ? '✓' : s.n}
                 </div>
                 <span style={{
                   fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
-                  color: active ? 'var(--teal)' : done ? 'var(--text2)' : 'var(--text3)',
+                  color: active ? 'var(--h-accent)' : done ? 'var(--h-muted)' : 'var(--h-faint)',
                 }}>
                   {s.label}
                 </span>
@@ -261,7 +261,7 @@ export default function NewJobPage() {
               {i < 2 && (
                 <div style={{
                   flex: 1, height: 2, marginTop: 12, marginLeft: 6, marginRight: 6,
-                  background: step > s.n ? 'var(--teal)' : 'var(--border2)',
+                  background: step > s.n ? 'var(--h-accent)' : 'var(--h-line-strong)',
                   borderRadius: 1,
                 }} />
               )}
@@ -271,7 +271,7 @@ export default function NewJobPage() {
       </div>
 
       {error && (
-        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#ef4444', marginBottom: 16 }}>
+        <div role="alert" style={{ background: 'var(--h-peach)', borderRadius: 12, padding: '10px 14px', fontSize: 13, color: 'var(--biz-clay-ink)', marginBottom: 16 }}>
           {error}
         </div>
       )}
@@ -285,7 +285,7 @@ export default function NewJobPage() {
                 <option value="">Paste a description instead</option>
                 {ghJobs.map((j) => <option key={j.key} value={j.key}>{j.name}</option>)}
               </select>
-              {ghLoading && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>Loading the posting…</div>}
+              {ghLoading && <div style={{ fontSize: 12, color: 'var(--h-faint)', marginTop: 6 }}>Loading the posting…</div>}
             </div>
           )}
           <label className="form-label">Job title</label>
@@ -309,7 +309,7 @@ export default function NewJobPage() {
             style={{ marginBottom: 20, resize: 'vertical', fontFamily: 'var(--font)' }}
           />
 
-          <button type="submit" className="btn-primary" disabled={analyzing || !title.trim() || !rawJd.trim() || !orgId}>
+          <button type="submit" className="biz-btn" disabled={analyzing || !title.trim() || !rawJd.trim() || !orgId}>
             {analyzing ? 'Analyzing job description…' : 'Analyze →'}
           </button>
         </form>
@@ -317,15 +317,15 @@ export default function NewJobPage() {
 
       {step === 2 && (
         <div>
-          <p style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 20, lineHeight: 1.55 }}>
+          <p style={{ fontSize: 13.5, color: 'var(--h-muted)', marginBottom: 20, lineHeight: 1.55 }}>
             We pulled these from the JD. Promote any to dealbreaker, add custom criteria, or remove ones that don&apos;t matter.
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
             {criteria.map((c) => (
-              <div key={c.key} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px' }}>
+              <div key={c.key} style={{ background: 'var(--h-card)', border: '1px solid var(--h-line)', borderRadius: 10, padding: '10px 12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <span style={{ color: 'var(--text3)', cursor: 'grab', fontSize: 13, flexShrink: 0 }}>⠿</span>
+                  <span style={{ color: 'var(--h-faint)', cursor: 'grab', fontSize: 13, flexShrink: 0 }}>⠿</span>
                   <input
                     className="form-input"
                     type="text"
@@ -337,7 +337,7 @@ export default function NewJobPage() {
                   />
                   <button
                     onClick={() => removeCriterion(c.key)}
-                    style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 17, padding: '2px 6px', flexShrink: 0, lineHeight: 1 }}
+                    style={{ background: 'none', border: 'none', color: 'var(--h-faint)', cursor: 'pointer', fontSize: 17, padding: '2px 6px', flexShrink: 0, lineHeight: 1 }}
                     aria-label="Remove criterion"
                   >
                     ×
@@ -353,9 +353,9 @@ export default function NewJobPage() {
                         style={{
                           fontSize: 11.5, fontWeight: 600,
                           padding: '4px 10px', borderRadius: 20,
-                          border: `1px solid ${active ? opt.color : 'var(--border2)'}`,
+                          border: `1px solid ${active ? opt.color : 'var(--h-line-strong)'}`,
                           background: active ? opt.bg : 'transparent',
-                          color: active ? opt.color : 'var(--text3)',
+                          color: active ? opt.color : 'var(--h-faint)',
                           cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all 0.15s',
                         }}
                       >
@@ -364,7 +364,7 @@ export default function NewJobPage() {
                     )
                   })}
                   <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', whiteSpace: 'nowrap' }}>Min. yrs</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--h-faint)', whiteSpace: 'nowrap' }}>Min. yrs</span>
                     <input
                       type="number"
                       min={0}
@@ -377,7 +377,7 @@ export default function NewJobPage() {
                           criterionType: val > 0 ? 'experience' : 'skill',
                         })
                       }}
-                      placeholder="—"
+                      placeholder="–"
                       className="form-input"
                       style={{ width: 44, padding: '3px 6px', fontSize: 12, textAlign: 'center' }}
                     />
@@ -387,13 +387,13 @@ export default function NewJobPage() {
             ))}
           </div>
 
-          <button onClick={addCriterion} className="btn-ghost" style={{ marginBottom: 24 }}>
+          <button onClick={addCriterion} className="biz-btn biz-btn-ghost" style={{ marginBottom: 24 }}>
             + Add criterion
           </button>
 
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => setStep(1)} className="btn-ghost">← Back</button>
-            <button onClick={handleSaveCriteria} className="btn-primary" disabled={saving || criteria.every((c) => !c.label.trim())}>
+            <button onClick={() => setStep(1)} className="biz-btn biz-btn-ghost">← Back</button>
+            <button onClick={handleSaveCriteria} className="biz-btn" disabled={saving || criteria.every((c) => !c.label.trim())}>
               {saving ? 'Saving…' : 'Save criteria →'}
             </button>
           </div>
@@ -402,10 +402,10 @@ export default function NewJobPage() {
 
       {step === 3 && jobId && (
         <div>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--h-ink)', marginBottom: 6 }}>
             Upload your first applicants
           </h2>
-          <p style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 20, lineHeight: 1.55 }}>
+          <p style={{ fontSize: 13.5, color: 'var(--h-muted)', marginBottom: 20, lineHeight: 1.55 }}>
             Drop in resumes to score them against your criteria. You can always add more from the job page.
           </p>
 
@@ -423,8 +423,8 @@ export default function NewJobPage() {
             onDragLeave={() => setDragging(false)}
             onDrop={handleDrop}
             style={{
-              border: `1.5px dashed ${dragging ? 'var(--teal)' : 'var(--border2)'}`,
-              background: dragging ? 'var(--teal-dim)' : 'var(--surface)',
+              border: `1.5px dashed ${dragging ? 'var(--h-accent)' : 'var(--h-line-strong)'}`,
+              background: dragging ? 'var(--h-lavender)' : 'var(--h-card)',
               borderRadius: 12,
               padding: '36px 20px',
               textAlign: 'center',
@@ -433,7 +433,7 @@ export default function NewJobPage() {
               transition: 'all 0.15s',
             }}
           >
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text2)' }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--h-muted)' }}>
               Drop resumes or a CSV here, or click to browse
             </div>
           </div>
@@ -445,18 +445,18 @@ export default function NewJobPage() {
                   key={`${f.name}-${i}`}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8,
-                    background: 'var(--surface)', border: '1px solid var(--border)',
-                    borderRadius: 8, padding: '8px 12px', fontSize: 13, color: 'var(--text2)',
+                    background: 'var(--h-card)', border: '1px solid var(--h-line)',
+                    borderRadius: 8, padding: '8px 12px', fontSize: 13, color: 'var(--h-muted)',
                   }}
                 >
                   <span style={{ flexShrink: 0 }}>
-                    {f.status === 'pending' && <span style={{ color: 'var(--text3)' }}>…</span>}
-                    {f.status === 'uploading' && <span style={{ color: 'var(--teal)' }}>↻</span>}
-                    {f.status === 'done' && <span style={{ color: 'var(--teal)' }}>✓</span>}
-                    {f.status === 'error' && <span style={{ color: '#ef4444' }}>✗</span>}
+                    {f.status === 'pending' && <span style={{ color: 'var(--h-faint)' }}>…</span>}
+                    {f.status === 'uploading' && <span style={{ color: 'var(--h-accent)' }}>↻</span>}
+                    {f.status === 'done' && <span style={{ color: 'var(--h-accent)' }}>✓</span>}
+                    {f.status === 'error' && <span style={{ color: 'var(--biz-clay-ink)' }}>✗</span>}
                   </span>
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
-                  <span style={{ fontSize: 11.5, color: f.status === 'error' ? '#ef4444' : 'var(--text3)', flexShrink: 0 }}>
+                  <span style={{ fontSize: 11.5, color: f.status === 'error' ? 'var(--biz-clay-ink)' : 'var(--h-faint)', flexShrink: 0 }}>
                     {f.status === 'pending' && 'Pending'}
                     {f.status === 'uploading' && 'Scoring…'}
                     {f.status === 'done' && 'Scored'}
@@ -468,15 +468,15 @@ export default function NewJobPage() {
           )}
 
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <button onClick={() => setStep(2)} className="btn-ghost">← Back</button>
+            <button onClick={() => setStep(2)} className="biz-btn biz-btn-ghost">← Back</button>
             <button
               onClick={() => router.push(`/business/jobs/${jobId}`)}
-              style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}
+              style={{ background: 'none', border: 'none', color: 'var(--h-faint)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}
             >
               Skip for now →
             </button>
             {successCount > 0 && (
-              <button onClick={() => router.push(`/business/jobs/${jobId}`)} className="btn-primary" disabled={processing}>
+              <button onClick={() => router.push(`/business/jobs/${jobId}`)} className="biz-btn" disabled={processing}>
                 Done →
               </button>
             )}

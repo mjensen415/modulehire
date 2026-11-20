@@ -39,48 +39,50 @@ export default function BusinessOnboardingPage() {
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '70vh' }}>
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 16, padding: 40, maxWidth: 480, width: '100%' }}>
-        <h1 style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 6, letterSpacing: '-0.02em' }}>
-          Create your organization
-        </h1>
-        <p style={{ fontSize: 13.5, color: 'var(--text2)', marginBottom: 24, lineHeight: 1.5 }}>
+    <div className="biz-inner" style={{ alignItems: 'center', justifyContent: 'center', minHeight: '70vh' }}>
+      <div className="biz-card" style={{ maxWidth: 520, width: '100%', padding: '36px 36px 32px', boxSizing: 'border-box' }}>
+        <h1 className="biz-h1" style={{ marginBottom: 6 }}>Create your organization</h1>
+        <p className="biz-sub" style={{ marginBottom: 24 }}>
           You&apos;ll be the owner and can invite team members later.
         </p>
 
-        <form onSubmit={handleSubmit}>
-          <label className="form-label">Organization name</label>
-          <input
-            className="form-input"
-            type="text"
-            placeholder="Acme Corp"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={100}
-            autoFocus
-            style={{ marginBottom: 16 }}
-          />
-
-          <label className="form-label">
-            What are you hiring for, and what would make this worth paying for?{' '}
-            <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(optional)</span>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <label className="warm-label">
+            Organization name
+            <input
+              className="warm-input"
+              type="text"
+              placeholder="Acme Corp"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={100}
+              autoFocus
+              style={{ minHeight: 44 }}
+            />
           </label>
-          <textarea
-            className="form-input"
-            placeholder="e.g. 3 support roles a quarter, 200+ applicants each. I need it to plug into Greenhouse."
-            value={hiringFor}
-            onChange={(e) => setHiringFor(e.target.value)}
-            maxLength={2000}
-            rows={3}
-            style={{ marginBottom: 16, resize: 'vertical', fontFamily: 'inherit' }}
-          />
+
+          <label className="warm-label">
+            <span>
+              What are you hiring for, and what would make this worth paying for?{' '}
+              <span style={{ color: 'var(--h-faint)', fontWeight: 400 }}>(optional)</span>
+            </span>
+            <textarea
+              className="warm-input"
+              placeholder="e.g. 3 support roles a quarter, 200+ applicants each. I need it to plug into Greenhouse."
+              value={hiringFor}
+              onChange={(e) => setHiringFor(e.target.value)}
+              maxLength={2000}
+              rows={3}
+              style={{ resize: 'vertical', fontFamily: 'inherit' }}
+            />
+          </label>
 
           {error && (
-            <div style={{ fontSize: 12.5, color: '#ef4444', marginBottom: 16 }}>{error}</div>
+            <div role="alert" style={{ fontSize: 13, color: 'var(--biz-clay-ink)', background: 'var(--h-peach)', borderRadius: 12, padding: '10px 14px' }}>{error}</div>
           )}
 
-          <button type="submit" className="btn-primary-full" disabled={loading || !name.trim()}>
-            {loading ? 'Creating…' : 'Create organization →'}
+          <button type="submit" className="biz-btn" style={{ width: '100%', minHeight: 44 }} disabled={loading || !name.trim()}>
+            {loading ? 'Creating…' : 'Create organization'}
           </button>
         </form>
       </div>

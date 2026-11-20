@@ -26,23 +26,23 @@ type Analytics = {
 }
 
 const BUCKET_COLOR: Record<keyof ScoreDistribution, string> = {
-  A: 'var(--teal)',
-  B: 'var(--amber)',
-  C: 'var(--indigo)',
-  D: 'var(--text3)',
+  A: 'var(--h-accent)',
+  B: 'color-mix(in srgb, var(--h-accent) 55%, var(--h-card2))',
+  C: 'var(--biz-sand-ink)',
+  D: 'var(--h-faint)',
 }
 
 const STATUS_COLORS: Record<string, { color: string; bg: string }> = {
-  draft: { color: 'var(--text3)', bg: 'var(--bg3)' },
-  active: { color: 'var(--teal)', bg: 'var(--teal-dim)' },
-  paused: { color: 'var(--amber)', bg: 'var(--amber-dim)' },
-  closed: { color: 'var(--text3)', bg: 'var(--bg3)' },
+  draft: { color: 'var(--h-muted)', bg: 'var(--h-card2)' },
+  active: { color: 'var(--biz-teal-ink)', bg: 'var(--h-lavender)' },
+  paused: { color: 'var(--biz-sand-ink)', bg: 'var(--h-butter)' },
+  closed: { color: 'var(--h-muted)', bg: 'var(--h-card2)' },
 }
 
 function passRateColor(rate: number): string {
-  if (rate < 40) return '#ef4444'
-  if (rate < 70) return 'var(--amber)'
-  return 'var(--teal)'
+  if (rate < 40) return 'var(--biz-clay-ink)'
+  if (rate < 70) return 'var(--biz-sand-ink)'
+  return 'var(--h-accent)'
 }
 
 function formatTime(iso: string) {
@@ -92,78 +92,78 @@ export default function BusinessAnalyticsPage() {
     : 0
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>
-          Analytics
-        </h1>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div className="biz-inner">
+      <div className="biz-head">
+        <div>
+          <h1 className="biz-h1">Analytics</h1>
+          <p className="biz-sub">How your postings and applicants are scoring.</p>
+        </div>
+        <div className="biz-actions" style={{ alignItems: 'center' }}>
           {data && (
-            <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+            <span className="biz-muted" style={{ fontSize: 13 }}>
               Last updated {formatTime(data.generated_at)}
             </span>
           )}
           <button
-            className="btn-ghost"
+            type="button"
+            className="biz-btn biz-btn-ghost biz-btn-sm"
             onClick={() => orgId && load(orgId, true)}
             disabled={!orgId || refreshing}
-            style={{ fontSize: 12.5, padding: '6px 12px' }}
           >
-            {refreshing ? 'Refreshing…' : '↻ Refresh'}
+            {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
       </div>
 
       {error && (
-        <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#ef4444', marginBottom: 16 }}>
+        <div role="alert" style={{ background: 'var(--h-peach)', borderRadius: 12, padding: '10px 14px', fontSize: 13, color: 'var(--biz-clay-ink)' }}>
           {error}
         </div>
       )}
 
       {loading ? (
-        <div style={{ color: 'var(--text3)', fontSize: 13.5 }}>Loading…</div>
+        <div style={{ color: 'var(--h-faint)', fontSize: 13.5 }}>Loading…</div>
       ) : !data || data.jobs.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', border: '1px dashed var(--border2)', borderRadius: 12 }}>
-          <p style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 16 }}>
-            No jobs yet — analytics will show up once you post a job and start scoring applicants.
-          </p>
-          <Link href="/business/jobs/new" className="btn-primary" style={{ display: 'inline-flex', textDecoration: 'none' }}>
-            + Create a job posting
+        <div className="biz-card biz-empty">
+          <h2>No jobs yet</h2>
+          <p>Analytics show up once you post a job and start scoring applicants.</p>
+          <Link href="/business/jobs/new" className="biz-btn">
+            Create a job posting
           </Link>
         </div>
       ) : (
         <>
           {/* Stat cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
-            <div className="stat-card">
-              <div className="stat-label">Open jobs</div>
-              <div className="stat-value">{data.totals.total_jobs_open}</div>
+          <div className="biz-stats">
+            <div className="biz-stat">
+              <div className="biz-stat-label biz-muted">Open jobs</div>
+              <div className="biz-stat-value">{data.totals.total_jobs_open}</div>
             </div>
-            <div className="stat-card">
-              <div className="stat-label">Total applicants</div>
-              <div className="stat-value">{data.totals.total_applicants}</div>
+            <div className="biz-stat">
+              <div className="biz-stat-label biz-muted">Total applicants</div>
+              <div className="biz-stat-value">{data.totals.total_applicants}</div>
             </div>
-            <div className="stat-card">
-              <div className="stat-label">Scored</div>
-              <div className="stat-value">{data.totals.total_scored}</div>
+            <div className="biz-stat">
+              <div className="biz-stat-label biz-muted">Scored</div>
+              <div className="biz-stat-value">{data.totals.total_scored}</div>
             </div>
-            <div className="stat-card">
-              <div className="stat-label">Avg score</div>
-              <div className="stat-value">{data.totals.avg_score ?? '—'}</div>
+            <div className="biz-stat">
+              <div className="biz-stat-label biz-muted">Avg score</div>
+              <div className="biz-stat-value">{data.totals.avg_score ?? '–'}</div>
             </div>
           </div>
 
           {/* Per-job table */}
-          <div className="section-card" style={{ marginBottom: 20 }}>
-            <div className="section-head">
-              <div className="section-head-title">Jobs</div>
+          <div className="biz-card">
+            <div className="biz-card-head">
+              <h2 className="biz-h2">Jobs</h2>
             </div>
             <div style={{ overflowX: 'auto' }}>
               <div style={{ minWidth: 640 }}>
                 <div style={{
                   display: 'flex', alignItems: 'center', padding: '8px 20px',
-                  borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700,
-                  color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em',
+                  borderBottom: '1px solid var(--h-line)', fontSize: 10.5, fontWeight: 700,
+                  color: 'var(--h-faint)', textTransform: 'uppercase', letterSpacing: '0.04em',
                 }}>
                   <div style={{ flex: 1 }}>Job title</div>
                   <div style={{ width: 80 }}>Status</div>
@@ -180,10 +180,10 @@ export default function BusinessAnalyticsPage() {
                       key={job.job_id}
                       style={{
                         display: 'flex', alignItems: 'center', padding: '12px 20px',
-                        borderBottom: '1px solid var(--border)', fontSize: 13,
+                        borderBottom: '1px solid var(--h-line)', fontSize: 13,
                       }}
                     >
-                      <div style={{ flex: 1, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>
+                      <div style={{ flex: 1, fontWeight: 600, color: 'var(--h-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>
                         {job.title}
                       </div>
                       <div style={{ width: 80 }}>
@@ -194,21 +194,21 @@ export default function BusinessAnalyticsPage() {
                           {job.status}
                         </span>
                       </div>
-                      <div style={{ width: 90, textAlign: 'right', color: 'var(--text2)' }}>{job.applicant_count}</div>
-                      <div style={{ width: 70, textAlign: 'right', color: 'var(--text2)' }}>{job.scored_count}</div>
-                      <div style={{ width: 80, textAlign: 'right', fontWeight: 700, color: 'var(--text)' }}>
-                        {job.avg_score ?? '—'}
+                      <div style={{ width: 90, textAlign: 'right', color: 'var(--h-muted)' }}>{job.applicant_count}</div>
+                      <div style={{ width: 70, textAlign: 'right', color: 'var(--h-muted)' }}>{job.scored_count}</div>
+                      <div style={{ width: 80, textAlign: 'right', fontWeight: 700, color: 'var(--h-ink)' }}>
+                        {job.avg_score ?? '–'}
                       </div>
                       <div style={{ width: 160, textAlign: 'right' }}>
                         {top ? (
                           <Link
                             href={`/business/jobs/${job.job_id}`}
-                            style={{ fontSize: 12.5, color: 'var(--teal)', textDecoration: 'none', fontWeight: 600 }}
+                            style={{ fontSize: 12.5, color: 'var(--h-accent)', textDecoration: 'none', fontWeight: 600 }}
                           >
-                            {top.name || 'Unnamed'} ({top.overall_score ?? '—'}) →
+                            {top.name || 'Unnamed'} ({top.overall_score ?? '–'}) →
                           </Link>
                         ) : (
-                          <span style={{ fontSize: 12.5, color: 'var(--text3)' }}>—</span>
+                          <span style={{ fontSize: 12.5, color: 'var(--h-faint)' }}>–</span>
                         )}
                       </div>
                     </div>
@@ -219,13 +219,13 @@ export default function BusinessAnalyticsPage() {
           </div>
 
           {/* Score distribution */}
-          <div className="section-card" style={{ marginBottom: 20 }}>
-            <div className="section-head">
-              <div className="section-head-title">Candidate pipeline</div>
+          <div className="biz-card">
+            <div className="biz-card-head">
+              <h2 className="biz-h2">Candidate pipeline</h2>
             </div>
             <div style={{ padding: '20px' }}>
               {totalScoreCount === 0 ? (
-                <div style={{ fontSize: 13, color: 'var(--text3)' }}>No scored applicants yet.</div>
+                <div style={{ fontSize: 13, color: 'var(--h-faint)' }}>No scored applicants yet.</div>
               ) : (
                 <svg width="100%" height={120} viewBox="0 0 400 120" preserveAspectRatio="none" style={{ display: 'block' }}>
                   {(['A', 'B', 'C', 'D'] as const).map((bucket, i) => {
@@ -235,10 +235,10 @@ export default function BusinessAnalyticsPage() {
                     const y = i * 30
                     return (
                       <g key={bucket}>
-                        <text x={0} y={y + 14} fontSize={11} fill="var(--text2)" fontWeight={700}>{bucket}</text>
-                        <rect x={20} y={y + 4} width={360} height={14} rx={4} fill="var(--bg3)" />
+                        <text x={0} y={y + 14} fontSize={11} fill="var(--h-muted)" fontWeight={700}>{bucket}</text>
+                        <rect x={20} y={y + 4} width={360} height={14} rx={4} fill="var(--h-card2)" />
                         <rect x={20} y={y + 4} width={barWidth} height={14} rx={4} fill={BUCKET_COLOR[bucket]} />
-                        <text x={385} y={y + 14} fontSize={11} fill="var(--text2)" textAnchor="end">
+                        <text x={385} y={y + 14} fontSize={11} fill="var(--h-muted)" textAnchor="end">
                           {count} ({Math.round(pct)}%)
                         </text>
                       </g>
@@ -250,20 +250,20 @@ export default function BusinessAnalyticsPage() {
           </div>
 
           {/* Criteria difficulty */}
-          <div className="section-card">
-            <div className="section-head">
-              <div className="section-head-title">Criteria difficulty</div>
+          <div className="biz-card">
+            <div className="biz-card-head">
+              <h2 className="biz-h2">Criteria difficulty</h2>
             </div>
             {data.criteria_pass_rates.length === 0 ? (
-              <div style={{ padding: '20px', fontSize: 13, color: 'var(--text3)' }}>
+              <div style={{ padding: '20px', fontSize: 13, color: 'var(--h-faint)' }}>
                 No scored criteria yet.
               </div>
             ) : (
               <div>
                 <div style={{
                   display: 'flex', alignItems: 'center', padding: '8px 20px',
-                  borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700,
-                  color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em',
+                  borderBottom: '1px solid var(--h-line)', fontSize: 10.5, fontWeight: 700,
+                  color: 'var(--h-faint)', textTransform: 'uppercase', letterSpacing: '0.04em',
                 }}>
                   <div style={{ flex: 1 }}>Criterion</div>
                   <div style={{ width: 100 }}>Weight</div>
@@ -274,13 +274,13 @@ export default function BusinessAnalyticsPage() {
                     key={c.criterion_id}
                     style={{
                       display: 'flex', alignItems: 'center', padding: '10px 20px',
-                      borderBottom: '1px solid var(--border)', fontSize: 13,
+                      borderBottom: '1px solid var(--h-line)', fontSize: 13,
                     }}
                   >
-                    <div style={{ flex: 1, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>
+                    <div style={{ flex: 1, color: 'var(--h-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>
                       {c.label}
                     </div>
-                    <div style={{ width: 100, fontSize: 11.5, color: 'var(--text3)', textTransform: 'capitalize' }}>
+                    <div style={{ width: 100, fontSize: 11.5, color: 'var(--h-faint)', textTransform: 'capitalize' }}>
                       {c.weight.replace('_', ' ')}
                     </div>
                     <div style={{ width: 100, textAlign: 'right', fontWeight: 700, color: passRateColor(c.pass_rate) }}>

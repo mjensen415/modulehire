@@ -4,7 +4,7 @@
 // (a zip or the files themselves), or a direct pull from a connected ATS (see ats/registry.ts).
 // Every candidate goes through one request at a time (3 in parallel) so large pipelines never hit
 // the function time limit, and duplicates on the posting are skipped server-side.
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Papa from 'papaparse'
 import './ats-import.css'
 import {
@@ -25,6 +25,7 @@ import { PROVIDERS, PROVIDER_INFO, type Provider } from '@/lib/business/ats/regi
 type Props = { jobId: string; jobTitle: string; onClose: () => void; onImported: () => void }
 type Direct = Provider
 type IntStatus = {
+  org_id?: string
   integrations: Record<Direct, { connected: boolean; writeback_enabled?: boolean; status?: string; can_comment?: boolean }>
   linked: { provider: string; external_id: string } | null
 }
@@ -125,12 +126,31 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
   const [stopReason, setStopReason] = useState('')
   const cancelRef = useRef(false)
 
+  // Scores left this month (null = unlimited or unknown), from the plan usage the Settings page reads.
+  const [remaining, setRemaining] = useState<number | null>(null)
+  const [runRemaining, setRunRemaining] = useState<number | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+  const closeRef = useRef<HTMLButtonElement>(null)
+
+  const loadUsage = useCallback((orgId: string | undefined) => {
+    if (!orgId) return
+    fetch(`/api/business/billing/usage?org_id=${orgId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { plan?: { monthlyScores: number | null }; usage?: { scoresThisMonth: number } } | null) => {
+        const limit = d?.plan?.monthlyScores
+        setRemaining(typeof limit === 'number' && d?.usage ? Math.max(0, limit - d.usage.scoresThisMonth) : null)
+      })
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
     fetch(`/api/business/integrations?job_id=${jobId}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setInts(d))
+      .then((d) => { setInts(d); loadUsage(d?.org_id) })
       .catch(() => setInts(null))
-  }, [jobId])
+  }, [jobId, loadUsage])
+
+  useEffect(() => { closeRef.current?.focus() }, [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !running) onClose() }
@@ -159,7 +179,7 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
     }
   }
 
-  async function onResumes(list: FileList | null) {
+  async function onResumes(list: FileList | File[] | null) {
     if (!list?.length) return
     setError(''); setReading(true)
     try {
@@ -177,7 +197,26 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
     }
   }
 
+  // Dropped files: the spreadsheet becomes the candidate export, everything else is resumes.
+  async function onDropFiles(list: FileList) {
+    setDragOver(false)
+    const files = Array.from(list)
+    if (!files.length || running) return
+    setMode('file')
+    const isSheet = (f: File) => /\.(csv|tsv|xlsx)$/i.test(f.name)
+    const sheet = files.find(isSheet)
+    const rest = files.filter((f) => f !== sheet)
+    if (sheet) await onSheet(sheet)
+    if (rest.length) await onResumes(rest)
+  }
+  const dropProps = {
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); setDragOver(true) },
+    onDragLeave: () => setDragOver(false),
+    onDrop: (e: React.DragEvent) => { e.preventDefault(); onDropFiles(e.dataTransfer.files) },
+  }
+
   async function runTasks(tasks: Task[]) {
+    setRunRemaining(remaining)
     setRunning(true); setDone(0); setTotal(tasks.length); setLog([]); setStopReason(''); setError('')
     cancelRef.current = false
     let next = 0
@@ -215,6 +254,7 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
     else if (cancelRef.current) setStopReason('Stopped. Candidates already imported stay on the posting.')
     setRunning(false)
     onImported()
+    loadUsage(ints?.org_id)
   }
 
   const post = async (url: string, body: BodyInit, json = false) => {
@@ -318,62 +358,126 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
   const dInfo = ints?.integrations?.[direct]
   const dWriteback = !!dInfo?.writeback_enabled && dInfo?.can_comment !== false
   const showRun = running || log.length > 0
+  const flow: 'direct' | 'file' = mode === 'file' ? 'file' : mode === 'direct' ? 'direct' : connected.length ? 'direct' : 'file'
+  const stepLabels = flow === 'direct'
+    ? ['Source', 'Pick a job', 'Choose candidates', 'Import and score']
+    : ['Source', 'Candidate file', 'Match resumes', 'Import and score']
+  const stepAt = showRun ? (running ? 3 : 4) : mode === 'pick' ? 0 : mode === 'direct' ? (ghJobId ? 2 : 1) : (headers.length ? 2 : 1)
+  const toScore = mode === 'file' ? ready.length : ghSelected.size
+  const scoresLine = (n: number, left: number | null) => left === null || !n ? null
+    : n > left
+      ? `You have ${left} ${left === 1 ? 'score' : 'scores'} left this month. The import stops when they run out.`
+      : `Uses up to ${n} of your ${left} remaining scores this month.`
+  const already = (ghApplicants ?? []).filter((a) => a.already_imported).length
+  const optedOut = (ghApplicants ?? []).filter((a) => a.opted_out).length
+  const ghJobName = (ghJobs ?? []).find((j) => String(j.id) === ghJobId)?.name
+  const otherAts = ats === 'other'
 
   return (
     <div className="ati-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !running) onClose() }}>
-      <div className="ati" role="dialog" aria-modal="true" aria-labelledby="ati-title">
-        <div className="ati-head">
-          <div>
+      <div className="ati" role="dialog" aria-modal="true" aria-labelledby="ati-title" aria-describedby="ati-desc">
+        <header className="ati-head">
+          <div className="ati-head-text">
             <h2 id="ati-title">Import from your ATS</h2>
-            <p>Bring your current candidates for {jobTitle} into ModuleHire and score them against this posting.</p>
+            <p id="ati-desc">Into {jobTitle}. Every candidate is scored against this posting&apos;s criteria.</p>
           </div>
-          <button className="ati-x" onClick={onClose} disabled={running} aria-label="Close">×</button>
-        </div>
+          <button ref={closeRef} type="button" className="ati-x" onClick={onClose} disabled={running} aria-label="Close">
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+          </button>
+        </header>
 
-        <div className="ati-body">
-          {error && <div className="ati-error" role="alert">{error}</div>}
+        <ol className="ati-steps" aria-label="Steps">
+          {stepLabels.map((label, i) => (
+            <li key={label} className={i < stepAt ? 'done' : i === stepAt ? 'current' : ''} aria-current={i === stepAt ? 'step' : undefined}>
+              <span className="ati-step-n" aria-hidden="true">
+                {i < stepAt
+                  ? <svg width="11" height="11" viewBox="0 0 12 12"><path d="M2.5 6.5l2.3 2.3 4.7-5" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  : i + 1}
+              </span>
+              {label}
+              {i < stepAt && <span className="sr-only"> (done)</span>}
+            </li>
+          ))}
+        </ol>
 
-          {showRun ? (
-            <>
-              <div>
-                <div className="ati-label">{running ? `Importing ${done} of ${total}…` : 'Import finished'}</div>
-                <div className="ati-bar"><i style={{ width: `${total ? (done / total) * 100 : 0}%` }} /></div>
-              </div>
-              <div className="ati-stats">
-                <div className="ati-stat"><b className="ati-ok">{counts.created ?? 0}</b><span>scored and added</span></div>
-                <div className="ati-stat"><b>{(counts.duplicate ?? 0) + (counts.skipped ?? 0)}</b><span>already here or skipped</span></div>
-                <div className="ati-stat"><b className={counts.failed ? 'ati-bad' : ''}>{counts.failed ?? 0}</b><span>failed</span></div>
-              </div>
-              {stopReason && <div className="ati-note">{stopReason}</div>}
-              {running && <div className="ati-note">Keep this tab open. Each candidate takes a few seconds to score.</div>}
-              <div className="ati-log" aria-live="polite">
-                {log.map((l, i) => (
-                  <div key={i}>
-                    <span>{l.label}</span>
-                    <span className={l.state === 'created' ? 'ati-ok' : l.state === 'failed' ? 'ati-bad' : 'ati-warn'}>{l.detail}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="ati-actions">
-                {running
-                  ? <button className="ati-btn ghost" onClick={() => { cancelRef.current = true }}>Stop</button>
-                  : <button className="ati-btn" onClick={onClose}>Done</button>}
-              </div>
-            </>
-          ) : mode === 'pick' ? (
-            <>
-              {connected.map((p) => (
-                <div key={p} className="ati-direct">
-                  <div>
-                    <b>{DIRECT_LABEL(p)} is connected</b>
-                    Pull candidates and resumes straight from a {DIRECT_LABEL(p)} job
-                    {ints?.integrations[p].writeback_enabled && ints?.integrations[p].can_comment !== false ? `, and post each score back as a ${NOTE_WORD(p)}` : ''}.
-                  </div>
-                  <button className="ati-btn" onClick={() => openDirect(p)}>Pull from {DIRECT_LABEL(p)}</button>
+        <div className="ati-cols">
+          <aside className="ati-side" aria-label="Source">
+            <span className="ati-eyebrow">Connected</span>
+            {connected.length ? connected.map((p) => {
+              const st = ints?.integrations[p]
+              const selected = mode === 'direct' && direct === p
+              const detail = selected && ghJobName ? `Job: ${ghJobName}`
+                : st?.status === 'error' ? 'Needs attention in Settings'
+                : ints?.linked?.provider === p ? 'Linked to this posting'
+                : 'Pull candidates from a job'
+              return (
+                <button key={p} type="button" className="ati-src" aria-pressed={selected} disabled={running} onClick={() => openDirect(p)}>
+                  <span className="ati-av" aria-hidden="true">{DIRECT_LABEL(p).charAt(0)}</span>
+                  <span className="ati-src-text"><b>{DIRECT_LABEL(p)}</b><small>{detail}</small></span>
+                </button>
+              )
+            }) : (
+              <p className="ati-side-note">
+                No ATS connected yet. <a href="/business/settings?tab=integrations">Connect one in Settings</a> to pull candidates without files.
+              </p>
+            )}
+            <span className="ati-eyebrow later">Or upload an export</span>
+            <button
+              type="button"
+              className={`ati-drop${dragOver ? ' over' : ''}`}
+              aria-pressed={mode === 'file'}
+              disabled={running}
+              onClick={() => { setError(''); setMode('file') }}
+              {...dropProps}
+            >
+              <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M11 15V4M6.5 8.5L11 4l4.5 4.5M4 15v3h14v-3" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <strong>Drop a CSV or .xlsx</strong>
+              <span>plus a .zip of resumes. Workable, Ashby, BambooHR, ADP and others.</span>
+            </button>
+          </aside>
+
+          <section className="ati-main" aria-labelledby="ati-step-h">
+            {error && <div className="ati-error" role="alert">{error}</div>}
+
+            {showRun ? (
+              <>
+                <div className="ati-title-row">
+                  <h3 id="ati-step-h" className="ati-h3">{running ? 'Importing and scoring' : 'Import finished'}</h3>
                 </div>
-              ))}
-              <div>
-                <div className="ati-label">{connected.length ? 'Or import an export file from' : 'Where are the candidates now?'}</div>
+                <div className="ati-progress">
+                  <div className="ati-progress-row"><b>{running ? 'Importing and scoring' : 'Done'}</b><span>{done} of {total}</span></div>
+                  <div className="ati-bar" role="progressbar" aria-label="Import progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+                    <i style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
+                  </div>
+                  {running && scoresLine(total, runRemaining) && <small>{scoresLine(total, runRemaining)}</small>}
+                </div>
+                <div className="ati-stats">
+                  <div className="ati-stat"><b className="ati-ok">{counts.created ?? 0}</b><span>scored and added</span></div>
+                  <div className="ati-stat"><b>{(counts.duplicate ?? 0) + (counts.skipped ?? 0)}</b><span>already here or skipped</span></div>
+                  <div className="ati-stat"><b className={counts.failed ? 'ati-bad' : ''}>{counts.failed ?? 0}</b><span>failed</span></div>
+                </div>
+                {stopReason && <div className="ati-sand" role="status">{stopReason}</div>}
+                {running && <p className="ati-note">Keep this tab open. Each candidate takes a few seconds to score.</p>}
+                {log.length > 0 && (
+                  <div className="ati-log" aria-live="polite">
+                    {log.map((l, i) => (
+                      <div key={i}>
+                        <span>{l.label}</span>
+                        <span className={l.state === 'created' ? 'ati-ok' : l.state === 'failed' ? 'ati-bad' : 'ati-warn'}>{l.detail}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : mode === 'pick' ? (
+              <>
+                <h3 id="ati-step-h" className="ati-h3">Where are the candidates now?</h3>
+                <p className="ati-lead">
+                  {connected.length
+                    ? 'Pick a connected ATS on the left to pull candidates and resumes straight from a job, or import an export file from any ATS.'
+                    : 'Import a candidate export from your ATS with their resumes. We match each resume to a candidate before anything is scored.'}
+                </p>
+                <span className="ati-eyebrow">Export file from</span>
                 <div className="ati-tiles">
                   {ATS_KEYS.map((k) => (
                     <button key={k} type="button" className="ati-tile" aria-pressed={ats === k} onClick={() => setAts(k)}>
@@ -382,39 +486,36 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
                     </button>
                   ))}
                 </div>
-              </div>
-              <div className="ati-note">
-                Export your candidates from {ATS_PRESETS[ats].label === 'Another ATS or a spreadsheet' ? 'your system' : ATS_PRESETS[ats].label} as a CSV or Excel file, and download their resumes (a zip is fine). We match each resume to a candidate by its file name, email, candidate ID or name, and you can check the match before anything is scored.
-                {(PROVIDERS as string[]).includes(ats) && !ints?.integrations?.[ats as Direct]?.connected && (
-                  <> Using {DIRECT_LABEL(ats as Direct)}? You can also <a href="/business/settings#integrations">connect it in Settings</a> and skip the files.</>
-                )}
-              </div>
-              <div className="ati-actions">
-                <button className="ati-btn ghost" onClick={onClose}>Cancel</button>
-                <button className="ati-btn" onClick={() => setMode('file')}>Continue</button>
-              </div>
-            </>
-          ) : mode === 'file' ? (
-            <>
-              <div className="ati-steps"><span className="on">{ATS_PRESETS[ats].label}</span><span className={headers.length ? 'on' : ''}>Candidates</span><span className={resumeFiles.length ? 'on' : ''}>Resumes</span></div>
-              <input ref={sheetInput} type="file" accept=".csv,.tsv,.xlsx,text/csv" hidden onChange={(e) => onSheet(e.target.files?.[0])} />
-              <input ref={resumeInput} type="file" accept=".zip,.pdf,.docx,.txt" multiple hidden onChange={(e) => onResumes(e.target.files)} />
-              <div className="ati-grid">
-                <div className={`ati-drop${headers.length ? ' has' : ''}`} role="button" tabIndex={0} onClick={() => sheetInput.current?.click()} onKeyDown={(e) => e.key === 'Enter' && sheetInput.current?.click()}>
-                  <strong>{sheetName || '1. Candidate export'}</strong>
-                  <span>{headers.length ? `${rows.length} rows · click to replace` : 'CSV or Excel (.xlsx)'}</span>
+                <p className="ati-note">
+                  Export your candidates from {otherAts ? 'your system' : ATS_PRESETS[ats].label} as a CSV or Excel file, and download their resumes (a zip is fine). We match each resume to a candidate by its file name, email, candidate ID or name, and you can check the match before anything is scored.
+                  {(PROVIDERS as string[]).includes(ats) && !ints?.integrations?.[ats as Direct]?.connected && (
+                    <> Using {DIRECT_LABEL(ats as Direct)}? You can also <a href="/business/settings?tab=integrations">connect it in Settings</a> and skip the files.</>
+                  )}
+                </p>
+              </>
+            ) : mode === 'file' ? (
+              <>
+                <div className="ati-title-row">
+                  <h3 id="ati-step-h" className="ati-h3">Candidate export</h3>
+                  <span className="ati-aside">From {otherAts ? 'another ATS or a spreadsheet' : ATS_PRESETS[ats].label}</span>
                 </div>
-                <div className={`ati-drop${resumeFiles.length ? ' has' : ''}`} role="button" tabIndex={0} onClick={() => resumeInput.current?.click()} onKeyDown={(e) => e.key === 'Enter' && resumeInput.current?.click()}>
-                  <strong>{resumeFiles.length ? `${resumeFiles.length} resumes` : '2. Resumes'}</strong>
-                  <span>{resumeFiles.length ? 'Click to add more' : 'A .zip, or PDF and Word files'}</span>
+                <input ref={sheetInput} type="file" accept=".csv,.tsv,.xlsx,text/csv" hidden onChange={(e) => onSheet(e.target.files?.[0])} />
+                <input ref={resumeInput} type="file" accept=".zip,.pdf,.docx,.txt" multiple hidden onChange={(e) => onResumes(e.target.files)} />
+                <div className="ati-grid">
+                  <button type="button" className={`ati-drop${headers.length ? ' has' : ''}`} onClick={() => sheetInput.current?.click()} {...dropProps}>
+                    <strong>{sheetName || '1. Candidate export'}</strong>
+                    <span>{headers.length ? `${rows.length} rows · click to replace` : 'CSV or Excel (.xlsx)'}</span>
+                  </button>
+                  <button type="button" className={`ati-drop${resumeFiles.length ? ' has' : ''}`} onClick={() => resumeInput.current?.click()} {...dropProps}>
+                    <strong>{resumeFiles.length ? `${resumeFiles.length} resumes` : '2. Resumes'}</strong>
+                    <span>{resumeFiles.length ? 'Click to add more' : 'A .zip, or PDF and Word files'}</span>
+                  </button>
                 </div>
-              </div>
-              {reading && <div className="ati-note">Reading files…</div>}
+                {reading && <p className="ati-note" role="status">Reading files…</p>}
 
-              {headers.length > 0 && (
-                <>
-                  <div>
-                    <div className="ati-label">Columns</div>
+                {headers.length > 0 && (
+                  <>
+                    <span className="ati-eyebrow">Columns</span>
                     <div className="ati-grid">
                       {MAPPABLE.map((f) => (
                         <label key={f} className="ati-field">
@@ -426,120 +527,147 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
                         </label>
                       ))}
                     </div>
-                  </div>
-                  <div className="ati-stats">
-                    <div className="ati-stat"><b>{candidates.length}</b><span>candidates</span></div>
-                    <div className="ati-stat"><b className="ati-ok">{ready.length}</b><span>with a resume, will be scored</span></div>
-                    <div className="ati-stat"><b className={missing ? 'ati-warn' : ''}>{missing}</b><span>no resume found, skipped</span></div>
-                  </div>
-                  {candidates.length > 0 && (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table className="ati-table">
-                        <thead><tr><th>Name</th><th>Email</th><th>Stage</th><th>Resume</th></tr></thead>
-                        <tbody>
-                          {candidates.slice(0, 8).map((c, i) => (
-                            <tr key={c.rowNum}>
-                              <td>{c.name ?? '–'}</td>
-                              <td>{c.email ?? '–'}</td>
-                              <td>{c.stage ?? '–'}</td>
-                              <td className={c.resumeText || matches.has(i) ? 'ati-ok' : 'ati-warn'}>
-                                {matches.has(i) ? resumeFiles[matches.get(i)!].name : c.resumeText ? 'Text in file' : 'Not found'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {candidates.length > 8 && <div className="ati-note" style={{ marginTop: 8 }}>And {candidates.length - 8} more.</div>}
+                    <div className="ati-stats">
+                      <div className="ati-stat"><b>{candidates.length}</b><span>candidates</span></div>
+                      <div className="ati-stat"><b className="ati-ok">{ready.length}</b><span>with a resume, will be scored</span></div>
+                      <div className="ati-stat"><b className={missing ? 'ati-warn' : ''}>{missing}</b><span>no resume found, skipped</span></div>
                     </div>
-                  )}
-                  {!mapping.email && !mapping.externalId && (
-                    <div className="ati-note">Map an Email or Candidate ID column if you can: it&apos;s how a second import knows who is already here.</div>
-                  )}
-                </>
-              )}
+                    {candidates.length > 0 && (
+                      <>
+                        <div className="ati-table-wrap">
+                          <table className="ati-table">
+                            <thead><tr><th>Name</th><th>Email</th><th>Stage</th><th>Resume</th></tr></thead>
+                            <tbody>
+                              {candidates.slice(0, 8).map((c, i) => (
+                                <tr key={c.rowNum}>
+                                  <td>{c.name ?? '–'}</td>
+                                  <td>{c.email ?? '–'}</td>
+                                  <td>{c.stage ?? '–'}</td>
+                                  <td>
+                                    <span className={`ati-pill${c.resumeText || matches.has(i) ? ' ok' : ''}`}>
+                                      {matches.has(i) ? resumeFiles[matches.get(i)!].name : c.resumeText ? 'Text in file' : 'No resume'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {candidates.length > 8 && <p className="ati-note">And {candidates.length - 8} more.</p>}
+                      </>
+                    )}
+                    {!mapping.email && !mapping.externalId && (
+                      <div className="ati-sand">Map an Email or Candidate ID column if you can: it&apos;s how a second import knows who is already here.</div>
+                    )}
+                  </>
+                )}
 
-              <div className="ati-note">
-                Candidates are scored by AI against this posting&apos;s criteria. Each one counts toward your plan&apos;s monthly scores; people already on this posting are skipped for free.
-              </div>
-              <div className="ati-actions">
-                <button className="ati-btn ghost" onClick={() => setMode('pick')}>Back</button>
-                <button className="ati-btn" disabled={!ready.length || reading} onClick={startFileImport}>
-                  Import and score {ready.length || ''}
-                </button>
-              </div>
+                <p className="ati-note">
+                  Candidates are scored by AI against this posting&apos;s criteria. Each one counts toward your plan&apos;s monthly scores; people already on this posting are skipped for free.
+                </p>
+              </>
+            ) : (
+              <>
+                <label className="ati-field">
+                  {dLabel} job
+                  <select value={ghJobId} onChange={(e) => loadDirectApplicants(direct, e.target.value)} disabled={ghLoading || !ghJobs}>
+                    <option value="">{ghJobs ? 'Pick an open job' : 'Loading jobs…'}</option>
+                    {(ghJobs ?? []).map((j) => <option key={j.id} value={j.id}>{j.name}{j.requisition_id ? ` (${j.requisition_id})` : ''}</option>)}
+                  </select>
+                </label>
+                {!ghApplicants && <h3 id="ati-step-h" className="ati-h3">{ghLoading && ghJobId ? `Loading candidates from ${dLabel}…` : `Pick a ${dLabel} job`}</h3>}
+                {ghApplicants && (
+                  <>
+                    <div className="ati-title-row">
+                      <h3 id="ati-step-h" className="ati-h3">
+                        {ghApplicants.length} {ghApplicants.length === 1 ? 'candidate' : 'candidates'}
+                      </h3>
+                      {already > 0 && <span className="ati-aside">{already} already on this posting, skipped</span>}
+                    </div>
+                    {PROVIDER_INFO[direct].hasOptOut && (
+                      <div className="ati-sand">
+                        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" stroke="currentColor" strokeWidth="1.5" fill="none" /><path d="M9 5.5v4M9 12v.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+                        <span>
+                          {optedOut
+                            ? `${optedOut} ${optedOut === 1 ? 'candidate' : 'candidates'} opted out of AI review in ${dLabel}. They won't be imported or scored.`
+                            : `Candidates who opted out of AI review in ${dLabel} are never imported or scored.`}
+                        </span>
+                      </div>
+                    )}
+                    {ghApplicants.length === 0 ? (
+                      <p className="ati-note">No active candidates on this {dLabel} job.</p>
+                    ) : (
+                      <div className="ati-list">
+                        <label className="ati-row all">
+                          <input
+                            type="checkbox"
+                            checked={ghEligible.length > 0 && ghEligible.every((a) => ghSelected.has(a.key))}
+                            disabled={!ghEligible.length}
+                            onChange={(e) => setGhSelected(e.target.checked ? new Set(ghEligible.map((a) => a.key)) : new Set())}
+                          />
+                          <span className="ati-row-name">Select all {ghEligible.length} new</span>
+                          <span className="ati-row-stage">{ghSelected.size} selected</span>
+                        </label>
+                        {ghApplicants.map((a) => {
+                          const blocked = a.opted_out ? 'Opted out' : a.already_imported ? 'Already here' : !a.resume && !a.resumeUnknown ? 'No resume' : ''
+                          return (
+                            <label key={a.key} className={`ati-row${blocked ? ' blocked' : ''}`}>
+                              <input
+                                type="checkbox"
+                                disabled={!!blocked}
+                                checked={ghSelected.has(a.key)}
+                                onChange={(e) => setGhSelected((s) => { const n = new Set(s); if (e.target.checked) n.add(a.key); else n.delete(a.key); return n })}
+                              />
+                              <span className="ati-row-name">{a.name ?? a.email ?? 'Unnamed'}</span>
+                              {a.stage && <span className="ati-row-stage">{a.stage}</span>}
+                              <span className={`ati-pill${blocked ? '' : a.resumeUnknown ? '' : ' ok'}`} title={a.resume?.filename}>
+                                {blocked || (a.resumeUnknown ? 'Checked at import' : 'Resume')}
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    )}
+                    <p className="ati-note">
+                      {PROVIDER_INFO[direct].activeMeans}{' '}
+                      {dWriteback
+                        ? `Each score is posted back to the candidate in ${dLabel} as a ${NOTE_WORD(direct)}.`
+                        : <>Scores aren&apos;t posted back to {dLabel}. <a href="/business/settings?tab=integrations">Change this in Settings</a>.</>}
+                    </p>
+                  </>
+                )}
+              </>
+            )}
+          </section>
+        </div>
+
+        <footer className="ati-foot">
+          {!showRun && mode !== 'pick' && scoresLine(toScore, remaining) && <span className="ati-foot-note">{scoresLine(toScore, remaining)}</span>}
+          {showRun ? (
+            <>
+              {running && <button type="button" className="biz-btn biz-btn-ghost" onClick={() => { cancelRef.current = true }}>Stop</button>}
+              <button type="button" className="biz-btn" disabled={running} onClick={onClose}>See ranked list</button>
+            </>
+          ) : mode === 'pick' ? (
+            <>
+              <button type="button" className="biz-btn biz-btn-ghost" onClick={onClose}>Cancel</button>
+              <button type="button" className="biz-btn" onClick={() => setMode('file')}>Continue with a file</button>
             </>
           ) : (
             <>
-              <label className="ati-field">
-                {dLabel} job
-                <select value={ghJobId} onChange={(e) => loadDirectApplicants(direct, e.target.value)} disabled={ghLoading || !ghJobs}>
-                  <option value="">{ghJobs ? 'Pick an open job' : 'Loading jobs…'}</option>
-                  {(ghJobs ?? []).map((j) => <option key={j.id} value={j.id}>{j.name}{j.requisition_id ? ` (${j.requisition_id})` : ''}</option>)}
-                </select>
-              </label>
-              {ghLoading && ghJobId && <div className="ati-note">Loading candidates from {dLabel}…</div>}
-              {ghApplicants && (
-                ghApplicants.length === 0 ? (
-                  <div className="ati-note">No active candidates on this {dLabel} job.</div>
-                ) : (
-                  <>
-                    <div className="ati-stats">
-                      <div className="ati-stat"><b>{ghApplicants.length}</b><span>active in {dLabel}</span></div>
-                      <div className="ati-stat"><b className="ati-ok">{ghSelected.size}</b><span>selected to score</span></div>
-                      {PROVIDER_INFO[direct].hasOptOut
-                        ? <div className="ati-stat"><b>{ghApplicants.filter((a) => a.opted_out).length}</b><span>opted out of AI review</span></div>
-                        : <div className="ati-stat"><b>{ghApplicants.filter((a) => a.already_imported).length}</b><span>already on this posting</span></div>}
-                    </div>
-                    <label className="ati-check">
-                      <input
-                        type="checkbox"
-                        checked={ghEligible.length > 0 && ghEligible.every((a) => ghSelected.has(a.key))}
-                        onChange={(e) => setGhSelected(e.target.checked ? new Set(ghEligible.map((a) => a.key)) : new Set())}
-                      />
-                      Select everyone who can be scored
-                    </label>
-                    <div style={{ overflowX: 'auto', maxHeight: 280 }}>
-                      <table className="ati-table">
-                        <thead><tr><th /><th>Name</th><th>Stage</th><th>Resume</th></tr></thead>
-                        <tbody>
-                          {ghApplicants.map((a) => {
-                            const blocked = a.opted_out ? 'Opted out of AI review' : a.already_imported ? 'Already here' : !a.resume && !a.resumeUnknown ? 'No resume' : ''
-                            return (
-                              <tr key={a.key}>
-                                <td>
-                                  <input
-                                    type="checkbox"
-                                    aria-label={`Import ${a.name ?? 'candidate'}`}
-                                    disabled={!!blocked}
-                                    checked={ghSelected.has(a.key)}
-                                    onChange={(e) => setGhSelected((s) => { const n = new Set(s); if (e.target.checked) n.add(a.key); else n.delete(a.key); return n })}
-                                  />
-                                </td>
-                                <td>{a.name ?? a.email ?? 'Unnamed'}</td>
-                                <td>{a.stage ?? '–'}</td>
-                                <td className={blocked ? 'ati-warn' : a.resumeUnknown ? '' : 'ati-ok'}>{blocked || a.resume?.filename || 'Checked at import'}</td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="ati-note">
-                      {PROVIDER_INFO[direct].activeMeans}{' '}
-                      {dWriteback ? `Each score is posted back to the candidate in ${dLabel} as a ${NOTE_WORD(direct)}.` : ''}
-                    </div>
-                  </>
-                )
-              )}
-              <div className="ati-actions">
-                <button className="ati-btn ghost" onClick={() => setMode('pick')}>Back</button>
-                <button className="ati-btn" disabled={!ghSelected.size || ghLoading} onClick={startDirectImport}>
+              <button type="button" className="biz-btn biz-btn-ghost" onClick={() => { setError(''); setMode('pick') }}>Back</button>
+              {mode === 'file' ? (
+                <button type="button" className="biz-btn" disabled={!ready.length || reading} onClick={startFileImport}>
+                  Import and score {ready.length || ''}
+                </button>
+              ) : (
+                <button type="button" className="biz-btn" disabled={!ghSelected.size || ghLoading} onClick={startDirectImport}>
                   Import and score {ghSelected.size || ''}
                 </button>
-              </div>
+              )}
             </>
           )}
-        </div>
+        </footer>
       </div>
     </div>
   )

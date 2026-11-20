@@ -3,7 +3,7 @@
 // Settings → Integrations: connect an ATS with a key the customer creates in their own account.
 // Fields, setup steps and permissions per ATS come from src/lib/business/ats/registry.ts.
 // None of these need partner status.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PROVIDERS, PROVIDER_INFO, type Provider } from '@/lib/business/ats/registry'
 
 type ProviderStatus = {
@@ -16,15 +16,16 @@ type ProviderStatus = {
 }
 type Status = { can_manage: boolean; integrations: Record<Provider, ProviderStatus> }
 
-const muted = { fontSize: 12.5, color: 'var(--text3)', lineHeight: 1.55 } as const
-const check = { display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: 'var(--text2)' } as const
+const BETA: Provider[] = ['bamboohr']
 
-function ConnectForm({ provider, orgId, onDone, onCancel }: { provider: Provider; orgId: string; onDone: () => void; onCancel: () => void }) {
+function ConnectForm({ provider, orgId, onDone, onCancel, replacing }: { provider: Provider; orgId: string; onDone: () => void; onCancel: () => void; replacing?: boolean }) {
   const info = PROVIDER_INFO[provider]
   const [vals, setVals] = useState<Record<string, string>>({})
   const [writeback, setWriteback] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const firstRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { firstRef.current?.focus() }, [])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -47,39 +48,45 @@ function ConnectForm({ provider, orgId, onDone, onCancel }: { provider: Provider
 
   const complete = info.fields.every((f) => (vals[f.name] ?? '').trim())
   return (
-    <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
-      <ol style={{ ...muted, margin: 0, paddingLeft: 18 }}>
-        {info.steps.map((s) => <li key={s}>{s}</li>)}
-        <li>Permissions: {info.permissions.join(', ')}.{info.permissions.length > 1 ? ` ${info.writebackPermission} is only for posting scores back.` : ''}</li>
-      </ol>
-      {info.fields.map((f) => (
-        <div key={f.name}>
-          <label className="form-label">{f.label}</label>
-          <input
-            className="form-input"
-            type={f.secret ? 'password' : 'text'}
-            value={vals[f.name] ?? ''}
-            placeholder={f.placeholder ?? ''}
-            onChange={(e) => setVals((v) => ({ ...v, [f.name]: e.target.value }))}
-            autoComplete={f.secret ? 'new-password' : 'off'}
-            spellCheck={false}
-          />
-        </div>
-      ))}
-      <label style={check}>
+    <form onSubmit={submit} className="bs-form" aria-label={`${replacing ? 'Update' : 'Connect'} ${info.label}`}>
+      <div className="bs-form-grid">
+        {info.fields.map((f, i) => (
+          <label key={f.name} className="bs-field">
+            {f.label}
+            <input
+              ref={i === 0 ? firstRef : undefined}
+              className="bs-input"
+              type={f.secret ? 'password' : 'text'}
+              value={vals[f.name] ?? ''}
+              placeholder={f.placeholder ?? ''}
+              onChange={(e) => setVals((v) => ({ ...v, [f.name]: e.target.value }))}
+              autoComplete={f.secret ? 'new-password' : 'off'}
+              spellCheck={false}
+            />
+          </label>
+        ))}
+      </div>
+      <details className="bs-details" open={!replacing}>
+        <summary>Where do I find this?</summary>
+        <ol>
+          {info.steps.map((st) => <li key={st}>{st}</li>)}
+          <li>Permissions: {info.permissions.join(', ')}.{info.permissions.length > 1 ? ` ${info.writebackPermission} is only for posting scores back.` : ''}</li>
+        </ol>
+      </details>
+      <label className="bs-check">
         <input type="checkbox" checked={writeback} onChange={(e) => setWriteback(e.target.checked)} />
         Post each score back to the candidate in {info.label} as a {info.noteWord}
       </label>
-      <div style={muted}>
+      <p className="bs-note">
         We check the key with {info.label} before saving it, store it encrypted, and never show it again.
         {info.hasOptOut && ` Candidates who opted out of AI review in ${info.label} are never imported or scored.`}
-      </div>
-      {error && <div style={{ fontSize: 12.5, color: 'var(--rose)' }}>{error}</div>}
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <button type="button" className="btn-ghost" onClick={onCancel}>Cancel</button>
-        <button type="submit" className="btn-primary" disabled={busy || !complete}>
-          {busy ? `Checking with ${info.label}…` : `Connect ${info.label}`}
+      </p>
+      {error && <div className="bs-error" role="alert">{error}</div>}
+      <div className="bs-form-actions">
+        <button type="submit" className="biz-btn biz-btn-sm" disabled={busy || !complete}>
+          {busy ? `Checking with ${info.label}…` : 'Test and connect'}
         </button>
+        <button type="button" className="biz-btn biz-btn-ghost biz-btn-sm" onClick={onCancel}>Cancel</button>
       </div>
     </form>
   )
@@ -112,61 +119,93 @@ export default function IntegrationsCard({ orgId }: { orgId: string }) {
     await load()
   }
 
-  // Connected ones first, so a busy list of options doesn't bury what's set up.
-  const order = s ? [...PROVIDERS].sort((a, b) => Number(!!s.integrations[b]?.connected) - Number(!!s.integrations[a]?.connected)) : PROVIDERS
+  const connected = s ? PROVIDERS.filter((p) => s.integrations[p]?.connected) : []
+  const available = s ? PROVIDERS.filter((p) => !s.integrations[p]?.connected) : []
+  const done = () => { setOpen(null); load() }
 
   return (
-    <div className="section-card" id="integrations">
-      <div className="section-head">
-        <div className="section-head-title">Integrations</div>
-      </div>
-      <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <div style={muted}>
-          Connect your applicant tracking system to pull candidates and resumes into a posting with &quot;Import from your ATS&quot;.
-          Using something else? Any ATS can export a spreadsheet, and the import takes that too.
-        </div>
-        {!s ? <div style={muted}>Loading…</div> : order.map((p, i) => {
-          const st = s.integrations[p] ?? { connected: false }
-          const info = PROVIDER_INFO[p]
-          return (
-            <div key={p} style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: i ? 18 : 0, borderTop: i ? '1px solid var(--border)' : 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 3 }}>{info.label}</div>
-                  <div style={muted}>
-                    {st.connected
-                      ? st.status === 'error'
-                        ? <span style={{ color: 'var(--rose)' }}>{st.last_error ?? 'Connection problem. Reconnect.'}</span>
-                        : `Connected (${st.hint}).`
-                      : info.blurb}
-                  </div>
-                </div>
-                {s.can_manage && open !== p && (
-                  st.connected
-                    ? <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                        <button className="btn-ghost" disabled={busy} onClick={() => setOpen(p)}>Replace key</button>
-                        <button className="btn-ghost" disabled={busy} onClick={() => disconnect(p)}>Disconnect</button>
+    <div className="bs-panel" id="integrations">
+      <p className="bs-intro">
+        Connect your ATS with a key you create there. We pull in-process candidates for a job with
+        &quot;Import from your ATS&quot;, score them, and can post each score back as a note.
+      </p>
+
+      {!s ? <p className="bs-note" role="status">Loading…</p> : (
+        <>
+          {connected.length > 0 && (
+            <section className="bs-section" aria-labelledby="bs-conn-h">
+              <h2 id="bs-conn-h" className="bs-eyebrow">Connected</h2>
+              {connected.map((p) => {
+                const st = s.integrations[p]
+                const info = PROVIDER_INFO[p]
+                const bad = st.status === 'error'
+                return (
+                  <div key={p} className="bs-conn">
+                    <div className="bs-conn-row">
+                      <span className={`bs-av${bad ? '' : ' teal'}`} aria-hidden="true">{info.label.charAt(0)}</span>
+                      <div className="bs-conn-text">
+                        <b>{info.label}</b>
+                        <span>
+                          {[st.hint, bad ? (st.last_error ?? 'Connection problem. Update the key.') : null].filter(Boolean).join(' · ') || 'Connected'}
+                        </span>
                       </div>
-                    : <button className="btn-ghost" style={{ flexShrink: 0 }} onClick={() => setOpen(p)}>Connect</button>
-                )}
+                      <span className={`bs-status ${bad ? 'bad' : 'ok'}`}>{bad ? 'Needs attention' : 'Working'}</span>
+                      {s.can_manage && open !== p && (
+                        <div className="bs-conn-actions">
+                          <label className="bs-check">
+                            <input type="checkbox" checked={!!st.writeback_enabled} onChange={(e) => toggleWriteback(p, e.target.checked)} />
+                            Post scores as {info.noteWord}s
+                          </label>
+                          <button type="button" className={`biz-btn biz-btn-sm ${bad ? 'biz-btn-dark' : 'biz-btn-ghost'}`} disabled={busy} onClick={() => setOpen(p)}>Update key</button>
+                          <button type="button" className="biz-btn biz-btn-ghost biz-btn-sm" disabled={busy} onClick={() => disconnect(p)}>Disconnect</button>
+                        </div>
+                      )}
+                    </div>
+                    {p === 'workable' && st.can_comment === false && (
+                      <p className="bs-note">We couldn&apos;t find a Workable member to post comments as, so scores won&apos;t be posted back. Reconnect while signed in with the email you use in Workable.</p>
+                    )}
+                    {open === p && s.can_manage && (
+                      <ConnectForm provider={p} orgId={orgId} replacing onCancel={() => setOpen(null)} onDone={done} />
+                    )}
+                  </div>
+                )
+              })}
+            </section>
+          )}
+
+          {available.length > 0 && (
+            <section className="bs-section" aria-labelledby="bs-avail-h">
+              <h2 id="bs-avail-h" className="bs-eyebrow">Available</h2>
+              <div className="bs-avail">
+                {available.map((p) => {
+                  const info = PROVIDER_INFO[p]
+                  const isOpen = open === p && s.can_manage
+                  return (
+                    <div key={p} className={`bs-avail-card${isOpen ? ' open' : ''}`}>
+                      <div className="bs-avail-name">
+                        <span className={`bs-av sm${isOpen ? ' teal' : ''}`} aria-hidden="true">{info.label.charAt(0)}</span>
+                        <span>{info.label}</span>
+                        {BETA.includes(p) && <span className="bs-beta">Beta</span>}
+                      </div>
+                      {isOpen ? (
+                        <ConnectForm provider={p} orgId={orgId} onCancel={() => setOpen(null)} onDone={done} />
+                      ) : (
+                        <>
+                          <p className="bs-note">{info.blurb}</p>
+                          {s.can_manage
+                            ? <button type="button" className="biz-btn biz-btn-sm bs-connect-btn" aria-label={`Connect ${info.label}`} onClick={() => setOpen(p)}>Connect</button>
+                            : <p className="bs-note">Ask an owner or admin to connect {info.label}.</p>}
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
-              {st.connected && s.can_manage && open !== p && (
-                <label style={check}>
-                  <input type="checkbox" checked={!!st.writeback_enabled} onChange={(e) => toggleWriteback(p, e.target.checked)} />
-                  Post each score back to the candidate in {info.label} as a {info.noteWord}
-                </label>
-              )}
-              {p === 'workable' && st.connected && st.can_comment === false && (
-                <div style={muted}>We couldn&apos;t find a Workable member to post comments as, so scores won&apos;t be posted back. Reconnect while signed in with the email you use in Workable.</div>
-              )}
-              {!s.can_manage && !st.connected && <div style={muted}>Ask an owner or admin to connect {info.label}.</div>}
-              {open === p && s.can_manage && (
-                <ConnectForm provider={p} orgId={orgId} onCancel={() => setOpen(null)} onDone={() => { setOpen(null); load() }} />
-              )}
-            </div>
-          )
-        })}
-      </div>
+            </section>
+          )}
+          <p className="bs-note">Using ADP or something else? Import a file export from any posting.</p>
+        </>
+      )}
     </div>
   )
 }
