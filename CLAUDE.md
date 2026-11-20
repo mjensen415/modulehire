@@ -534,6 +534,15 @@ Enterprise = unlimited (set by hand; billing events never change it). Monthly us
   in middleware). Onboarding's optional "what are you hiring for" answer is stored as `ev_biz_feedback`:
   `select created_at, metadata from usage_events where action = 'ev_biz_feedback' order by 1 desc;`
 
+## Business UI (warm workspace)
+Signed-in `/business/*` renders inside `<div class="warm biz-shell">` (layout imports `warm.css` + `business/business.css`):
+charcoal sidebar (`BusinessSidebar.tsx`: org, nav, open postings, plan usage meter from `/api/business/billing/usage`),
+serif headers, `.biz-*` classes (cards, stats, chips, score badges, pipeline bar, tabs). Page CSS: `jobs/[id]/posting.css`
+(`bp-`, ranked list beside the candidate panel), `jobs/[id]/ats-import.css` (`.ati`, stepped dialog),
+`settings/settings.css` (`bs-`, tabs with `?tab=integrations|plan|team|organization`). The public landing
+(`business/page.tsx` + `landing.css`, `bl-`) has the how-it-works steps and a sample ranking grid. Mockups:
+the "ModuleHire UI refresh mockups" Design canvas. Tokens only; the sidebar's fixed charcoal lives in `--biz-side-*`.
+
 ## Business: importing pipelines from an ATS
 Posting page (`/business/jobs/[id]`) → "Import from your ATS" (file export, or a direct pull from a connected ATS) (`AtsImport.tsx` + `ats-import.css`, scoped `.ati`).
 - **File export (any ATS):** pick Greenhouse / Lever / Ashby / Workable / BambooHR / ADP / other, drop the candidate export
