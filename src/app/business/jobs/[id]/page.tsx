@@ -1,9 +1,14 @@
 'use client'
 
+// Posting workspace: ranked applicant list beside the selected candidate.
+// Styles: ./posting.css (.bp-*) on top of business.css (.biz-*).
+
 import { useCallback, useEffect, useRef, useState } from 'react'
-import AtsImport from './AtsImport'
+import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import ScoreGauge from '@/components/ScoreGauge'
+import AtsImport from './AtsImport'
+import { isProvider, PROVIDER_INFO, providerLabel } from '@/lib/business/ats/registry'
+import './posting.css'
 
 type Applicant = {
   id: string
@@ -44,9 +49,20 @@ type ApplicantDetail = Applicant & {
   resume_signed_url: string | null
   ai_check_result: AiCheckResult | null
   ai_checked_at: string | null
+  source?: string | null
+  external_source?: string | null
+  ats_stage?: string | null
+  ats_note_posted_at?: string | null
 }
 
-type Job = { id: string; title: string; status: string; extracted_themes: string[] }
+type Job = {
+  id: string
+  title: string
+  status: string
+  extracted_themes: string[]
+  extracted_company?: string | null
+  external_source?: string | null
+}
 
 type Status = 'new' | 'reviewing' | 'shortlisted' | 'interviewing' | 'offered' | 'rejected'
 type SortKey = 'score' | 'name' | 'date'
@@ -55,11 +71,12 @@ type Weight = 'dealbreaker' | 'must_have' | 'nice_to_have'
 type CriterionType = 'skill' | 'experience'
 type Criterion = { key: string; id?: string; label: string; weight: Weight; description?: string; criterionType: CriterionType; minYears?: number }
 
-const CRITERIA_WEIGHT_OPTIONS: Array<{ value: Weight; label: string; color: string; bg: string }> = [
-  { value: 'dealbreaker', label: '⚠ Dealbreaker', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
-  { value: 'must_have', label: 'Must have', color: 'var(--teal)', bg: 'var(--teal-dim)' },
-  { value: 'nice_to_have', label: 'Nice to have', color: 'var(--text3)', bg: 'var(--bg3)' },
-]
+const WEIGHT_LABEL: Record<Weight, string> = {
+  dealbreaker: 'Dealbreaker',
+  must_have: 'Must have',
+  nice_to_have: 'Nice to have',
+}
+const WEIGHTS: Weight[] = ['dealbreaker', 'must_have', 'nice_to_have']
 
 const AI_REVIEW_THRESHOLD = 88
 
@@ -69,38 +86,51 @@ function nextCriteriaKey() {
   return `nc${criteriaKeyCounter}`
 }
 
-const STATUS_CONFIG: Record<Status, { label: string; color: string; bg: string }> = {
-  new:         { label: 'New',         color: 'var(--text3)',     bg: 'var(--bg3)' },
-  reviewing:   { label: 'Reviewing',   color: '#3b82f6',         bg: 'rgba(59,130,246,0.1)' },
-  shortlisted: { label: 'Shortlisted', color: '#1d9e75',         bg: 'rgba(29,158,117,0.10)' },
-  interviewing:{ label: 'Interviewing',color: '#8b5cf6',         bg: 'rgba(139,92,246,0.10)' },
-  offered:     { label: 'Offered',     color: '#10b981',         bg: 'rgba(16,185,129,0.10)' },
-  rejected:    { label: 'Rejected',    color: '#ef4444',         bg: 'rgba(239,68,68,0.10)' },
+const STATUSES: Status[] = ['new', 'reviewing', 'shortlisted', 'interviewing', 'offered', 'rejected']
+
+// label + biz-chip variant
+const STATUS_CONFIG: Record<Status, { label: string; chip: string }> = {
+  new:          { label: 'New',          chip: '' },
+  reviewing:    { label: 'Reviewing',    chip: 'sand' },
+  shortlisted:  { label: 'Shortlisted',  chip: 'teal' },
+  interviewing: { label: 'Interviewing', chip: 'solid' },
+  offered:      { label: 'Offered',      chip: 'sage' },
+  rejected:     { label: 'Rejected',     chip: 'clay' },
 }
 
-const FILTER_TABS: Array<{ key: 'all' | Status; label: string }> = [
-  { key: 'all', label: 'All' },
-  { key: 'new', label: 'New' },
-  { key: 'shortlisted', label: 'Shortlisted' },
-  { key: 'interviewing', label: 'Interviewing' },
+const NEXT_STAGE: Partial<Record<Status, Status>> = {
+  new: 'reviewing',
+  reviewing: 'shortlisted',
+  shortlisted: 'interviewing',
+  interviewing: 'offered',
+}
+
+const JOB_STATUSES: Array<{ value: string; label: string }> = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'active', label: 'Active' },
+  { value: 'paused', label: 'Paused' },
+  { value: 'closed', label: 'Closed (archived)' },
 ]
 
-const WEIGHT_COLOR: Record<string, string> = {
-  dealbreaker:  '#ef4444',
-  must_have:    'var(--teal)',
-  nice_to_have: 'var(--text3)',
+const SOURCE_LABELS: Record<string, string> = {
+  upload: 'direct upload',
+  bulk: 'direct upload',
+  csv: 'CSV import',
+  import: 'file import',
+  link: 'link',
+  email: 'email',
 }
 
-function scoreColor(score: number) {
-  if (score >= 80) return '#1d9e75'
-  if (score >= 60) return '#f59e0b'
-  return '#ef4444'
+function scoreClass(score: number | null, dealbreaker: boolean) {
+  if (score == null) return 'none'
+  if (dealbreaker) return 'lo'
+  if (score >= 80) return 'hi'
+  if (score >= 60) return 'mid'
+  return 'lo'
 }
 
-function scoreBg(score: number) {
-  if (score >= 80) return 'rgba(29,158,117,0.12)'
-  if (score >= 60) return 'rgba(245,158,11,0.12)'
-  return 'rgba(239,68,68,0.12)'
+function isMet(cs: { score: number | null; met: boolean | null }) {
+  return cs.met === true || (cs.met == null && cs.score != null && cs.score >= 65)
 }
 
 function isCsvFile(file: File): boolean {
@@ -125,6 +155,17 @@ function timeAgo(iso: string) {
   const hours = Math.round(mins / 60)
   if (hours < 24) return `${hours}h ago`
   return `${Math.round(hours / 24)}d ago`
+}
+
+function shortDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function sourceText(d: ApplicantDetail): string | null {
+  const ext = providerLabel(d.external_source) ?? providerLabel(d.source)
+  if (ext) return `from ${ext}`
+  if (d.source && SOURCE_LABELS[d.source]) return `via ${SOURCE_LABELS[d.source]}`
+  return null
 }
 
 function generateSummary(applicant: Applicant, criteria: Criterion[]): string {
@@ -154,32 +195,26 @@ function generateSummary(applicant: Applicant, criteria: Criterion[]): string {
   return `Meets ${metCount} of ${criteriaWithIds.length} criteria.`
 }
 
-function CriterionDot({ applicant, criterionId, weight }: {
-  applicant: Applicant
-  criterionId: string
-  weight: Weight
-}) {
-  const scores = applicant.applicant_criterion_scores
-  if (!scores || scores.length === 0) {
-    return <span style={{ fontSize: 12, color: 'var(--text3)' }}>—</span>
-  }
+/** "Meets X of Y" for a list row, or null when the applicant has no criterion scores yet. */
+function meetsLine(a: Applicant): string | null {
+  const scores = (a.applicant_criterion_scores ?? []).filter((s) => s.score != null || s.met != null)
+  if (scores.length === 0) return null
+  return `Meets ${scores.filter(isMet).length} of ${scores.length}`
+}
 
-  const cs = scores.find((s) => s.criterion_id === criterionId)
-  if (!cs || cs.score == null) {
-    return (
-      <span title="Not yet scored" style={{ fontSize: 13, color: 'var(--text3)' }}>—</span>
-    )
-  }
-
-  const met = cs.met === true || (cs.met == null && cs.score >= 65)
-  const isDealbreakerFail = !met && weight === 'dealbreaker'
-  const color = met ? '#1d9e75' : '#ef4444'
-  const tooltip = isDealbreakerFail ? '⚠ Dealbreaker not met' : met ? 'Met' : 'Not met'
-
+function ShieldIcon() {
   return (
-    <span title={tooltip} style={{ fontSize: 13, fontWeight: 700, color, lineHeight: 1 }}>
-      {met ? '✓' : '✗'}
-    </span>
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <path d="M9 2l6 2.5v4c0 4-2.6 6.5-6 7.5-3.4-1-6-3.5-6-7.5v-4z" stroke="currentColor" strokeWidth="1.5" fill="none" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <path d="M4 9.5l3 3 7-7" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+    </svg>
   )
 }
 
@@ -194,15 +229,13 @@ export default function JobWorkspacePage() {
   const [detail, setDetail] = useState<ApplicantDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState<'all' | Status>('all')
+  const [hideDealbreakers, setHideDealbreakers] = useState(true)
   const [sortKey, setSortKey] = useState<SortKey>('score')
   const [search, setSearch] = useState('')
   const [jobStatusUpdating, setJobStatusUpdating] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [csvUploading, setCsvUploading] = useState(false)
   const [noteText, setNoteText] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const [toast, setToast] = useState('')
-  const [expandedEvidence, setExpandedEvidence] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
   const [criteria, setCriteria] = useState<Criterion[]>([])
   const [criteriaOpen, setCriteriaOpen] = useState(false)
@@ -210,16 +243,21 @@ export default function JobWorkspacePage() {
   const [criteriaSaving, setCriteriaSaving] = useState(false)
   const [rescoring, setRescoring] = useState(false)
   const [rescoreCount, setRescoreCount] = useState(0)
-  const [addApplicantsOpen, setAddApplicantsOpen] = useState(false)
   const [atsImportOpen, setAtsImportOpen] = useState(false)
   const [addingApplicant, setAddingApplicant] = useState(false)
   const [detailTab, setDetailTab] = useState<'score' | 'resume'>('score')
   const [aiChecking, setAiChecking] = useState(false)
   const [aiCheckResult, setAiCheckResult] = useState<AiCheckResult | null>(null)
+  const [aiCheckedNow, setAiCheckedNow] = useState(false)
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const csvInputRef = useRef<HTMLInputElement>(null)
   const addApplicantInputRef = useRef<HTMLInputElement>(null)
+  const panelRef = useRef<HTMLElement>(null)
+  const latestDetailRequest = useRef<string | null>(null)
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(''), 5000)
+  }, [])
 
   const loadApplicants = useCallback(async () => {
     try {
@@ -253,27 +291,68 @@ export default function JobWorkspacePage() {
   }, [jobId, loadApplicants])
 
   const loadDetail = useCallback(async (id: string) => {
+    latestDetailRequest.current = id
     setDetailLoading(true)
     try {
       const res = await fetch(`/api/business/applicants/${id}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Could not load applicant')
+      if (latestDetailRequest.current !== id) return
       setDetail(data.applicant)
       setAiCheckResult(data.applicant.ai_check_result ?? null)
+      setAiCheckedNow(false)
     } catch (e) {
-      setError((e as Error).message)
+      if (latestDetailRequest.current === id) setError((e as Error).message)
     } finally {
-      setDetailLoading(false)
+      if (latestDetailRequest.current === id) setDetailLoading(false)
     }
   }, [])
 
+  // Stage counts ignore the search box and the dealbreaker toggle.
+  const stageCounts = STATUSES.reduce((acc, s) => {
+    acc[s] = applicants.filter((a) => a.status === s).length
+    return acc
+  }, {} as Record<Status, number>)
+
+  const inStage = applicants.filter((a) => statusFilter === 'all' || a.status === statusFilter)
+  const dealbreakerCount = inStage.filter((a) => a.has_dealbreaker).length
+
+  const filtered = inStage
+    .filter((a) => !hideDealbreakers || !a.has_dealbreaker)
+    .filter((a) => {
+      if (!search.trim()) return true
+      const q = search.toLowerCase()
+      return (a.name ?? '').toLowerCase().includes(q) || (a.email ?? '').toLowerCase().includes(q)
+    })
+    .sort((a, b) => {
+      if (sortKey === 'score') {
+        if (a.has_dealbreaker !== b.has_dealbreaker) return a.has_dealbreaker ? 1 : -1
+        return (b.overall_score ?? -1) - (a.overall_score ?? -1)
+      }
+      if (sortKey === 'name') return (a.name ?? '').localeCompare(b.name ?? '')
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+
+  // The panel shows the chosen applicant, or the top of the current list.
+  const activeId = selectedId && filtered.some((a) => a.id === selectedId) ? selectedId : (filtered[0]?.id ?? null)
+
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the detail pane when a different applicant is selected
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the detail pane when a different applicant is shown
     setDetailTab('score')
     setAiCheckResult(null)
-    if (selectedId) loadDetail(selectedId)
-    else setDetail(null)
-  }, [selectedId, loadDetail])
+    if (activeId) loadDetail(activeId)
+    else {
+      latestDetailRequest.current = null
+      setDetail(null)
+    }
+  }, [activeId, loadDetail])
+
+  function selectApplicant(id: string) {
+    setSelectedId(id)
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches) {
+      requestAnimationFrame(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    }
+  }
 
   async function runAiCheck(applicantId: string) {
     setAiChecking(true)
@@ -282,6 +361,7 @@ export default function JobWorkspacePage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Could not run AI check')
       setAiCheckResult(data.result)
+      setAiCheckedNow(true)
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -289,51 +369,7 @@ export default function JobWorkspacePage() {
     }
   }
 
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    setError('')
-    try {
-      const formData = new FormData()
-      formData.append('job_id', jobId)
-      formData.append('file', file)
-      const res = await fetch('/api/business/applicants/upload', { method: 'POST', body: formData })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Could not upload resume')
-      await loadApplicants()
-      setSelectedId(data.applicant.id)
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }
-
-  async function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setCsvUploading(true)
-    setError('')
-    try {
-      const formData = new FormData()
-      formData.append('job_id', jobId)
-      formData.append('file', file)
-      const res = await fetch('/api/business/applicants/csv', { method: 'POST', body: formData })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Could not process CSV')
-      setToast(`Processed ${data.processed} applicant${data.processed === 1 ? '' : 's'}${data.failed ? ` — ${data.failed} failed` : ''}`)
-      setTimeout(() => setToast(''), 5000)
-      await loadApplicants()
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setCsvUploading(false)
-      if (csvInputRef.current) csvInputRef.current.value = ''
-    }
-  }
-
+  // Resumes (PDF/DOCX) go one by one to the upload route; a CSV goes to the batch route.
   async function handleAddApplicantFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return
     const files = Array.from(fileList)
@@ -341,21 +377,32 @@ export default function JobWorkspacePage() {
     setError('')
     try {
       let lastApplicantId: string | null = null
+      let csvProcessed = 0
+      let csvFailed = 0
+      let sawCsv = false
       for (const file of files) {
         const formData = new FormData()
         formData.append('job_id', jobId)
         formData.append('file', file)
-        const res = await fetch(isCsvFile(file) ? '/api/business/applicants/csv' : '/api/business/applicants/upload', {
+        const csv = isCsvFile(file)
+        const res = await fetch(csv ? '/api/business/applicants/csv' : '/api/business/applicants/upload', {
           method: 'POST',
           body: formData,
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error ?? `Could not upload ${file.name}`)
+        if (csv) {
+          sawCsv = true
+          csvProcessed += data.processed ?? 0
+          csvFailed += data.failed ?? 0
+        }
         if (data.applicant?.id) lastApplicantId = data.applicant.id
       }
       await loadApplicants()
       if (lastApplicantId) setSelectedId(lastApplicantId)
-      setAddApplicantsOpen(false)
+      if (sawCsv) {
+        showToast(`Processed ${csvProcessed} applicant${csvProcessed === 1 ? '' : 's'}${csvFailed ? `, ${csvFailed} failed` : ''}`)
+      }
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -395,26 +442,27 @@ export default function JobWorkspacePage() {
   }
 
   async function handleStatusChange(status: Status) {
-    if (!detail) return
+    if (!detail || detail.status === status) return
     const previous = detail.status
+    const id = detail.id
     setDetail({ ...detail, status })
-    setApplicants((as) => as.map((a) => (a.id === detail.id ? { ...a, status } : a)))
+    setApplicants((as) => as.map((a) => (a.id === id ? { ...a, status } : a)))
     try {
-      const res = await fetch(`/api/business/applicants/${detail.id}/status`, {
+      const res = await fetch(`/api/business/applicants/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       })
       if (!res.ok) throw new Error('Could not update status')
     } catch (e) {
-      setDetail((d) => (d ? { ...d, status: previous } : d))
-      setApplicants((as) => as.map((a) => (a.id === detail.id ? { ...a, status: previous } : a)))
+      setDetail((d) => (d && d.id === id ? { ...d, status: previous } : d))
+      setApplicants((as) => as.map((a) => (a.id === id ? { ...a, status: previous } : a)))
       setError((e as Error).message)
     }
   }
 
   async function handleJobStatusChange(status: string) {
-    if (!job || jobStatusUpdating) return false
+    if (!job || jobStatusUpdating || job.status === status) return
     const previous = job.status
     setJob({ ...job, status })
     setJobStatusUpdating(true)
@@ -428,21 +476,12 @@ export default function JobWorkspacePage() {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error ?? 'Could not update job status')
       }
-      return true
+      if (status === 'closed') showToast('Posting archived')
     } catch (e) {
       setJob({ ...job, status: previous })
       setError((e as Error).message)
-      return false
     } finally {
       setJobStatusUpdating(false)
-    }
-  }
-
-  async function handleArchiveJob() {
-    const ok = await handleJobStatusChange('closed')
-    if (ok) {
-      setToast('Job archived')
-      setTimeout(() => setToast(''), 5000)
     }
   }
 
@@ -495,6 +534,17 @@ export default function JobWorkspacePage() {
     setTimeout(() => setSuggestNote(''), 3000)
   }
 
+  const closeCriteria = useCallback(() => {
+    if (!criteriaSaving && !rescoring) setCriteriaOpen(false)
+  }, [criteriaSaving, rescoring])
+
+  useEffect(() => {
+    if (!criteriaOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeCriteria() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [criteriaOpen, closeCriteria])
+
   async function handleSaveCriteria() {
     if (criteriaSaving || rescoring) return
     setCriteriaSaving(true)
@@ -539,9 +589,8 @@ export default function JobWorkspacePage() {
         const rescoreData = await rescoreRes.json()
         if (!rescoreRes.ok) throw new Error(rescoreData.error ?? 'Could not re-score applicants')
         await loadApplicants()
-        if (selectedId) loadDetail(selectedId)
-        setToast(`Re-scored ${rescoreData.rescored} applicant${rescoreData.rescored === 1 ? '' : 's'}${rescoreData.errors ? ` — ${rescoreData.errors} failed` : ''}`)
-        setTimeout(() => setToast(''), 5000)
+        if (activeId) loadDetail(activeId)
+        showToast(`Re-scored ${rescoreData.rescored} applicant${rescoreData.rescored === 1 ? '' : 's'}${rescoreData.errors ? `, ${rescoreData.errors} failed` : ''}`)
       } catch (e) {
         setError((e as Error).message)
       } finally {
@@ -554,176 +603,462 @@ export default function JobWorkspacePage() {
     }
   }
 
-  function toggleEvidence(criterionId: string) {
-    setExpandedEvidence((prev) => {
-      const next = new Set(prev)
-      if (next.has(criterionId)) next.delete(criterionId)
-      else next.add(criterionId)
-      return next
-    })
-  }
-
-  const filtered = applicants
-    .filter((a) => statusFilter === 'all' || a.status === statusFilter)
-    .filter((a) => {
-      if (!search.trim()) return true
-      const q = search.toLowerCase()
-      return (a.name ?? '').toLowerCase().includes(q) || (a.email ?? '').toLowerCase().includes(q)
-    })
-    .sort((a, b) => {
-      if (sortKey === 'score') {
-        if (a.has_dealbreaker !== b.has_dealbreaker) return a.has_dealbreaker ? 1 : -1
-        return (b.overall_score ?? -1) - (a.overall_score ?? -1)
-      }
-      if (sortKey === 'name') return (a.name ?? '').localeCompare(b.name ?? '')
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    })
-
-
-  const criterionColumns = criteria
-    .filter((c): c is Criterion & { id: string } => !!c.id)
-    .map((c) => ({ id: c.id, label: c.label, weight: c.weight, criterionType: c.criterionType, minYears: c.minYears }))
+  const shown = detail && detail.id === activeId && !detailLoading ? detail : null
+  const extSource = job?.external_source ? providerLabel(job.external_source) : null
+  const writeBackProvider = shown?.external_source && isProvider(shown.external_source) ? shown.external_source : null
+  const aiEligible = !!shown && shown.overall_score != null && shown.overall_score >= AI_REVIEW_THRESHOLD && !shown.has_dealbreaker
+  const nextStage = shown ? NEXT_STAGE[shown.status] : undefined
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)', margin: '-40px' }}>
-
-      {/* Top bar */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '0 20px',
-        borderBottom: '1px solid var(--border)', flexShrink: 0, height: 52,
-      }}>
-        <h1 style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>
-          {job?.title ?? '…'}
-        </h1>
-        {job && (
-          <div style={{ display: 'flex', gap: 4 }}>
-            {(['draft', 'active', 'paused', 'closed'] as const).map((s) => {
-              const cfg = STATUS_CONFIG[s as Status] ?? STATUS_CONFIG.new
-              const active = job.status === s
-              return (
-                <button
-                  key={s}
-                  onClick={() => handleJobStatusChange(s)}
-                  disabled={jobStatusUpdating}
-                  style={{
-                    fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 20,
-                    border: `1px solid ${active ? cfg.color : 'var(--border2)'}`,
-                    background: active ? cfg.bg : 'transparent',
-                    color: active ? cfg.color : 'var(--text3)',
-                    cursor: jobStatusUpdating ? 'default' : 'pointer',
-                    textTransform: 'uppercase' as const, letterSpacing: '0.04em',
-                    fontFamily: 'var(--font)', transition: 'all 0.15s',
-                  }}
-                >
-                  {s}
-                </button>
-              )
-            })}
+    <div className="biz-inner bp">
+      <header className="biz-head">
+        <div className="bp-head-main">
+          <Link href="/business/jobs" className="bp-back">← Postings</Link>
+          <h1 className="biz-h1">{job?.title ?? 'Loading posting'}</h1>
+          <div className="bp-meta">
+            {job?.extracted_company && <><span>{job.extracted_company}</span><span className="bp-meta-sep" aria-hidden="true">·</span></>}
+            <span>{listLoading ? 'Loading applicants' : `${applicants.length} applicant${applicants.length === 1 ? '' : 's'}`}</span>
+            {extSource && <><span className="bp-meta-sep" aria-hidden="true">·</span><span>linked to {extSource}</span></>}
+            {job && (
+              <>
+                <span className="bp-meta-sep" aria-hidden="true">·</span>
+                <label className="bp-status">
+                  Posting
+                  <select
+                    className="bp-select"
+                    value={job.status}
+                    onChange={(e) => handleJobStatusChange(e.target.value)}
+                    disabled={jobStatusUpdating}
+                  >
+                    {JOB_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </label>
+              </>
+            )}
           </div>
-        )}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          {job?.status === 'active' && (
-            <button className="btn-ghost" onClick={handleArchiveJob} disabled={jobStatusUpdating} style={{ fontSize: 12.5, padding: '6px 12px' }}>
-              🗄 Archive
-            </button>
-          )}
-          <button className="btn-ghost" onClick={handleExportCsv} disabled={applicants.length === 0} style={{ fontSize: 12.5, padding: '6px 12px' }}>
-            ↓ Export CSV
+        </div>
+        <div className="biz-actions">
+          <input
+            ref={addApplicantInputRef}
+            type="file"
+            accept=".pdf,.docx,.csv"
+            multiple
+            onChange={(e) => handleAddApplicantFiles(e.target.files)}
+            className="bp-sr"
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+          <button
+            type="button"
+            className="biz-btn biz-btn-ghost"
+            onClick={() => addApplicantInputRef.current?.click()}
+            disabled={addingApplicant}
+            title="PDF or DOCX resumes, or a CSV batch"
+          >
+            {addingApplicant ? 'Uploading…' : 'Add applicants'}
           </button>
-          <button className="btn-ghost" onClick={() => setCriteriaOpen(true)} style={{ fontSize: 12.5, padding: '6px 12px' }}>
-            ⚙ Criteria
+          <button type="button" className="biz-btn biz-btn-ghost" onClick={() => setAtsImportOpen(true)} disabled={!job}>
+            {applicants.length === 0 ? 'Import from your ATS' : 'Import more'}
           </button>
-          <input ref={fileInputRef} type="file" accept=".pdf,.docx" onChange={handleFileUpload} style={{ display: 'none' }} />
-          <button className="btn-ghost" onClick={() => fileInputRef.current?.click()} disabled={uploading} style={{ fontSize: 12.5, padding: '6px 12px' }}>
-            {uploading ? 'Uploading…' : '↑ Resume'}
-          </button>
-          <input ref={csvInputRef} type="file" accept=".csv" onChange={handleCsvUpload} style={{ display: 'none' }} />
-          <button className="btn-primary" onClick={() => csvInputRef.current?.click()} disabled={csvUploading} style={{ fontSize: 12.5, padding: '6px 14px' }}>
-            {csvUploading ? 'Processing…' : '↑ CSV batch'}
+          <button type="button" className="biz-btn biz-btn-ghost" onClick={() => setCriteriaOpen(true)}>
+            Edit criteria
           </button>
         </div>
+      </header>
+
+      {toast && (
+        <div className="bp-toast" role="status">
+          {toast}
+        </div>
+      )}
+      {error && (
+        <div className="bp-error" role="alert">
+          <span>{error}</span>
+          <button type="button" className="bp-x" onClick={() => setError('')} aria-label="Dismiss error">×</button>
+        </div>
+      )}
+
+      <div className="bp-filters" role="group" aria-label="Filter by stage">
+        <button type="button" className="bp-pill" aria-pressed={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>
+          All <span className="bp-pill-n">{applicants.length}</span>
+        </button>
+        {STATUSES.map((s) => (
+          <button key={s} type="button" className="bp-pill" aria-pressed={statusFilter === s} onClick={() => setStatusFilter(s)}>
+            {STATUS_CONFIG[s].label} <span className="bp-pill-n">{stageCounts[s]}</span>
+          </button>
+        ))}
+        <span className="bp-filters-gap" />
+        <label className="bp-check">
+          <input type="checkbox" checked={hideDealbreakers} onChange={(e) => setHideDealbreakers(e.target.checked)} />
+          Hide missed dealbreakers ({dealbreakerCount})
+        </label>
       </div>
 
-      {/* Criteria editor modal */}
-      {criteriaOpen && (
-        <div
-          onClick={() => { if (!criteriaSaving && !rescoring) setCriteriaOpen(false) }}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 14,
-              padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', overflowY: 'auto',
-            }}
-          >
-            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', marginBottom: 4, letterSpacing: '-0.02em' }}>
-              Scoring criteria
+      <div className="bp-cols">
+        <section aria-label="Ranked applicants" className="biz-card bp-list">
+          <div className="bp-list-tools">
+            <label className="bp-sr" htmlFor="bp-search">Search applicants</label>
+            <input
+              id="bp-search"
+              type="search"
+              className="bp-search"
+              placeholder="Search name or email"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <label className="bp-sr" htmlFor="bp-sort">Sort by</label>
+            <select id="bp-sort" className="bp-select" style={{ minHeight: 40 }} value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}>
+              <option value="score">Score</option>
+              <option value="name">Name</option>
+              <option value="date">Newest</option>
+            </select>
+          </div>
+
+          {listLoading ? (
+            <div aria-busy="true" aria-label="Loading applicants">
+              {[0, 1, 2, 3].map((i) => <div key={i} className="bp-skel" style={{ opacity: 1 - i * 0.2 }} />)}
             </div>
-            <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 18, lineHeight: 1.5 }}>
-              Changes here re-score every applicant on this job automatically.
-            </p>
+          ) : filtered.length === 0 ? (
+            <div className="bp-list-empty">
+              {applicants.length === 0
+                ? 'No applicants yet. Add resumes or a CSV, or import from your ATS.'
+                : inStage.length > 0 && dealbreakerCount === inStage.length && hideDealbreakers
+                  ? 'Everyone here missed a dealbreaker. Untick "Hide missed dealbreakers" to see them.'
+                  : 'No applicants match.'}
+            </div>
+          ) : (
+            <ul className="bp-rows">
+              {filtered.map((a) => {
+                const selected = a.id === activeId
+                const cfg = STATUS_CONFIG[a.status] ?? STATUS_CONFIG.new
+                const meets = meetsLine(a)
+                const sub = a.has_dealbreaker
+                  ? ['Missed a dealbreaker', a.parsed_headline].filter(Boolean).join(' · ')
+                  : [meets ?? (a.overall_score == null ? 'Scoring…' : null), a.parsed_headline ?? a.email].filter(Boolean).join(' · ')
+                return (
+                  <li key={a.id}>
+                    <button
+                      type="button"
+                      className="bp-row"
+                      aria-current={selected ? 'true' : undefined}
+                      onClick={() => selectApplicant(a.id)}
+                    >
+                      <span
+                        className={`biz-score ${selected && a.overall_score != null && !a.has_dealbreaker ? 'top' : scoreClass(a.overall_score, a.has_dealbreaker)}`}
+                        aria-label={a.overall_score != null ? `Score ${a.overall_score}` : 'Not scored yet'}
+                      >
+                        {a.overall_score ?? '–'}
+                      </span>
+                      <span className="bp-row-body">
+                        <span className="bp-row-name">
+                          <span>{a.name || 'Unnamed'}</span>
+                          {a.overall_score != null && a.overall_score >= AI_REVIEW_THRESHOLD && !a.has_dealbreaker && (
+                            <span className="biz-chip sand bp-flag" title="High match: worth verifying">Verify</span>
+                          )}
+                        </span>
+                        <span className={`bp-row-sub${a.has_dealbreaker ? ' miss' : ''}`}>{sub || '–'}</span>
+                      </span>
+                      <span className={`biz-chip ${cfg.chip}`}>{cfg.label}</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+
+          {!listLoading && applicants.length > 0 && (
+            <div className="bp-list-foot">
+              <span>Showing {filtered.length} of {applicants.length}</span>
+              <button type="button" className="bp-linkbtn" onClick={handleExportCsv}>Export CSV</button>
+            </div>
+          )}
+        </section>
+
+        <section ref={panelRef} aria-labelledby="bp-cand-h" aria-busy={!!activeId && !shown} className="biz-card bp-panel">
+          {!activeId ? (
+            <div className="bp-panel-empty">
+              <h2 id="bp-cand-h" className="biz-h2">No applicant selected</h2>
+              <p>{applicants.length === 0 ? 'Applicants you add or import show up here, scored against your criteria.' : 'Pick someone from the list.'}</p>
+            </div>
+          ) : !shown ? (
+            <div className="bp-panel-empty">
+              <h2 id="bp-cand-h" className="bp-sr">Applicant</h2>
+              Loading…
+            </div>
+          ) : (
+            <>
+              <div className="bp-cand-head">
+                <div
+                  className={`bp-ring${shown.overall_score == null ? ' none' : shown.has_dealbreaker ? ' miss' : ''}`}
+                  style={{ '--pct': Math.max(0, Math.min(100, shown.overall_score ?? 0)) } as React.CSSProperties}
+                  role="img"
+                  aria-label={shown.overall_score != null ? `Score ${shown.overall_score} out of 100` : 'Scoring in progress'}
+                >
+                  <span aria-hidden="true">{shown.overall_score ?? '–'}</span>
+                </div>
+                <div className="bp-cand-id">
+                  <h2 id="bp-cand-h" className="bp-cand-name">{shown.name || 'Unnamed applicant'}</h2>
+                  <span className="bp-cand-meta">
+                    {[shown.email || 'No email', sourceText(shown)].filter(Boolean).join(' · ')}
+                    {shown.resume_signed_url && (
+                      <>
+                        {' · '}
+                        <a href={shown.resume_signed_url} target="_blank" rel="noopener noreferrer">Original file</a>
+                      </>
+                    )}
+                  </span>
+                  {shown.parsed_headline && <span className="bp-cand-headline">{shown.parsed_headline}</span>}
+                  {shown.ats_stage && writeBackProvider && (
+                    <span className="bp-cand-meta">Stage in {PROVIDER_INFO[writeBackProvider].label}: {shown.ats_stage}</span>
+                  )}
+                </div>
+                <div className="bp-cand-actions">
+                  {shown.status !== 'rejected' ? (
+                    <button type="button" className="biz-btn biz-btn-ghost" onClick={() => handleStatusChange('rejected')}>Reject</button>
+                  ) : (
+                    <button type="button" className="biz-btn biz-btn-ghost" onClick={() => handleStatusChange('new')}>Move back to New</button>
+                  )}
+                  {nextStage && (
+                    <button type="button" className="biz-btn" onClick={() => handleStatusChange(nextStage)}>
+                      Move to {STATUS_CONFIG[nextStage].label}
+                    </button>
+                  )}
+                  <label className="bp-stage">
+                    <span className="bp-sr">Stage</span>
+                    <select className="bp-select" value={shown.status} onChange={(e) => handleStatusChange(e.target.value as Status)}>
+                      {STATUSES.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div className="biz-tabs" role="tablist" aria-label="Applicant details">
+                <button type="button" role="tab" id="bp-tab-score" aria-controls="bp-tabpanel" aria-selected={detailTab === 'score'} onClick={() => setDetailTab('score')}>
+                  Score and notes
+                </button>
+                <button type="button" role="tab" id="bp-tab-resume" aria-controls="bp-tabpanel" aria-selected={detailTab === 'resume'} onClick={() => setDetailTab('resume')}>
+                  Resume
+                </button>
+              </div>
+
+              <div id="bp-tabpanel" role="tabpanel" aria-labelledby={detailTab === 'score' ? 'bp-tab-score' : 'bp-tab-resume'} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                {detailTab === 'score' ? (
+                  <>
+                    {shown.overall_score == null ? (
+                      <p className="bp-summary">Scoring in progress…</p>
+                    ) : (
+                      <p className="bp-summary">{generateSummary(shown, criteria)}</p>
+                    )}
+                    {shown.has_dealbreaker && <p className="bp-alert">Missed a dealbreaker</p>}
+
+                    {shown.criteria_scores.length > 0 && (
+                      <div className="bp-crit">
+                        <h3 className="bp-h3">Criteria</h3>
+                        {shown.criteria_scores.map((cs) => {
+                          const weight = (cs.weight && cs.weight in WEIGHT_LABEL ? cs.weight : 'nice_to_have') as Weight
+                          const met = isMet(cs)
+                          const noEvidence = !cs.evidence || /not found/i.test(cs.evidence)
+                          let result = '–'
+                          let resultLabel = 'Not scored yet'
+                          let resultClass = ''
+                          if (weight === 'dealbreaker' && (cs.met != null || cs.score != null)) {
+                            result = met ? 'Met' : 'Missed'
+                            resultLabel = met ? 'Met' : 'Not met'
+                            resultClass = met ? 'met' : 'miss'
+                          } else if (cs.score != null) {
+                            const outOf5 = Math.max(0, Math.min(5, Math.round(cs.score / 20)))
+                            result = `${outOf5}/5`
+                            resultLabel = `${met ? 'Met' : 'Not met'}, scored ${cs.score} out of 100`
+                            resultClass = met ? 'met' : ''
+                          }
+                          return (
+                            <div key={cs.criterion_id} className="bp-crit-row">
+                              <span className={`bp-weight ${weight}`}>{WEIGHT_LABEL[weight]}</span>
+                              <div className="bp-crit-text">
+                                <span className="bp-crit-label">{cs.label ?? 'Criterion'}</span>
+                                {noEvidence
+                                  ? <span className="bp-evidence none">Not found in the resume</span>
+                                  : <span className="bp-evidence">&ldquo;{cs.evidence}&rdquo;</span>}
+                              </div>
+                              <span className={`bp-result ${resultClass}`} title={resultLabel}>
+                                <span aria-hidden="true">{result}</span>
+                                <span className="bp-sr">{resultLabel}</span>
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {(aiCheckResult || aiEligible || shown.ats_note_posted_at) && (
+                      <div className="bp-cards">
+                        {aiCheckResult ? (
+                          <div className={`bp-info${aiCheckResult.likely_ai ? ' warn' : ''}`}>
+                            <ShieldIcon />
+                            <div className="bp-info-body">
+                              <span className="bp-info-title">
+                                AI writing check: {aiCheckResult.likely_ai ? 'likely AI-generated' : 'looks human'}
+                              </span>
+                              <span className="bp-info-note">
+                                {aiCheckResult.confidence} confidence
+                                {aiCheckedNow ? ' · checked just now' : shown.ai_checked_at ? ` · checked ${shortDate(shown.ai_checked_at)}` : ''}
+                              </span>
+                              <details>
+                                <summary>Details</summary>
+                                <p style={{ margin: '4px 0 6px' }}>{aiCheckResult.summary}</p>
+                                {aiCheckResult.signals.length > 0 && (
+                                  <>
+                                    <div className="bp-info-k">Signals</div>
+                                    <ul>{aiCheckResult.signals.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                                  </>
+                                )}
+                                {aiCheckResult.human_signals.length > 0 && (
+                                  <>
+                                    <div className="bp-info-k">Human signals</div>
+                                    <ul>{aiCheckResult.human_signals.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                                  </>
+                                )}
+                                {aiCheckResult.likely_ai && (
+                                  <p style={{ margin: '4px 0 6px', fontStyle: 'italic' }}>
+                                    If this candidate used ModuleHire, their resume was built from real experience
+                                    modules, but may read as AI-optimized. Consider asking them to explain a specific
+                                    bullet point to verify.
+                                  </p>
+                                )}
+                              </details>
+                              <button type="button" className="bp-linkbtn" style={{ alignSelf: 'flex-start', padding: 0 }} onClick={() => runAiCheck(shown.id)} disabled={aiChecking}>
+                                {aiChecking ? 'Re-running…' : 'Re-run check'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : aiEligible ? (
+                          <div className="bp-info warn">
+                            <ShieldIcon />
+                            <div className="bp-info-body">
+                              <span className="bp-info-title">High match: verify authenticity</span>
+                              <span className="bp-info-note">
+                                This resume scores {shown.overall_score}/100 with no dealbreakers. High-scoring resumes are
+                                sometimes AI-optimized, so review the original and verify key experience directly.
+                              </span>
+                              <button type="button" className="biz-btn biz-btn-ghost biz-btn-sm" onClick={() => runAiCheck(shown.id)} disabled={aiChecking}>
+                                {aiChecking ? 'Analyzing…' : 'Run AI writing check'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {shown.ats_note_posted_at && (
+                          <div className="bp-info">
+                            <CheckIcon />
+                            <div className="bp-info-body">
+                              <span className="bp-info-title">
+                                Score posted to {writeBackProvider ? PROVIDER_INFO[writeBackProvider].label : 'your ATS'}
+                              </span>
+                              <span className="bp-info-note">
+                                As a {writeBackProvider ? PROVIDER_INFO[writeBackProvider].noteWord : 'note'} on the application · {shortDate(shown.ats_note_posted_at)}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="bp-notes">
+                      <h3 className="bp-h3">Team notes</h3>
+                      {shown.notes.length === 0 ? (
+                        <span className="biz-faint" style={{ fontSize: 13 }}>No notes yet.</span>
+                      ) : shown.notes.map((note) => (
+                        <div key={note.id} className="bp-note">
+                          <span className="bp-note-time">{timeAgo(note.created_at)}</span>
+                          {note.body}
+                        </div>
+                      ))}
+                      <label className="bp-field">
+                        <span className="bp-sr">Add a team note</span>
+                        <textarea
+                          className="bp-textarea"
+                          placeholder="Add a note"
+                          value={noteText}
+                          onChange={(e) => setNoteText(e.target.value)}
+                          rows={3}
+                          maxLength={2000}
+                        />
+                      </label>
+                      <div className="bp-note-actions">
+                        <button type="button" className="biz-btn biz-btn-ghost biz-btn-sm" onClick={handleAddNote} disabled={savingNote || !noteText.trim()}>
+                          {savingNote ? 'Saving…' : 'Add note'}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {shown.resume_signed_url && (
+                      <a href={shown.resume_signed_url} target="_blank" rel="noopener noreferrer" className="biz-btn biz-btn-ghost biz-btn-sm" style={{ alignSelf: 'flex-start' }}>
+                        Download original file
+                      </a>
+                    )}
+                    {shown.raw_text
+                      ? <pre className="bp-resume">{shown.raw_text}</pre>
+                      : <span className="biz-muted">No resume text available.</span>}
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+
+      {criteriaOpen && (
+        <div className="bp-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) closeCriteria() }}>
+          <div className="biz-card bp-modal" role="dialog" aria-modal="true" aria-labelledby="bp-crit-h">
+            <div className="bp-modal-row" style={{ justifyContent: 'space-between' }}>
+              <h2 id="bp-crit-h" className="biz-h2">Scoring criteria</h2>
+              <button type="button" className="bp-x" onClick={closeCriteria} disabled={criteriaSaving || rescoring} aria-label="Close">×</button>
+            </div>
+            <p>Changes here re-score every applicant on this posting automatically.</p>
 
             {job && job.extracted_themes.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <button
-                  onClick={handleSuggestFromJd}
-                  className="btn-ghost"
-                  style={{ fontSize: 12, padding: '5px 12px' }}
-                >
-                  ✦ Suggest from JD
+              <div className="bp-modal-row">
+                <button type="button" className="biz-btn biz-btn-ghost biz-btn-sm" onClick={handleSuggestFromJd}>
+                  Suggest from the job description
                 </button>
-                {suggestNote && (
-                  <span style={{ fontSize: 11, color: 'var(--teal)' }}>{suggestNote}</span>
-                )}
+                {suggestNote && <span className="bp-hint" role="status">{suggestNote}</span>}
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-              {criteria.map((c) => (
-                <div key={c.key} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <div className="bp-edit-list">
+              {criteria.map((c, idx) => (
+                <div key={c.key} className="bp-edit">
+                  <div className="bp-edit-top">
+                    <label className="bp-sr" htmlFor={`bp-crit-${c.key}`}>Criterion {idx + 1}</label>
                     <input
-                      className="form-input"
+                      id={`bp-crit-${c.key}`}
+                      className="bp-input"
                       type="text"
                       value={c.label}
                       onChange={(e) => updateCriterion(c.key, { label: e.target.value })}
                       placeholder="Criterion label"
                       maxLength={100}
-                      style={{ flex: 1, padding: '8px 12px', fontSize: 13 }}
                     />
-                    <button
-                      onClick={() => removeCriterion(c.key)}
-                      style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 17, padding: '2px 6px', flexShrink: 0, lineHeight: 1 }}
-                      aria-label="Remove criterion"
-                    >
+                    <button type="button" className="bp-x" onClick={() => removeCriterion(c.key)} aria-label={`Remove ${c.label || 'criterion'}`}>
                       ×
                     </button>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {CRITERIA_WEIGHT_OPTIONS.map((opt) => {
-                      const active = c.weight === opt.value
-                      return (
-                        <button
-                          key={opt.value}
-                          onClick={() => updateCriterion(c.key, { weight: opt.value })}
-                          style={{
-                            fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
-                            border: `1px solid ${active ? opt.color : 'var(--border2)'}`,
-                            background: active ? opt.bg : 'transparent',
-                            color: active ? opt.color : 'var(--text3)',
-                            cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all 0.15s',
-                          }}
-                        >
-                          {opt.label}
-                        </button>
-                      )
-                    })}
-                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', whiteSpace: 'nowrap' }}>Min. yrs</span>
+                  <div className="bp-edit-bottom" role="group" aria-label="Weight">
+                    {WEIGHTS.map((w) => (
+                      <button
+                        key={w}
+                        type="button"
+                        className={`bp-wopt ${w}`}
+                        aria-pressed={c.weight === w}
+                        onClick={() => updateCriterion(c.key, { weight: w })}
+                      >
+                        {WEIGHT_LABEL[w]}
+                      </button>
+                    ))}
+                    <label className="bp-years">
+                      Min. years
                       <input
                         type="number"
                         min={0}
@@ -736,31 +1071,27 @@ export default function JobWorkspacePage() {
                             criterionType: val > 0 ? 'experience' : 'skill',
                           })
                         }}
-                        placeholder="—"
-                        className="form-input"
-                        style={{ width: 44, padding: '3px 6px', fontSize: 12, textAlign: 'center' }}
+                        placeholder="–"
+                        className="bp-input"
                       />
-                    </div>
+                    </label>
                   </div>
                 </div>
               ))}
             </div>
 
-            <button onClick={addCriterion} className="btn-ghost" style={{ marginBottom: 20 }}>
-              + Add criterion
-            </button>
+            <div className="bp-modal-row">
+              <button type="button" className="biz-btn biz-btn-ghost biz-btn-sm" onClick={addCriterion}>+ Add criterion</button>
+            </div>
 
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => setCriteriaOpen(false)}
-                className="btn-ghost"
-                disabled={criteriaSaving || rescoring}
-              >
+            <div className="bp-modal-row" style={{ justifyContent: 'flex-end' }}>
+              <button type="button" className="biz-btn biz-btn-ghost" onClick={closeCriteria} disabled={criteriaSaving || rescoring}>
                 Cancel
               </button>
               <button
+                type="button"
+                className="biz-btn"
                 onClick={handleSaveCriteria}
-                className="btn-primary"
                 disabled={criteriaSaving || rescoring || criteria.every((c) => !c.label.trim())}
               >
                 {criteriaSaving
@@ -774,571 +1105,6 @@ export default function JobWorkspacePage() {
         </div>
       )}
 
-      {/* Toasts / errors */}
-      {toast && (
-        <div style={{ padding: '7px 20px', background: 'var(--teal-dim)', color: 'var(--teal)', fontSize: 12.5, fontWeight: 600, flexShrink: 0 }}>
-          ✓ {toast}
-        </div>
-      )}
-      {error && (
-        <div style={{ padding: '7px 20px', background: 'rgba(239,68,68,0.1)', color: '#ef4444', fontSize: 12.5, fontWeight: 600, flexShrink: 0, display: 'flex', justifyContent: 'space-between' }}>
-          {error}
-          <button onClick={() => setError('')} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14 }}>×</button>
-        </div>
-      )}
-
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-
-        {/* Ranked candidate table */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
-          {/* Toolbar: search + filters + sort */}
-          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            <input
-              className="form-input"
-              placeholder="Search name or email…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ fontSize: 12.5, padding: '7px 11px', maxWidth: 220 }}
-            />
-            <div style={{ display: 'flex', gap: 4 }}>
-              {FILTER_TABS.map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setStatusFilter(tab.key)}
-                  style={{
-                    fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20,
-                    border: `1px solid ${statusFilter === tab.key ? 'var(--teal-glow)' : 'var(--border2)'}`,
-                    background: statusFilter === tab.key ? 'var(--teal-dim)' : 'transparent',
-                    color: statusFilter === tab.key ? 'var(--teal)' : 'var(--text3)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 500 }}>Sort:</span>
-              {(['score', 'name', 'date'] as SortKey[]).map((k) => (
-                <button
-                  key={k}
-                  onClick={() => setSortKey(k)}
-                  style={{
-                    fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 5,
-                    background: sortKey === k ? 'var(--bg3)' : 'transparent',
-                    border: `1px solid ${sortKey === k ? 'var(--border2)' : 'transparent'}`,
-                    color: sortKey === k ? 'var(--text)' : 'var(--text3)',
-                    cursor: 'pointer',
-                    textTransform: 'capitalize',
-                  }}
-                >
-                  {k}
-                </button>
-              ))}
-            </div>
-            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text3)' }}>
-              {filtered.length} applicant{filtered.length === 1 ? '' : 's'}
-            </span>
-          </div>
-
-          {/* Table */}
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            {listLoading ? (
-              <div style={{ padding: 16 }}>
-                {[0, 1, 2, 3].map((i) => (
-                  <div key={i} style={{ height: 44, background: 'var(--bg2)', borderRadius: 8, marginBottom: 8, opacity: 1 - i * 0.2 }} />
-                ))}
-              </div>
-            ) : filtered.length === 0 ? (
-              <div style={{ padding: 40, textAlign: 'center', fontSize: 12.5, color: 'var(--text3)' }}>
-                {applicants.length === 0 ? 'No applicants yet. Upload a CSV or a resume.' : 'No matches.'}
-              </div>
-            ) : (
-              <div>
-                {/* Header row */}
-                <div style={{
-                  display: 'flex', alignItems: 'center',
-                  position: 'sticky', top: 0, background: 'var(--bg)', zIndex: 2,
-                  borderBottom: '1px solid var(--border)', fontSize: 10.5, fontWeight: 700,
-                  color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em',
-                }}>
-                  <div style={{ width: 36, flexShrink: 0, textAlign: 'center', padding: '8px 0' }}>#</div>
-                  <div style={{ flex: 1, padding: '8px 6px' }}>Candidate</div>
-                  {criterionColumns.map((c) => (
-                    <div key={c.id} title={c.label} style={{ width: 44, flexShrink: 0, textAlign: 'center', padding: '6px 2px', overflow: 'hidden' }}>
-                      <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {c.label.slice(0, 3).toUpperCase()}
-                      </span>
-                      <span style={{ display: 'block', fontSize: 9, color: 'var(--text3)', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>
-                        {c.criterionType === 'experience'
-                          ? (c.minYears ? `≥${c.minYears}yr` : 'exp')
-                          : 'skill'}
-                      </span>
-                    </div>
-                  ))}
-                  <div style={{ width: 64, flexShrink: 0, textAlign: 'right', padding: '8px 8px' }}>Score</div>
-                  <div style={{ width: 220, flexShrink: 0, padding: '8px 12px' }}>Summary</div>
-                </div>
-
-                {/* Rows */}
-                {filtered.map((a, i) => {
-                  const selected = a.id === selectedId
-                  const statusCfg = STATUS_CONFIG[a.status] ?? STATUS_CONFIG.new
-                  return (
-                    <div
-                      key={a.id}
-                      onClick={() => setSelectedId(a.id)}
-                      style={{
-                        display: 'flex', alignItems: 'center', cursor: 'pointer',
-                        borderBottom: '1px solid var(--border)',
-                        borderLeft: `3px solid ${selected ? 'var(--teal)' : 'transparent'}`,
-                        background: selected ? 'var(--teal-dim)' : 'transparent',
-                        transition: 'background 0.1s',
-                      }}
-                      onMouseEnter={(e) => { if (!selected) e.currentTarget.style.background = 'var(--bg2)' }}
-                      onMouseLeave={(e) => { if (!selected) e.currentTarget.style.background = 'transparent' }}
-                    >
-                      <div style={{
-                        width: 36, flexShrink: 0, textAlign: 'center', padding: '10px 0',
-                        fontSize: 12, fontWeight: 600, color: a.has_dealbreaker ? 'var(--text3)' : 'var(--text2)',
-                      }}>
-                        {i + 1}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0, padding: '10px 6px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {a.name || 'Unnamed'}
-                          </span>
-                          <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 20, color: statusCfg.color, background: statusCfg.bg, flexShrink: 0 }}>
-                            {statusCfg.label}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: 11.5, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {a.email || '—'}
-                        </div>
-                      </div>
-                      {criterionColumns.map((c) => (
-                        <div key={c.id} style={{ width: 44, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px 2px' }}>
-                          <CriterionDot applicant={a} criterionId={c.id} weight={c.weight} />
-                        </div>
-                      ))}
-                      <div style={{ minWidth: 64, flexShrink: 0, textAlign: 'right', padding: '10px 8px' }}>
-                        {a.overall_score != null ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            {a.has_dealbreaker && <span style={{ color: '#ef4444', fontSize: 11 }}>⚠</span>}
-                            <span style={{
-                              fontSize: 12, fontWeight: 800,
-                              color: scoreColor(a.overall_score),
-                              background: scoreBg(a.overall_score),
-                              padding: '2px 7px', borderRadius: 6,
-                            }}>
-                              {a.overall_score}
-                            </span>
-                            {a.overall_score >= AI_REVIEW_THRESHOLD && !a.has_dealbreaker && (
-                              <span style={{
-                                fontSize: 10, fontWeight: 600, letterSpacing: '0.04em',
-                                background: 'rgba(234, 179, 8, 0.12)',
-                                color: '#b45309',
-                                border: '1px solid rgba(234, 179, 8, 0.3)',
-                                borderRadius: 4, padding: '2px 6px',
-                                whiteSpace: 'nowrap',
-                              }}>
-                                ⚑ Review
-                              </span>
-                            )}
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: 11, color: 'var(--text3)' }}>…</span>
-                        )}
-                      </div>
-                      <div style={{
-                        width: 220, flexShrink: 0, padding: '10px 12px', fontSize: 12, color: 'var(--text2)', lineHeight: 1.4,
-                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
-                      }}>
-                        {generateSummary(a, criteria)}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Ongoing upload — sticky footer */}
-          <div style={{ borderTop: '1px solid var(--border)', padding: 10, flexShrink: 0 }}>
-            <input
-              ref={addApplicantInputRef}
-              type="file"
-              accept=".pdf,.docx,.csv"
-              multiple
-              onChange={(e) => handleAddApplicantFiles(e.target.files)}
-              style={{ display: 'none' }}
-            />
-            {!addApplicantsOpen && (
-              <button
-                onClick={() => setAtsImportOpen(true)}
-                style={{
-                  width: '100%', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--text2)', background: 'none',
-                  border: '1px solid var(--border2)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', fontFamily: 'var(--font)',
-                }}
-              >
-                Import from your ATS
-              </button>
-            )}
-            {!addApplicantsOpen ? (
-              <button
-                onClick={() => setAddApplicantsOpen(true)}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  fontSize: 12.5, fontWeight: 600, color: 'var(--teal)', background: 'var(--teal-dim)',
-                  border: '1px solid var(--teal-glow)', borderRadius: 8, padding: '8px 10px',
-                  cursor: 'pointer', fontFamily: 'var(--font)',
-                }}
-              >
-                ＋ Add applicants
-              </button>
-            ) : (
-              <div
-                onClick={() => !addingApplicant && addApplicantInputRef.current?.click()}
-                style={{
-                  border: '1.5px dashed var(--border2)', borderRadius: 8, padding: '14px 10px',
-                  textAlign: 'center', cursor: addingApplicant ? 'default' : 'pointer', position: 'relative',
-                }}
-              >
-                {addingApplicant ? (
-                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-                    <span style={{ display: 'inline-block', animation: 'spin 0.8s linear infinite' }}>↻</span> Uploading…
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 4 }}>
-                      Click to browse PDF, DOCX, or CSV
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setAddApplicantsOpen(false) }}
-                      style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 11, cursor: 'pointer', fontFamily: 'var(--font)' }}
-                    >
-                      Cancel
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Detail panel — 340px, slides in when an applicant is selected */}
-        {selectedId && (
-          <div style={{ width: 340, flexShrink: 0, borderLeft: '1px solid var(--border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 10px 0', flexShrink: 0 }}>
-              <button
-                onClick={() => setSelectedId(null)}
-                aria-label="Close"
-                style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4 }}
-              >
-                ×
-              </button>
-            </div>
-
-            {detailLoading || !detail ? (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div style={{ fontSize: 12, color: 'var(--text3)' }}>Loading…</div>
-              </div>
-            ) : (
-              <>
-                {/* Candidate header */}
-                <div style={{ padding: '0 16px 14px' }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>
-                    {detail.name || 'Unnamed applicant'}
-                  </div>
-                  <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>{detail.email || 'No email'}</div>
-                  {detail.parsed_headline && (
-                    <div style={{ fontSize: 12.5, color: 'var(--teal)', marginTop: 4, fontWeight: 600 }}>{detail.parsed_headline}</div>
-                  )}
-                </div>
-
-                {/* Tabs */}
-                <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginTop: 12, flexShrink: 0 }}>
-                  {(['score', 'resume'] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setDetailTab(tab)}
-                      style={{
-                        flex: 1, padding: '9px 0', textAlign: 'center', fontSize: 12.5, fontWeight: 600,
-                        cursor: 'pointer', background: 'none', border: 'none', fontFamily: 'var(--font)',
-                        transition: 'color 0.15s',
-                        color: detailTab === tab ? 'var(--teal)' : 'var(--text3)',
-                        borderBottom: detailTab === tab ? '2px solid var(--teal)' : '2px solid transparent',
-                      }}
-                    >
-                      {tab === 'score' ? 'Score & Notes' : 'Resume'}
-                    </button>
-                  ))}
-                </div>
-
-                {detailTab === 'score' && (
-                  <>
-                    {detail.overall_score != null && detail.overall_score >= AI_REVIEW_THRESHOLD && !detail.has_dealbreaker && (
-                      <div style={{ padding: '0 16px 16px' }}>
-                        <div style={{
-                          background: 'rgba(234, 179, 8, 0.08)',
-                          border: '1px solid rgba(234, 179, 8, 0.25)',
-                          borderRadius: 8, padding: '12px 14px',
-                        }}>
-                          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#92400e', marginBottom: 4 }}>
-                            ⚑ High match — verify authenticity
-                          </div>
-                          <div style={{ fontSize: 12, color: '#78350f', lineHeight: 1.5, marginBottom: aiCheckResult ? 0 : 10 }}>
-                            This resume scores {detail.overall_score}/100 with no dealbreakers.
-                            High-scoring resumes are sometimes AI-optimized. We recommend reviewing
-                            the original resume and verifying key experience directly.
-                          </div>
-
-                          {!aiCheckResult && (
-                            <button
-                              onClick={() => runAiCheck(detail.id)}
-                              className="btn-ghost"
-                              style={{ fontSize: 12, padding: '6px 12px' }}
-                              disabled={aiChecking}
-                            >
-                              {aiChecking ? 'Analyzing…' : '⚑ Run AI authenticity check'}
-                            </button>
-                          )}
-
-                          {aiCheckResult && (
-                            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(234, 179, 8, 0.25)' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                                <span style={{
-                                  fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20,
-                                  color: aiCheckResult.likely_ai ? '#92400e' : '#166534',
-                                  background: aiCheckResult.likely_ai ? 'rgba(234, 179, 8, 0.18)' : 'rgba(34, 197, 94, 0.14)',
-                                }}>
-                                  {aiCheckResult.likely_ai ? 'Likely AI-generated' : 'Likely authentic'}
-                                </span>
-                                <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-                                  {aiCheckResult.confidence} confidence
-                                </span>
-                              </div>
-
-                              <div style={{ fontSize: 12.5, color: 'var(--text2)', marginBottom: 8, lineHeight: 1.5 }}>
-                                {aiCheckResult.summary}
-                              </div>
-
-                              {aiCheckResult.signals.length > 0 && (
-                                <div style={{ marginBottom: 8 }}>
-                                  <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
-                                    Signals
-                                  </div>
-                                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--text2)', lineHeight: 1.6 }}>
-                                    {aiCheckResult.signals.map((s, i) => <li key={i}>{s}</li>)}
-                                  </ul>
-                                </div>
-                              )}
-
-                              {aiCheckResult.human_signals.length > 0 && (
-                                <div style={{ marginBottom: 8 }}>
-                                  <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
-                                    Human signals
-                                  </div>
-                                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--text2)', lineHeight: 1.6 }}>
-                                    {aiCheckResult.human_signals.map((s, i) => <li key={i}>{s}</li>)}
-                                  </ul>
-                                </div>
-                              )}
-
-                              {aiCheckResult.likely_ai && (
-                                <div style={{ fontSize: 11.5, color: 'var(--text3)', lineHeight: 1.5, marginBottom: 8, fontStyle: 'italic' }}>
-                                  If this candidate used ModuleHire, their resume was built from real experience
-                                  modules — but may read as AI-optimized. Consider asking for a quick explanation
-                                  of a specific bullet point to verify.
-                                </div>
-                              )}
-
-                              <button
-                                onClick={() => runAiCheck(detail.id)}
-                                disabled={aiChecking}
-                                style={{ background: 'none', border: 'none', color: 'var(--teal)', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, fontFamily: 'var(--font)', padding: 0 }}
-                              >
-                                {aiChecking ? 'Re-running…' : 'Re-run →'}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Score overview */}
-                    <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border)' }}>
-                      {detail.overall_score != null ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <ScoreGauge score={detail.overall_score} size="sm" showLabel={false} />
-                          <div>
-                            <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.04em', color: scoreColor(detail.overall_score), lineHeight: 1 }}>
-                              {detail.overall_score}
-                            </div>
-                            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>out of 100</div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>Scoring in progress…</div>
-                      )}
-                      {detail.has_dealbreaker && (
-                        <div style={{
-                          marginTop: 10,
-                          background: 'rgba(239,68,68,0.1)', color: '#ef4444', fontSize: 12, fontWeight: 600,
-                          padding: '7px 10px', borderRadius: 7, textAlign: 'center',
-                        }}>
-                          ⚠ Dealbreaker not met
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Criteria breakdown */}
-                    {detail.criteria_scores.length > 0 && (
-                      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-                          Score breakdown
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                          {detail.criteria_scores.map((cs) => {
-                            const score = cs.score ?? 0
-                            const expanded = expandedEvidence.has(cs.criterion_id)
-                            const wColor = cs.weight ? (WEIGHT_COLOR[cs.weight] ?? 'var(--text3)') : 'var(--text3)'
-                            return (
-                              <div key={cs.criterion_id}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-                                  <span style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, flex: 1, lineHeight: 1.3 }}>{cs.label}</span>
-                                  <span style={{ fontSize: 13, fontWeight: 800, color: scoreColor(score), flexShrink: 0 }}>{score}</span>
-                                </div>
-                                {/* Bar */}
-                                <div style={{ height: 4, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden', marginBottom: 4 }}>
-                                  <div style={{
-                                    width: `${Math.max(0, Math.min(100, score))}%`, height: '100%',
-                                    background: scoreColor(score), borderRadius: 3,
-                                    transition: 'width 0.4s ease',
-                                  }} />
-                                </div>
-                                {/* Weight badge */}
-                                {cs.weight && cs.weight !== 'nice_to_have' && (
-                                  <div style={{ fontSize: 10, fontWeight: 700, color: wColor, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-                                    {cs.weight === 'dealbreaker' ? '⚠ ' : ''}{cs.weight.replace('_', ' ')}
-                                  </div>
-                                )}
-                                {/* Evidence */}
-                                {cs.evidence && (
-                                  <div
-                                    onClick={() => toggleEvidence(cs.criterion_id)}
-                                    style={{
-                                      fontSize: 11.5, fontStyle: 'italic', color: 'var(--text3)', cursor: 'pointer',
-                                      lineHeight: 1.5,
-                                      display: expanded ? 'block' : '-webkit-box',
-                                      WebkitLineClamp: expanded ? undefined : 2,
-                                      WebkitBoxOrient: 'vertical' as const,
-                                      overflow: 'hidden',
-                                    }}
-                                  >
-                                    &ldquo;{cs.evidence}&rdquo;
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Status */}
-                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                        Status
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                        {(Object.keys(STATUS_CONFIG) as Status[]).map((s) => {
-                          const cfg = STATUS_CONFIG[s]
-                          const active = detail.status === s
-                          return (
-                            <button
-                              key={s}
-                              onClick={() => handleStatusChange(s)}
-                              style={{
-                                fontSize: 11.5, fontWeight: 600, padding: '5px 10px', borderRadius: 20,
-                                border: `1px solid ${active ? cfg.color : 'var(--border2)'}`,
-                                background: active ? cfg.bg : 'transparent',
-                                color: active ? cfg.color : 'var(--text3)',
-                                cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all 0.15s',
-                              }}
-                            >
-                              {cfg.label}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Notes */}
-                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                        Notes
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 10 }}>
-                        {detail.notes.length === 0 ? (
-                          <div style={{ fontSize: 12, color: 'var(--text3)' }}>No notes yet.</div>
-                        ) : detail.notes.map((note) => (
-                          <div key={note.id} style={{ background: 'var(--bg2)', borderRadius: 8, padding: '8px 10px', border: '1px solid var(--border)' }}>
-                            <div style={{ fontSize: 10.5, color: 'var(--text3)', marginBottom: 4 }}>{timeAgo(note.created_at)}</div>
-                            <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.5 }}>{note.body}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <textarea
-                        className="form-input"
-                        placeholder="Add a note…"
-                        value={noteText}
-                        onChange={(e) => setNoteText(e.target.value)}
-                        rows={3}
-                        maxLength={2000}
-                        style={{ fontSize: 12.5, marginBottom: 8, resize: 'vertical' }}
-                      />
-                      <button
-                        className="btn-ghost"
-                        onClick={handleAddNote}
-                        disabled={savingNote || !noteText.trim()}
-                        style={{ width: '100%', justifyContent: 'center', fontSize: 12.5 }}
-                      >
-                        {savingNote ? 'Saving…' : 'Add note'}
-                      </button>
-                    </div>
-                  </>
-                )}
-
-                {detailTab === 'resume' && (
-                  <div style={{ padding: 16, overflowY: 'auto' }}>
-                    {detail.resume_signed_url && (
-                      <a
-                        href={detail.resume_signed_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn-ghost"
-                        style={{ display: 'inline-flex', textDecoration: 'none', fontSize: 12.5, marginBottom: 14 }}
-                      >
-                        Download original file
-                      </a>
-                    )}
-                    {detail.raw_text ? (
-                      <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                        {detail.raw_text}
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>No resume text available.</div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
-      </div>
       {atsImportOpen && job && (
         <AtsImport
           jobId={jobId}
