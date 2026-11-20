@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import BusinessSidebar from '@/components/business/BusinessSidebar'
+import '@/app/warm.css'
+import './business.css'
 
 const DESCRIPTION =
   'Paste a job description, upload applicants, and get every resume scored 0 to 100 against your criteria, with quoted evidence for each score.'
@@ -44,9 +46,9 @@ export default async function BusinessLayout({ children }: { children: React.Rea
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
+    <div className="warm biz-shell">
       <BusinessSidebar userEmail={user.email ?? null} />
-      <main style={{ flex: 1, marginLeft: 240, padding: 40 }}>
+      <main className="biz-main">
         {children}
       </main>
     </div>

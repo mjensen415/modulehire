@@ -1,6 +1,9 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { providerLabel } from '@/lib/business/ats/registry'
+
+// Business dashboard. Styles: src/app/business/business.css (.biz-*).
 
 type JobRow = {
   id: string
@@ -8,23 +11,50 @@ type JobRow = {
   status: string
   applicant_count: number
   created_at: string
+  external_source: string | null
 }
 
-const STATUS_COLORS: Record<string, { color: string; bg: string }> = {
-  draft: { color: 'var(--text3)', bg: 'var(--bg3)' },
-  active: { color: 'var(--teal)', bg: 'var(--teal-dim)' },
-  paused: { color: 'var(--amber)', bg: 'var(--amber-dim)' },
-  closed: { color: 'var(--text3)', bg: 'var(--bg3)' },
+type ApplicantRow = {
+  job_id: string
+  overall_score: number | null
+  has_dealbreaker: boolean | null
+  status: string | null
+  source: string | null
+  created_at: string
 }
 
-function scoreColor(score: number) {
-  if (score >= 80) return '#1d9e75'
-  if (score >= 60) return '#f59e0b'
-  return '#ef4444'
+const STAGES = [
+  { key: 'new', label: 'New', color: 'var(--biz-stage-new)' },
+  { key: 'reviewing', label: 'Reviewing', color: 'var(--biz-stage-review)' },
+  { key: 'shortlisted', label: 'Shortlisted', color: 'var(--biz-stage-short)' },
+  { key: 'interviewing', label: 'Interviewing', color: 'var(--biz-stage-int)' },
+] as const
+
+const SOURCE_LABELS: Record<string, string> = {
+  upload: 'Direct upload',
+  bulk: 'Direct upload',
+  csv: 'CSV import',
+  import: 'File import',
+  link: 'Link',
+  email: 'Email',
+}
+
+function sourceLabel(job: JobRow, sources: Map<string, number> | undefined): string {
+  if (job.external_source) return providerLabel(job.external_source) ?? job.external_source
+  if (!sources || sources.size === 0) return 'No applicants yet'
+  const [top] = [...sources.entries()].sort((a, b) => b[1] - a[1])
+  return providerLabel(top[0]) ?? SOURCE_LABELS[top[0]] ?? top[0]
+}
+
+function scoreClass(score: number | undefined) {
+  if (score == null) return 'none'
+  if (score >= 80) return 'hi'
+  if (score >= 60) return 'mid'
+  return 'lo'
 }
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 export default async function BusinessDashboardPage() {
@@ -44,132 +74,166 @@ export default async function BusinessDashboardPage() {
 
   if (!org) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '70vh' }}>
-        <div style={{ textAlign: 'center', maxWidth: 420 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', marginBottom: 8, letterSpacing: '-0.02em' }}>
-            Welcome to ModuleHire for Business
-          </h1>
-          <p style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 24, lineHeight: 1.6 }}>
-            Set up your organization to start reviewing applicants.
-          </p>
-          <Link href="/business/onboarding" className="btn-primary" style={{ display: 'inline-flex', textDecoration: 'none' }}>
-            Create organization →
-          </Link>
+      <div className="biz-inner">
+        <div className="biz-card biz-empty" style={{ marginTop: '10vh' }}>
+          <h2>Welcome to ModuleHire for Business</h2>
+          <p>Set up your organization to start ranking applicants.</p>
+          <Link href="/business/onboarding" className="biz-btn">Create organization</Link>
         </div>
       </div>
     )
   }
 
-  const { data: jobs } = await supabase
-    .from('job_postings')
-    .select('id, title, status, applicant_count, created_at')
-    .eq('org_id', org.id)
-    .order('created_at', { ascending: false })
+  const [{ data: jobs }, { data: applicants }] = await Promise.all([
+    supabase
+      .from('job_postings')
+      .select('id, title, status, applicant_count, created_at, external_source')
+      .eq('org_id', org.id)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('applicants')
+      .select('job_id, overall_score, has_dealbreaker, status, source, created_at')
+      .eq('org_id', org.id),
+  ])
 
   const jobRows = (jobs ?? []) as JobRow[]
-  const activeJobs = jobRows.filter((j) => j.status === 'active').length
-  const totalApplicants = jobRows.reduce((sum, j) => sum + (j.applicant_count ?? 0), 0)
+  const appRows = (applicants ?? []) as ApplicantRow[]
+  const openJobs = jobRows.filter((j) => j.status !== 'closed')
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
 
-  const { data: applicants } = await supabase
-    .from('applicants')
-    .select('job_id, overall_score')
-    .eq('org_id', org.id)
-    .not('overall_score', 'is', null)
-
-  const scoredApplicants = (applicants ?? []) as { job_id: string; overall_score: number }[]
-  const avgScore = scoredApplicants.length
-    ? Math.round(scoredApplicants.reduce((sum, a) => sum + a.overall_score, 0) / scoredApplicants.length)
-    : null
-
-  const topScoreByJob = new Map<string, number>()
-  for (const a of scoredApplicants) {
-    const current = topScoreByJob.get(a.job_id)
-    if (current === undefined || a.overall_score > current) topScoreByJob.set(a.job_id, a.overall_score)
+  type JobStats = { top?: number; stages: Record<string, number>; sources: Map<string, number>; recent: number; total: number }
+  const byJob = new Map<string, JobStats>()
+  let strong = 0
+  let waiting = 0
+  let dealbreakers = 0
+  let newThisWeek = 0
+  for (const a of appRows) {
+    let s = byJob.get(a.job_id)
+    if (!s) { s = { stages: {}, sources: new Map(), recent: 0, total: 0 }; byJob.set(a.job_id, s) }
+    s.total += 1
+    const stage = a.status ?? 'new'
+    s.stages[stage] = (s.stages[stage] ?? 0) + 1
+    if (a.source) s.sources.set(a.source, (s.sources.get(a.source) ?? 0) + 1)
+    if (a.overall_score != null && (s.top === undefined || a.overall_score > s.top)) s.top = a.overall_score
+    if (new Date(a.created_at).getTime() >= weekAgo) { s.recent += 1; newThisWeek += 1 }
+    if (a.has_dealbreaker) dealbreakers += 1
+    else if (a.overall_score != null && a.overall_score >= 80) strong += 1
+    if (stage === 'new' && !a.has_dealbreaker) waiting += 1
   }
 
+  const sorted = [...openJobs].sort((a, b) => (byJob.get(b.id)?.recent ?? 0) - (byJob.get(a.id)?.recent ?? 0))
+
   return (
-    <div>
-      <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', marginBottom: 24, letterSpacing: '-0.02em' }}>
-        {org.name}
-      </h1>
+    <div className="biz-inner">
+      <header className="biz-head">
+        <div>
+          <h1 className="biz-h1">Hiring at {org.name}</h1>
+          <p className="biz-sub">
+            {openJobs.length} open posting{openJobs.length === 1 ? '' : 's'}.{' '}
+            {newThisWeek > 0 ? `${newThisWeek} new applicant${newThisWeek === 1 ? '' : 's'} in the last 7 days.` : 'No new applicants this week.'}
+          </p>
+        </div>
+        <div className="biz-actions">
+          <Link href="/business/jobs" className="biz-btn biz-btn-ghost">All postings</Link>
+          <Link href="/business/jobs/new" className="biz-btn">+ New posting</Link>
+        </div>
+      </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
-        <div className="stat-card">
-          <div className="stat-label">Active jobs</div>
-          <div className="stat-value">{activeJobs}</div>
+      <section aria-label="Pipeline totals" className="biz-stats">
+        <div className="biz-stat">
+          <span className="biz-stat-label biz-muted">Applicants</span>
+          <span className="biz-stat-value">{appRows.length}</span>
+          <span className="biz-stat-note biz-muted">across {openJobs.length} posting{openJobs.length === 1 ? '' : 's'}</span>
         </div>
-        <div className="stat-card">
-          <div className="stat-label">Total applicants</div>
-          <div className="stat-value">{totalApplicants}</div>
+        <div className="biz-stat teal">
+          <span className="biz-stat-label">Strong matches</span>
+          <span className="biz-stat-value">{strong}</span>
+          <span className="biz-stat-note">score 80 or higher</span>
         </div>
-        <div className="stat-card">
-          <div className="stat-label">Avg score</div>
-          <div className="stat-value">{avgScore ?? '—'}</div>
+        <div className="biz-stat sand">
+          <span className="biz-stat-label">Waiting on review</span>
+          <span className="biz-stat-value">{waiting}</span>
+          <span className="biz-stat-note">still in New</span>
         </div>
-      </div>
+        <div className="biz-stat clay">
+          <span className="biz-stat-label">Missed a dealbreaker</span>
+          <span className="biz-stat-value">{dealbreakers}</span>
+          <span className="biz-stat-note">hidden by default</span>
+        </div>
+      </section>
 
-      <div className="section-card">
-        <div className="section-head">
-          <div className="section-head-title">Recent jobs</div>
-          <Link href="/business/jobs" className="section-head-action">View all →</Link>
+      <section aria-labelledby="post-h" className="biz-card" style={{ overflow: 'hidden' }}>
+        <div className="biz-card-head">
+          <h2 id="post-h" className="biz-h2">Open postings</h2>
+          {sorted.length > 0 && <span className="biz-muted" style={{ fontSize: 13 }}>Sorted by most new applicants</span>}
         </div>
 
-        {jobRows.length === 0 ? (
-          <div style={{ padding: '44px 32px', textAlign: 'center' }}>
-            <div style={{ fontSize: 28, marginBottom: 14 }}>📋</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>
-              Post your first job
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 20, maxWidth: 340, margin: '0 auto 20px' }}>
-              Start by creating a job posting, then add your scoring criteria and upload applicants — we&apos;ll score and rank them for you.
-            </div>
-            <Link href="/business/jobs/new" className="btn-primary" style={{ display: 'inline-flex', textDecoration: 'none' }}>
-              + Create a job posting
-            </Link>
+        {sorted.length === 0 ? (
+          <div className="biz-empty">
+            <h2>Post your first job</h2>
+            <p>Paste the job description, set what matters, then upload applicants or import them from your ATS. We score and rank every one.</p>
+            <Link href="/business/jobs/new" className="biz-btn">+ Create a posting</Link>
           </div>
         ) : (
-          <div>
-            {jobRows.slice(0, 10).map((job) => {
-              const statusCfg = STATUS_COLORS[job.status] ?? STATUS_COLORS.draft
-              const topScore = topScoreByJob.get(job.id)
-              return (
-                <Link
-                  key={job.id}
-                  href={`/business/jobs/${job.id}`}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 16,
-                    padding: '14px 20px',
-                    borderBottom: '1px solid var(--border)',
-                    textDecoration: 'none',
-                    color: 'var(--text)',
-                  }}
-                >
-                  <div style={{ flex: 1, fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {job.title}
-                  </div>
-                  <span style={{
-                    fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 20,
-                    color: statusCfg.color, background: statusCfg.bg, textTransform: 'capitalize',
-                  }}>
-                    {job.status}
-                  </span>
-                  <span style={{ fontSize: 12, color: 'var(--text3)', width: 90, textAlign: 'right' }}>
-                    {job.applicant_count} applicant{job.applicant_count === 1 ? '' : 's'}
-                  </span>
-                  <span style={{ fontSize: 12, fontWeight: 700, width: 40, textAlign: 'right', color: topScore != null ? scoreColor(topScore) : 'var(--text3)' }}>
-                    {topScore ?? '—'}
-                  </span>
-                  <span style={{ fontSize: 12, color: 'var(--text3)', width: 90, textAlign: 'right' }}>
-                    {formatDate(job.created_at)}
-                  </span>
-                </Link>
-              )
-            })}
-          </div>
+          <>
+            <div className="biz-table-wrap">
+              <table className="biz-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Posting</th>
+                    <th scope="col">Source</th>
+                    <th scope="col">Pipeline</th>
+                    <th scope="col">Top score</th>
+                    <th scope="col">New this week</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((job) => {
+                    const s = byJob.get(job.id)
+                    const total = s?.total ?? 0
+                    const shortlisted = s?.stages.shortlisted ?? 0
+                    return (
+                      <tr key={job.id}>
+                        <td>
+                          <Link href={`/business/jobs/${job.id}`} className="biz-row-link">{job.title}</Link>
+                          <div className="biz-muted" style={{ fontSize: 12.5 }}>
+                            {job.status === 'active' ? 'Active' : job.status.charAt(0).toUpperCase() + job.status.slice(1)} · opened {formatDate(job.created_at)}
+                          </div>
+                        </td>
+                        <td><span className="biz-chip">{sourceLabel(job, s?.sources)}</span></td>
+                        <td style={{ width: 260 }}>
+                          <div
+                            className="biz-pipe"
+                            role="img"
+                            aria-label={STAGES.map((st) => `${s?.stages[st.key] ?? 0} ${st.label.toLowerCase()}`).join(', ')}
+                          >
+                            {total > 0 && STAGES.map((st) => {
+                              const n = s?.stages[st.key] ?? 0
+                              return n > 0 ? <span key={st.key} style={{ width: `${(n / total) * 100}%`, background: st.color }} /> : null
+                            })}
+                          </div>
+                          <div className="biz-pipe-note">
+                            {total} applicant{total === 1 ? '' : 's'}{total > 0 ? ` · ${shortlisted} shortlisted` : ''}
+                          </div>
+                        </td>
+                        <td><span className={`biz-score ${scoreClass(s?.top)}`}>{s?.top ?? '–'}</span></td>
+                        <td>
+                          {s?.recent ? <span className="biz-chip solid">+{s.recent}</span> : <span className="biz-faint">0</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="biz-legend">
+              {STAGES.map((st) => (
+                <span key={st.key}><i style={{ background: st.color }} />{st.label}</span>
+              ))}
+            </div>
+          </>
         )}
-      </div>
+      </section>
     </div>
   )
 }

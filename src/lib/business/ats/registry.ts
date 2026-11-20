@@ -106,3 +106,8 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     activeMeans: 'Applicants in new or active statuses.',
   },
 }
+
+/** Display name for a provider id, or null for anything that isn't a connected ATS. */
+export function providerLabel(v: string | null | undefined): string | null {
+  return isProvider(v) ? PROVIDER_INFO[v].label : null
+}
