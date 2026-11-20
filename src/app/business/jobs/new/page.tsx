@@ -36,6 +36,9 @@ export default function NewJobPage() {
   const [error, setError] = useState('')
   const [jobId, setJobId] = useState<string | null>(null)
   const [orgId, setOrgId] = useState<string | null>(null)
+  const [ghJobs, setGhJobs] = useState<Array<{ id: number; name: string }> | null>(null)
+  const [ghJobId, setGhJobId] = useState('')
+  const [ghLoading, setGhLoading] = useState(false)
   const [criteria, setCriteria] = useState<Criterion[]>([])
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([])
   const [processing, setProcessing] = useState(false)
@@ -52,6 +55,37 @@ export default function NewJobPage() {
       })
   }, [router])
 
+  // When the org has connected Greenhouse, offer to start from one of its open jobs.
+  useEffect(() => {
+    if (!orgId) return
+    fetch(`/api/business/integrations/greenhouse?org_id=${orgId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => {
+        if (!s?.connected || s.status === 'error') return null
+        return fetch(`/api/business/integrations/greenhouse/jobs?org_id=${orgId}`).then((r) => (r.ok ? r.json() : null))
+      })
+      .then((d) => { if (d?.jobs) setGhJobs(d.jobs) })
+      .catch(() => null)
+  }, [orgId])
+
+  async function pickGreenhouseJob(id: string) {
+    setGhJobId(id)
+    if (!id || !orgId) return
+    setGhLoading(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/business/integrations/greenhouse/job-post?org_id=${orgId}&gh_job_id=${id}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Could not load that Greenhouse job')
+      setTitle(String(data.title ?? '').slice(0, 200))
+      setRawJd(String(data.text ?? ''))
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setGhLoading(false)
+    }
+  }
+
   async function handleAnalyze(e: React.FormEvent) {
     e.preventDefault()
     if (!title.trim() || !rawJd.trim() || !orgId || analyzing) return
@@ -67,6 +101,13 @@ export default function NewJobPage() {
       if (!res.ok) throw new Error(data.error ?? 'Could not analyze job description')
 
       setJobId(data.job.id)
+      if (ghJobId) {
+        fetch('/api/business/integrations/greenhouse/link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: data.job.id, gh_job_id: Number(ghJobId) }),
+        }).catch(() => null)
+      }
       const themes: string[] = data.job.extracted_themes ?? []
       setCriteria(themes.map((theme: string) => ({ key: nextKey(), label: theme, weight: 'must_have' as Weight, criterionType: 'skill' as CriterionType })))
       if (data.job.extraction_failed || themes.length === 0) {
@@ -226,6 +267,16 @@ export default function NewJobPage() {
 
       {step === 1 && (
         <form onSubmit={handleAnalyze}>
+          {ghJobs && ghJobs.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <label className="form-label">Start from a Greenhouse job (optional)</label>
+              <select className="form-input" value={ghJobId} onChange={(e) => pickGreenhouseJob(e.target.value)} disabled={ghLoading}>
+                <option value="">Paste a description instead</option>
+                {ghJobs.map((j) => <option key={j.id} value={j.id}>{j.name}</option>)}
+              </select>
+              {ghLoading && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>Loading the posting from Greenhouse…</div>}
+            </div>
+          )}
           <label className="form-label">Job title</label>
           <input
             className="form-input"

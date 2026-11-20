@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import IntegrationsCard from './IntegrationsCard'
 
 type Org = { id: string; name: string; slug: string; tier: string; role: string; created_at: string }
 
@@ -257,6 +258,8 @@ export default function BusinessSettingsPage() {
           </div>
 
           <PlanCard orgId={org.id} isOwner={org.role === 'owner'} />
+
+          <IntegrationsCard orgId={org.id} />
 
         </div>
       )}

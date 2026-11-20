@@ -1,0 +1,51 @@
+/* Import from your ATS (AtsImport.tsx). Tokens: src/app/globals.css. */
+.ati-backdrop { position: fixed; inset: 0; z-index: 80; background: color-mix(in srgb, var(--bg) 70%, transparent); backdrop-filter: blur(3px); display: grid; place-items: center; padding: 20px; }
+.ati { width: min(760px, 100%); max-height: calc(100vh - 40px); overflow: auto; background: var(--surface); border: 1px solid var(--border2); border-radius: 16px; box-shadow: 0 24px 60px -20px rgba(0,0,0,.45); font-family: var(--font); color: var(--text); }
+.ati-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 22px 14px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.ati-head h2 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+.ati-head p { margin: 4px 0 0; font-size: 13px; color: var(--text2); }
+.ati-x { background: none; border: none; color: var(--text3); font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 6px; }
+.ati-body { padding: 18px 22px 22px; display: flex; flex-direction: column; gap: 16px; }
+.ati-steps { display: flex; gap: 6px; font-size: 12px; color: var(--text3); }
+.ati-steps span { padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); }
+.ati-steps span.on { color: var(--teal); border-color: var(--teal-glow); background: var(--teal-dim); font-weight: 700; }
+.ati-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ati-tile { text-align: left; font: inherit; color: inherit; cursor: pointer; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 4px; transition: border-color .15s, transform .15s; }
+.ati-tile:hover { border-color: var(--border2); transform: translateY(-1px); }
+.ati-tile[aria-pressed="true"] { border-color: var(--teal); background: var(--teal-dim); }
+.ati-tile b { font-size: 14px; }
+.ati-tile small { font-size: 12px; color: var(--text3); }
+.ati-direct { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--teal-glow); background: color-mix(in srgb, var(--teal) 8%, var(--surface)); }
+.ati-direct div { flex: 1; min-width: 0; font-size: 13px; color: var(--text2); }
+.ati-direct b { display: block; color: var(--text); font-size: 14px; }
+.ati-drop { border: 1.5px dashed var(--border2); border-radius: 12px; padding: 18px; text-align: center; cursor: pointer; background: var(--bg2); }
+.ati-drop.has { border-style: solid; border-color: var(--teal-glow); }
+.ati-drop strong { display: block; font-size: 14px; margin-bottom: 3px; }
+.ati-drop span { font-size: 12.5px; color: var(--text3); }
+.ati-label { font-size: 12px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+.ati-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.ati-field { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--text2); }
+.ati-field select, .ati-input { font: inherit; font-size: 13px; color: var(--text); background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px; padding: 7px 9px; }
+.ati-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ati-stat { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.ati-stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.ati-stat span { font-size: 12px; color: var(--text3); }
+.ati-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ati-table th, .ati-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.ati-table th { color: var(--text3); font-weight: 600; }
+.ati-ok { color: var(--green); font-weight: 600; }
+.ati-warn { color: var(--amber); font-weight: 600; }
+.ati-bad { color: var(--rose); font-weight: 600; }
+.ati-note { font-size: 12.5px; color: var(--text2); background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; line-height: 1.5; }
+.ati-error { font-size: 13px; color: var(--rose); background: var(--rose-dim); border-radius: 10px; padding: 10px 12px; }
+.ati-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.ati-btn { font: inherit; font-size: 13.5px; font-weight: 700; padding: 9px 16px; border-radius: 999px; border: 1px solid var(--teal); background: var(--teal); color: var(--on-teal); cursor: pointer; }
+.ati-btn:disabled { opacity: .5; cursor: default; }
+.ati-btn.ghost { background: none; color: var(--text); border-color: var(--border2); }
+.ati-bar { height: 8px; border-radius: 999px; background: var(--bg3); overflow: hidden; }
+.ati-bar i { display: block; height: 100%; background: var(--teal); transition: width .3s; }
+.ati-log { max-height: 220px; overflow: auto; font-size: 12.5px; display: flex; flex-direction: column; gap: 4px; }
+.ati-log div { display: flex; gap: 8px; }
+.ati-log div span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ati-check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text2); }
+@media (max-width: 640px) { .ati-tiles, .ati-grid, .ati-stats { grid-template-columns: 1fr; } }

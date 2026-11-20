@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import AtsImport from './AtsImport'
 import { useParams } from 'next/navigation'
 import ScoreGauge from '@/components/ScoreGauge'
 
@@ -210,6 +211,7 @@ export default function JobWorkspacePage() {
   const [rescoring, setRescoring] = useState(false)
   const [rescoreCount, setRescoreCount] = useState(0)
   const [addApplicantsOpen, setAddApplicantsOpen] = useState(false)
+  const [atsImportOpen, setAtsImportOpen] = useState(false)
   const [addingApplicant, setAddingApplicant] = useState(false)
   const [detailTab, setDetailTab] = useState<'score' | 'resume'>('score')
   const [aiChecking, setAiChecking] = useState(false)
@@ -973,6 +975,17 @@ export default function JobWorkspacePage() {
               onChange={(e) => handleAddApplicantFiles(e.target.files)}
               style={{ display: 'none' }}
             />
+            {!addApplicantsOpen && (
+              <button
+                onClick={() => setAtsImportOpen(true)}
+                style={{
+                  width: '100%', marginBottom: 6, fontSize: 12, fontWeight: 600, color: 'var(--text2)', background: 'none',
+                  border: '1px solid var(--border2)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', fontFamily: 'var(--font)',
+                }}
+              >
+                Import from your ATS
+              </button>
+            )}
             {!addApplicantsOpen ? (
               <button
                 onClick={() => setAddApplicantsOpen(true)}
@@ -1326,6 +1339,14 @@ export default function JobWorkspacePage() {
           </div>
         )}
       </div>
+      {atsImportOpen && job && (
+        <AtsImport
+          jobId={jobId}
+          jobTitle={job.title}
+          onClose={() => setAtsImportOpen(false)}
+          onImported={() => { loadApplicants() }}
+        />
+      )}
     </div>
   )
 }
