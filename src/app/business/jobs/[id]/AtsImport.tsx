@@ -1,7 +1,7 @@
 'use client'
 
 // "Import from your ATS" on a posting: a candidate export file (CSV or Excel) plus resumes
-// (a zip or the files themselves), or a direct pull from Greenhouse or Workable when connected.
+// (a zip or the files themselves), or a direct pull from a connected ATS (see ats/registry.ts).
 // Every candidate goes through one request at a time (3 in parallel) so large pipelines never hit
 // the function time limit, and duplicates on the posting are skipped server-side.
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -20,9 +20,10 @@ import {
   type FieldKey,
   type Mapping,
 } from '@/lib/business/ats-import'
+import { PROVIDERS, PROVIDER_INFO, type Provider } from '@/lib/business/ats/registry'
 
 type Props = { jobId: string; jobTitle: string; onClose: () => void; onImported: () => void }
-type Direct = 'greenhouse' | 'workable'
+type Direct = Provider
 type IntStatus = {
   integrations: Record<Direct, { connected: boolean; writeback_enabled?: boolean; status?: string; can_comment?: boolean }>
   linked: { provider: string; external_id: string } | null
@@ -33,8 +34,8 @@ type DirectApplicant = {
   key: string; name: string | null; email: string | null; stage: string | null
   resume: { filename: string } | null; resumeUnknown: boolean; opted_out: boolean; already_imported: boolean
 }
-const DIRECT_LABEL: Record<Direct, string> = { greenhouse: 'Greenhouse', workable: 'Workable' }
-const NOTE_WORD: Record<Direct, string> = { greenhouse: 'note', workable: 'comment' }
+const DIRECT_LABEL = (p: Direct) => PROVIDER_INFO[p].label
+const NOTE_WORD = (p: Direct) => PROVIDER_INFO[p].noteWord
 type LogLine = { label: string; state: 'created' | 'duplicate' | 'skipped' | 'failed'; detail?: string }
 type Task = { label: string; run: () => Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> }
 
@@ -43,6 +44,7 @@ const ATS_HINT: Record<AtsKey, string> = {
   lever: 'Candidate export',
   ashby: 'Candidate export',
   workable: 'Candidate export',
+  bamboohr: 'Applicant export',
   adp: 'Applicant report',
   other: 'Any spreadsheet',
 }
@@ -197,8 +199,8 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
             line = { label: t.label, state: 'skipped', detail: String(data.reason ?? 'Skipped') }
           } else {
             const score = data.overall_score
-            const label = DIRECT_LABEL[direct]
-            const note = data.note_error ? ` · ${NOTE_WORD[direct]} to ${label} failed` : data.note_posted ? ` · score posted to ${label}` : ''
+            const label = DIRECT_LABEL(direct)
+            const note = data.note_error ? ` · ${NOTE_WORD(direct)} to ${label} failed` : data.note_posted ? ` · score posted to ${label}` : ''
             line = { label: t.label, state: 'created', detail: `${typeof score === 'number' ? `${score}/100` : 'Scored'}${note}` }
           }
         } catch {
@@ -254,7 +256,7 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
     try {
       const res = await fetch(`/api/business/integrations/${p}/jobs?job_id=${jobId}`)
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? `Could not load ${DIRECT_LABEL[p]} jobs`)
+      if (!res.ok) throw new Error(data.error ?? `Could not load ${DIRECT_LABEL(p)} jobs`)
       setGhJobs(data.jobs)
       const linked = ints?.linked
       if (linked?.provider === p && data.jobs.some((j: DirectJob) => String(j.id) === linked.external_id)) {
@@ -272,15 +274,13 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
     if (!id) return
     setGhLoading(true)
     try {
-      const payload = p === 'greenhouse' ? { job_id: jobId, gh_job_id: Number(id) } : { job_id: jobId, shortcode: id }
-      const { ok, data } = await post(`/api/business/integrations/${p}/applicants`, JSON.stringify(payload), true)
+      const { ok, data } = await post(`/api/business/integrations/${p}/applicants`, JSON.stringify({ job_id: jobId, ats_job_id: id }), true)
       if (!ok) throw new Error(String(data.error ?? 'Could not load candidates'))
-      type Raw = { application_id?: number; candidate_id: number | string; name: string | null; email: string | null; stage: string | null; resume: { filename: string } | null; opted_out: boolean; already_imported: boolean }
+      type Raw = { key: string; name: string | null; email: string | null; stage: string | null; resume: { filename: string } | null; resume_unknown: boolean; opted_out: boolean; already_imported: boolean }
       const list: DirectApplicant[] = (data.applicants as Raw[]).map((a) => ({
-        key: String(p === 'greenhouse' ? a.application_id : a.candidate_id),
-        name: a.name, email: a.email, stage: a.stage, resume: a.resume,
-        // Workable's candidate list doesn't always say whether there's a resume; it's checked at import.
-        resumeUnknown: p === 'workable' && !a.resume,
+        key: a.key, name: a.name, email: a.email, stage: a.stage, resume: a.resume,
+        // Some ATS lists don't say whether there's a resume; it's checked at import.
+        resumeUnknown: a.resume_unknown,
         opted_out: a.opted_out, already_imported: a.already_imported,
       }))
       setGhApplicants(list)
@@ -304,9 +304,7 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
         label: a.name ?? a.email ?? `Candidate ${a.key}`,
         run: () => post(
           `/api/business/integrations/${p}/import`,
-          JSON.stringify(p === 'greenhouse'
-            ? { job_id: jobId, gh_job_id: Number(ghJobId), application_id: Number(a.key) }
-            : { job_id: jobId, shortcode: ghJobId, candidate_id: a.key }),
+          JSON.stringify({ job_id: jobId, ats_job_id: ghJobId, key: a.key }),
           true,
         ),
       }))
@@ -315,8 +313,8 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
 
   const counts = log.reduce((acc, l) => ({ ...acc, [l.state]: (acc[l.state] ?? 0) + 1 }), {} as Record<string, number>)
   const ghEligible = (ghApplicants ?? []).filter(canImport)
-  const connected = (['greenhouse', 'workable'] as Direct[]).filter((p) => ints?.integrations?.[p]?.connected)
-  const dLabel = DIRECT_LABEL[direct]
+  const connected = PROVIDERS.filter((p) => ints?.integrations?.[p]?.connected)
+  const dLabel = DIRECT_LABEL(direct)
   const dInfo = ints?.integrations?.[direct]
   const dWriteback = !!dInfo?.writeback_enabled && dInfo?.can_comment !== false
   const showRun = running || log.length > 0
@@ -367,11 +365,11 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
               {connected.map((p) => (
                 <div key={p} className="ati-direct">
                   <div>
-                    <b>{DIRECT_LABEL[p]} is connected</b>
-                    Pull candidates and resumes straight from a {DIRECT_LABEL[p]} job
-                    {ints?.integrations[p].writeback_enabled && ints?.integrations[p].can_comment !== false ? `, and post each score back as a ${NOTE_WORD[p]}` : ''}.
+                    <b>{DIRECT_LABEL(p)} is connected</b>
+                    Pull candidates and resumes straight from a {DIRECT_LABEL(p)} job
+                    {ints?.integrations[p].writeback_enabled && ints?.integrations[p].can_comment !== false ? `, and post each score back as a ${NOTE_WORD(p)}` : ''}.
                   </div>
-                  <button className="ati-btn" onClick={() => openDirect(p)}>Pull from {DIRECT_LABEL[p]}</button>
+                  <button className="ati-btn" onClick={() => openDirect(p)}>Pull from {DIRECT_LABEL(p)}</button>
                 </div>
               ))}
               <div>
@@ -387,8 +385,8 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
               </div>
               <div className="ati-note">
                 Export your candidates from {ATS_PRESETS[ats].label === 'Another ATS or a spreadsheet' ? 'your system' : ATS_PRESETS[ats].label} as a CSV or Excel file, and download their resumes (a zip is fine). We match each resume to a candidate by its file name, email, candidate ID or name, and you can check the match before anything is scored.
-                {(ats === 'greenhouse' || ats === 'workable') && !ints?.integrations?.[ats]?.connected && (
-                  <> Using {DIRECT_LABEL[ats]}? You can also <a href="/business/settings#integrations">connect it in Settings</a> and skip the files.</>
+                {(PROVIDERS as string[]).includes(ats) && !ints?.integrations?.[ats as Direct]?.connected && (
+                  <> Using {DIRECT_LABEL(ats as Direct)}? You can also <a href="/business/settings#integrations">connect it in Settings</a> and skip the files.</>
                 )}
               </div>
               <div className="ati-actions">
@@ -488,7 +486,7 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
                     <div className="ati-stats">
                       <div className="ati-stat"><b>{ghApplicants.length}</b><span>active in {dLabel}</span></div>
                       <div className="ati-stat"><b className="ati-ok">{ghSelected.size}</b><span>selected to score</span></div>
-                      {direct === 'greenhouse'
+                      {PROVIDER_INFO[direct].hasOptOut
                         ? <div className="ati-stat"><b>{ghApplicants.filter((a) => a.opted_out).length}</b><span>opted out of AI review</span></div>
                         : <div className="ati-stat"><b>{ghApplicants.filter((a) => a.already_imported).length}</b><span>already on this posting</span></div>}
                     </div>
@@ -527,8 +525,8 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
                       </table>
                     </div>
                     <div className="ati-note">
-                      {direct === 'greenhouse' ? 'Candidates who opted out of AI review in Greenhouse are never imported or scored. ' : 'Disqualified and hired candidates are left out. '}
-                      {dWriteback ? `Each score is posted back to the candidate in ${dLabel} as a ${NOTE_WORD[direct]}.` : ''}
+                      {PROVIDER_INFO[direct].activeMeans}{' '}
+                      {dWriteback ? `Each score is posted back to the candidate in ${dLabel} as a ${NOTE_WORD(direct)}.` : ''}
                     </div>
                   </>
                 )

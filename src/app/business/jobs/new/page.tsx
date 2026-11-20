@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { PROVIDERS, PROVIDER_INFO } from '@/lib/business/ats/registry'
 import { useRouter } from 'next/navigation'
 
 type Weight = 'dealbreaker' | 'must_have' | 'nice_to_have'
@@ -59,17 +60,17 @@ export default function NewJobPage() {
   // When the org has connected an ATS, offer to start from one of its open jobs.
   useEffect(() => {
     if (!orgId) return
-    const label = { greenhouse: 'Greenhouse', workable: 'Workable' } as const
     fetch(`/api/business/integrations?org_id=${orgId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then(async (st) => {
         if (!st?.integrations) return
         const out: Array<{ key: string; name: string }> = []
-        for (const p of ['greenhouse', 'workable'] as const) {
+        // BambooHR's API has no job description text, so it can't seed a posting.
+        for (const p of PROVIDERS.filter((x) => x !== 'bamboohr')) {
           const i = st.integrations[p]
           if (!i?.connected || i.status === 'error') continue
           const d = await fetch(`/api/business/integrations/${p}/jobs?org_id=${orgId}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)
-          for (const j of d?.jobs ?? []) out.push({ key: `${p}:${j.id}`, name: `${j.name} (${label[p]})` })
+          for (const j of d?.jobs ?? []) out.push({ key: `${p}:${j.id}`, name: `${j.name} (${PROVIDER_INFO[p].label})` })
         }
         if (out.length) setGhJobs(out)
       })
@@ -83,8 +84,7 @@ export default function NewJobPage() {
     setGhLoading(true)
     setError('')
     try {
-      const q = provider === 'greenhouse' ? `gh_job_id=${encodeURIComponent(id)}` : `shortcode=${encodeURIComponent(id)}`
-      const res = await fetch(`/api/business/integrations/${provider}/job-post?org_id=${orgId}&${q}`)
+      const res = await fetch(`/api/business/integrations/${provider}/job-post?org_id=${orgId}&ats_job_id=${encodeURIComponent(id)}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Could not load that job')
       setTitle(String(data.title ?? '').slice(0, 200))

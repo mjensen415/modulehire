@@ -3,7 +3,7 @@
 // Column names differ by ATS, account and export settings, so presets only order the guesses;
 // the wizard always shows the mapping and lets the user change it.
 
-export type AtsKey = 'greenhouse' | 'lever' | 'ashby' | 'workable' | 'adp' | 'other'
+export type AtsKey = 'greenhouse' | 'lever' | 'ashby' | 'workable' | 'bamboohr' | 'adp' | 'other'
 export type FieldKey = 'fullName' | 'firstName' | 'lastName' | 'email' | 'resumeText' | 'resumeFile' | 'externalId' | 'stage'
 
 export const FIELD_LABELS: Record<FieldKey, string> = {
@@ -33,6 +33,7 @@ export const ATS_PRESETS: Record<AtsKey, { label: string; prefer: Partial<Record
   lever: { label: 'Lever', prefer: { externalId: ['opportunity id', 'contact id', 'candidate id'], stage: ['stage', 'current stage'] } },
   ashby: { label: 'Ashby', prefer: { externalId: ['candidate id', 'application id'], stage: ['current interview stage', 'stage'] } },
   workable: { label: 'Workable', prefer: { externalId: ['candidate id', 'id'], stage: ['stage', 'disqualified'] } },
+  bamboohr: { label: 'BambooHR', prefer: { externalId: ['applicant id', 'application id', 'candidate id'], stage: ['status', 'applicant status'] } },
   adp: { label: 'ADP', prefer: { externalId: ['applicant id', 'candidate id', 'associate id'], stage: ['status', 'application status'] } },
   other: { label: 'Another ATS or a spreadsheet', prefer: {} },
 }

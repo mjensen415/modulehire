@@ -1,17 +1,14 @@
 // Org-level ATS connections (org_integrations). The table has no grants for signed-in users:
 // routes check the caller's org role with their own client, then use the service role here.
-// Per provider: Greenhouse client_id = OAuth client id, secret = client secret;
-// Workable client_id = account subdomain, secret = API access token, config.member_id = comment author.
+// client_id holds the account identifier (Greenhouse client id, Workable subdomain, BambooHR
+// domain, or a key hint for Lever/Ashby); secret_ciphertext the key; config provider extras.
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getOrgRole } from './org-access'
 import { openSecret } from './secret-box'
-import type { GhCreds } from './greenhouse'
-import type { WkCreds } from './workable'
+import { PROVIDER_INFO, isProvider, type Provider } from './ats/registry'
+import { ADAPTERS } from './ats/adapters'
 
-export type Provider = 'greenhouse' | 'workable'
-export const PROVIDERS: Provider[] = ['greenhouse', 'workable']
-export const PROVIDER_LABEL: Record<Provider, string> = { greenhouse: 'Greenhouse', workable: 'Workable' }
-export const isProvider = (v: unknown): v is Provider => v === 'greenhouse' || v === 'workable'
+export { isProvider, type Provider }
 
 export type Connection = {
   provider: Provider
@@ -24,13 +21,7 @@ export type Connection = {
   lastError: string | null
 }
 
-export type GreenhouseConnection = Connection & { creds: GhCreds }
-export type WorkableConnection = Connection & { creds: WkCreds }
-
 export const BUSINESS_APP_URL = 'https://business.modulehire.com'
-
-export const clientIdHint = (id: string) => (id.length > 6 ? `…${id.slice(-4)}` : '…')
-const hintFor = (provider: Provider, clientId: string) => (provider === 'workable' ? `${clientId}.workable.com` : `client ${clientIdHint(clientId)}`)
 
 /** Owners and admins manage connections; any member can import through one. */
 export async function canManageIntegrations(supabase: SupabaseClient, orgId: string, userId: string) {
@@ -54,7 +45,7 @@ export async function loadIntegration(admin: SupabaseClient, orgId: string, prov
     secret = openSecret(data.secret_ciphertext as string)
   } catch {
     status = 'error'
-    lastError = `The saved key can no longer be read. Reconnect ${PROVIDER_LABEL[provider]}.`
+    lastError = `The saved key can no longer be read. Reconnect ${PROVIDER_INFO[provider].label}.`
   }
   return {
     provider,
@@ -62,20 +53,10 @@ export async function loadIntegration(admin: SupabaseClient, orgId: string, prov
     secret,
     writebackEnabled: !!data.writeback_enabled,
     config: (data.config as Record<string, unknown> | null) ?? {},
-    hint: hintFor(provider, clientId),
+    hint: ADAPTERS[provider].hint(clientId),
     status,
     lastError,
   }
-}
-
-export async function loadGreenhouse(admin: SupabaseClient, orgId: string): Promise<GreenhouseConnection | null> {
-  const c = await loadIntegration(admin, orgId, 'greenhouse')
-  return c ? { ...c, creds: { clientId: c.clientId, clientSecret: c.secret } } : null
-}
-
-export async function loadWorkable(admin: SupabaseClient, orgId: string): Promise<WorkableConnection | null> {
-  const c = await loadIntegration(admin, orgId, 'workable')
-  return c ? { ...c, creds: { subdomain: c.clientId, token: c.secret } } : null
 }
 
 export async function markIntegrationError(admin: SupabaseClient, orgId: string, provider: Provider, message: string | null) {
@@ -85,9 +66,6 @@ export async function markIntegrationError(admin: SupabaseClient, orgId: string,
     .eq('org_id', orgId)
     .eq('provider', provider)
 }
-
-export const markGreenhouseError = (admin: SupabaseClient, orgId: string, message: string | null) =>
-  markIntegrationError(admin, orgId, 'greenhouse', message)
 
 export function scoreNote(input: { score: number | null; dealbreaker: boolean; headline: string | null; jobId: string; jobTitle: string }) {
   return [

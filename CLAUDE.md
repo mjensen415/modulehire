@@ -128,6 +128,7 @@ ModuleHire is a resume generation tool built on a "modular resume" concept. User
 - Applied 2026-11-18. Sprints — tracked in `supabase/migrations/20261118_sprints.sql`: `users.sprint_ends_at` (service-role only, not in the users column grants), `sprint_purchases` (read-own RLS, no user writes, unique `stripe_session_id`), and `apply_sprint_purchase(user, sku, session, amount)` (service_role only; locks the user row, extends from `greatest(now(), sprint_ends_at)`, idempotent on the session id).
 - Applied 2026-11-18. `interview_sessions` (voice mock interviews) — tracked in `supabase/migrations/20261118_interview_sessions.sql`. Own-rows SELECT and DELETE only; insert/update revoked (the server writes with the service role). The monthly cap counts `ev_voice_session_start` usage events, so deleting a session never resets it.
 
+- Applied 2026-11-20. Lever, Ashby, BambooHR — `supabase/migrations/20261120_ats_more_providers.sql`: `org_integrations.provider`, applicants `source` and `external_source` allow them.
 - Applied 2026-11-20. Workable connection — `supabase/migrations/20261120_workable_integration.sql`: `org_integrations.provider` allows `workable`, new `org_integrations.config jsonb`, applicants `source` allows `workable`.
 - Applied 2026-11-20. ATS import — tracked in `supabase/migrations/20261120_ats_import.sql` (not yet in `schema.sql`): `applicants.external_source/external_id/ats_stage/ats_note_posted_at` (service-role writes only; unique `(job_id, external_source, external_id)`), `source` check adds `import`/`greenhouse`, `job_postings.external_source/external_id`, and `org_integrations` (encrypted ATS credentials; RLS on, no grants to anon/authenticated).
 - Applied 2026-11-18. `stripe_events (id text pk, type, processed_at)`, RLS on, no grants to anon/authenticated — tracked in `supabase/migrations/20261118_stripe_events.sql`. `/api/stripe/webhook` inserts `event.id` before processing (duplicate = 200, skipped); on a handler error it deletes the row and returns 500 so Stripe retries. Write failures in the handler must throw, not log, or the retry never happens.
@@ -534,8 +535,8 @@ Enterprise = unlimited (set by hand; billing events never change it). Monthly us
   `select created_at, metadata from usage_events where action = 'ev_biz_feedback' order by 1 desc;`
 
 ## Business: importing pipelines from an ATS
-Posting page (`/business/jobs/[id]`) → "Import from your ATS" (file export, or a direct pull from a connected Greenhouse or Workable) (`AtsImport.tsx` + `ats-import.css`, scoped `.ati`).
-- **File export (any ATS):** pick Greenhouse / Lever / Ashby / Workable / ADP / other, drop the candidate export
+Posting page (`/business/jobs/[id]`) → "Import from your ATS" (file export, or a direct pull from a connected ATS) (`AtsImport.tsx` + `ats-import.css`, scoped `.ati`).
+- **File export (any ATS):** pick Greenhouse / Lever / Ashby / Workable / BambooHR / ADP / other, drop the candidate export
   (CSV, or .xlsx via `read-excel-file/universal`; the `/browser` build spawns a blob: worker the CSP blocks) and the
   resumes (a .zip unpacked in the browser with `fflate`, or the files). `src/lib/business/ats-import.ts` (pure, client
   safe): `autoMap()` guesses columns from per-ATS alias lists (best-effort: real export headers vary, so the wizard
@@ -547,32 +548,50 @@ Posting page (`/business/jobs/[id]`) → "Import from your ATS" (file export, or
   400/hour, org daily cap, monthly plan scores (402 stops the run).
 - **Shared intake:** `src/lib/business/applicant-intake.ts` (`intakeApplicant`: dedupe, insert with the user client,
   external ids/file_url with the service role, store the file, `scoreApplicant`). The older upload/CSV routes are unchanged.
-- **Greenhouse (Harvest v3, `src/lib/business/greenhouse.ts`):** the customer creates a Harvest V3 (OAuth) client in
-  their own Greenhouse (no partner status needed; v1/v2 API keys were retired 2026-08-31) and pastes it in Settings →
-  Integrations (`IntegrationsCard.tsx`, owners/admins). Saved only after a test call; the secret is AES-256-GCM in
-  `org_integrations.secret_ciphertext` (`secret-box.ts`, key from `INTEGRATIONS_SECRET_KEY` or HKDF of the service role
-  key: rotating either means orgs reconnect). Routes under `/api/business/integrations/greenhouse`: status/connect/
-  writeback toggle/disconnect, `jobs`, `job-post` (start a new posting from a Greenhouse job on `/business/jobs/new`),
-  `link`, `applicants` (in-process applications with resume, AI opt-out, already-imported flags) and `import` (one
-  application: re-checks status, job, opt-out and the resume at import time). **Candidates who opted out of AI review
-  (`/v3/ai_opt_out_statuses`) are never imported or scored; the opt-out read fails closed.** If write-back is on, each
-  score is posted as a public candidate note (`POST /v3/notes`); a failed note doesn't fail the import. Cursor pages follow
-  the Link header only on harvest.greenhouse.io; resumes download through `safeFetchBuffer` and the token is only ever
-  sent to *.greenhouse.io. Scopes needed: `GREENHOUSE_SCOPES`. Partner program (an OAuth "Connect" button and a
-  marketplace listing) was paused for new applications in Nov 2026.
-- **Workable (SPI v3, `src/lib/business/workable.ts`):** subdomain + an API access token the customer generates in
-  Workable (Settings, Integrations, API Access Tokens; scopes `WORKABLE_SCOPES`). Stored in `org_integrations` with
-  `client_id` = subdomain, secret = token, `config.member_id` = the Workable member comments are posted as (the
-  connecting user's member by email, else an active admin; none found = no write-back). Routes mirror Greenhouse under
-  `/api/business/integrations/workable` (`jobs` = published + internal jobs by shortcode, `job-post`, `applicants` =
-  candidates not disqualified or hired, `import` = one candidate by id). The token is only sent to
-  `{subdomain}.workable.com/spi/v3` or `www.workable.com/spi/v3/accounts/{subdomain}/` (paging links). Account tokens
-  are limited to 10 requests per 10 seconds: 429s wait for `X-Rate-Limit-Reset`. Comments are visible to hiring
-  managers, recruiting admins and admins, not external agency recruiters. Workable has no AI opt-out API.
-- Shared across providers: `GET/PATCH/DELETE /api/business/integrations` (status of every connection, write-back
-  switch, disconnect), `POST /api/business/integrations/link`, `_shared.ts` (org check, connection load, error mapping).
-- Not built: Lever, Ashby, BambooHR, Rippling (next candidates for direct connections), a unified API (Merge/Kombo),
-  Greenhouse webhooks for new applicants, and ADP direct (ADP Marketplace partner program; ADP users import a file).
+- **Direct connections (Greenhouse, Lever, Ashby, Workable, BambooHR):** each customer pastes a key they create in
+  their own ATS (no partner program needed) in Settings → Integrations (`IntegrationsCard.tsx`, owners/admins). One
+  adapter per ATS behind one set of routes:
+  - `src/lib/business/ats/registry.ts` (client-safe): labels, connect fields, setup steps, permissions, `noteWord`,
+    `hasOptOut`. `ats/types.ts`: the `Adapter` contract (`parseConnect`, `verify`, `afterConnect`, `listJobs`,
+    `jobText`, `listApplicants`, `fetchForImport`, `postNote`, `canComment`). `ats/adapters.ts`: the registry.
+    `ats/http.ts`: `AtsError`, `atsFetch` (sends the key only to hosts the adapter allows, retries 429/503),
+    `downloadWithAuth` (API download; a redirect to storage is followed without credentials through the SSRF guard),
+    `downloadPublic` (signed links), `resumeFilename`, `htmlToText`.
+  - Routes: `POST /api/business/integrations/[provider]` (connect: `{ org_id, account?, secret }`, checked with a
+    test call, AES-256-GCM via `secret-box.ts`, key from `INTEGRATIONS_SECRET_KEY` or HKDF of the service role key;
+    rotating either means orgs reconnect), `[provider]/jobs`, `[provider]/job-post?ats_job_id=` (start a posting from an
+    ATS job on `/business/jobs/new`; BambooHR has no description API so it's left out there), `[provider]/applicants`
+    (`{ job_id, ats_job_id }`, also links the posting) and `[provider]/import` (`{ job_id, ats_job_id, key }`: the
+    adapter re-reads the candidate, then shared intake, then the score posted back if write-back is on; a failed note
+    never fails the import). `GET/PATCH/DELETE /api/business/integrations` = status of every connection, write-back
+    switch, disconnect. `POST /api/business/integrations/link`. `_shared.ts`: org check, connection load, error mapping
+    (bad key or missing permission marks the connection `error`).
+  - `org_integrations.client_id`: Greenhouse client id, Workable subdomain, BambooHR company domain, or `key-XXXX` (last
+    4 of the key) for Lever and Ashby, whose keys carry no account name.
+  - **Greenhouse** (`src/lib/business/greenhouse.ts`, Harvest v3 client credentials; v1/v2 keys were retired 2026-08-31):
+    key = application id; in-process applications; **candidates who opted out of AI review (`/v3/ai_opt_out_statuses`)
+    are never imported or scored; the opt-out read fails closed**; public candidate note. Cursor pages follow the Link
+    header only on harvest.greenhouse.io; the token is only sent to *.greenhouse.io. Partner program paused Nov 2026.
+  - **Lever** (`ats/lever.ts`, API key as Basic username): job = posting (published + internal), key = opportunity id
+    (not archived); resume = newest from `/opportunities/:id/resumes`, downloaded via the API; note via
+    `POST /opportunities/:id/notes`. About 10 requests/second per key.
+  - **Ashby** (`ats/ashby.ts`, API key as Basic username, every endpoint a POST): job = Open jobs, key = application id
+    (Active, on that job); resume via `resumeFileHandle` + `file.info` (signed URL); note via `candidate.createNote`.
+    `success: false` bodies are errors; missing permissions map to `scope`.
+  - **Workable** (`src/lib/business/workable.ts`): subdomain + API token; job = shortcode (published + internal), key =
+    candidate id (not disqualified or hired); comment via `/candidates/:id/comments` as `config.member_id` (the
+    connecting user's member by email, else an active admin; none = no write-back), visible to hiring team roles, not
+    agency recruiters. Token only sent to `{subdomain}.workable.com/spi/v3` or `www.workable.com/spi/v3/accounts/{sub}/`.
+    Account tokens: 10 requests per 10 seconds.
+  - **BambooHR** (`ats/bamboohr.ts`, user API key as Basic username, password `x`, base
+    `https://{domain}.bamboohr.com/api/v1`): job = Open job openings, key = application id (`ALL_ACTIVE`); the resume is
+    the attachment matching `resumeFileId` (or a resume/CV-named attachment) via its `fileUrl`; comment via
+    `POST /applicant_tracking/applications/:id/comments`. **Unverified against a real account:** the docs list
+    `resumeFileId` but no applicant file download endpoint, so this relies on the attachment `fileUrl`.
+  - Only Greenhouse has an AI opt-out API. Lever, Ashby and BambooHR were built from their public docs on 2026-11-20 and
+    tested against mocked responses only.
+- Not built: Rippling (customer API tokens exist, but listing candidates appears to need a higher API tier), a unified
+  API (Merge/Kombo), webhooks for new applicants, and ADP direct (ADP Marketplace partner program; ADP users import a file).
 
 ## Press kit (`/press`)
 Public page in `src/app/press/`; files in `public/press/` (how to rebuild the logos and zip: that folder's `README.md`). Copy, facts and the founder bio are approved text, so don't change claims without Matt's sign-off, and keep `modulehire-press-kit.txt` and the zip in step with the page.

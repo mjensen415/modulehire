@@ -5,16 +5,13 @@
 // Docs: https://workable.readme.io. Paging: follow paging.next. Account tokens are limited to
 // 10 requests per 10 seconds, so 429s are expected and retried after the reset.
 import { safeFetchBuffer } from '@/lib/url-validation'
+import { AtsError } from './ats/http'
 
 export const WORKABLE_SCOPES = ['r_jobs', 'r_candidates', 'w_candidates'] as const
 
 export type WkCreds = { subdomain: string; token: string }
 
-export class WorkableError extends Error {
-  constructor(message: string, readonly status: number, readonly kind: 'auth' | 'scope' | 'rate' | 'other' = 'other') {
-    super(message)
-  }
-}
+export class WorkableError extends AtsError {}
 
 export const isWorkableSubdomain = (s: string) => /^[a-z0-9][a-z0-9-]{0,62}$/.test(s)
 

@@ -4,7 +4,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { scoreApplicant } from './score-applicant'
 
-export const EXTERNAL_SOURCES = ['greenhouse', 'lever', 'ashby', 'workable', 'adp', 'other'] as const
+export const EXTERNAL_SOURCES = ['greenhouse', 'lever', 'ashby', 'workable', 'adp', 'bamboohr', 'other'] as const
 export type ExternalSource = (typeof EXTERNAL_SOURCES)[number]
 export const isExternalSource = (v: unknown): v is ExternalSource =>
   typeof v === 'string' && (EXTERNAL_SOURCES as readonly string[]).includes(v)
@@ -73,7 +73,7 @@ export type IntakeInput = {
   rawText: string
   name?: string | null
   email?: string | null
-  source: 'upload' | 'csv' | 'import' | 'greenhouse' | 'workable'
+  source: 'upload' | 'csv' | 'import' | 'greenhouse' | 'workable' | 'lever' | 'ashby' | 'bamboohr'
   externalSource?: ExternalSource | null
   externalId?: string | null
   atsStage?: string | null

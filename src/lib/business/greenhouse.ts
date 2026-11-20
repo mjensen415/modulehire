@@ -4,6 +4,7 @@
 // Docs: https://harvestdocs.greenhouse.io (authentication, pagination, rate limiting).
 // Cursor pagination: follow the Link rel="next" URL exactly; a cursor URL takes no other params.
 import { safeFetchBuffer } from '@/lib/url-validation'
+import { AtsError } from './ats/http'
 
 const AUTH_URL = 'https://auth.greenhouse.io/token'
 const API = 'https://harvest.greenhouse.io'
@@ -21,11 +22,7 @@ export const GREENHOUSE_SCOPES = [
 
 export type GhCreds = { clientId: string; clientSecret: string }
 
-export class GreenhouseError extends Error {
-  constructor(message: string, readonly status: number, readonly kind: 'auth' | 'scope' | 'rate' | 'other' = 'other') {
-    super(message)
-  }
-}
+export class GreenhouseError extends AtsError {}
 
 const tokens = new Map<string, { token: string; exp: number; secret: string }>()
 

@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { isUuid } from '@/lib/validate'
-import { GREENHOUSE_SCOPES } from '@/lib/business/greenhouse'
-import { WORKABLE_SCOPES } from '@/lib/business/workable'
-import { PROVIDERS, canManageIntegrations, isProvider, loadIntegration } from '@/lib/business/integrations'
+import { PROVIDERS, isProvider } from '@/lib/business/ats/registry'
+import { ADAPTERS } from '@/lib/business/ats/adapters'
+import { canManageIntegrations, loadIntegration } from '@/lib/business/integrations'
 import { resolveOrg } from './_shared'
-
-const SCOPES = { greenhouse: GREENHOUSE_SCOPES, workable: WORKABLE_SCOPES }
 
 // GET ?org_id= | ?job_id= — every ATS connection's status (never a secret). With job_id, also
 // which ATS job that posting was linked to.
@@ -24,8 +22,11 @@ export async function GET(req: Request) {
   for (const p of PROVIDERS) {
     const c = await loadIntegration(admin, org.orgId, p)
     integrations[p] = c
-      ? { connected: true, hint: c.hint, writeback_enabled: c.writebackEnabled, status: c.status, last_error: c.lastError, can_comment: p !== 'workable' || !!c.config.member_id, scopes: SCOPES[p] }
-      : { connected: false, scopes: SCOPES[p] }
+      ? {
+          connected: true, hint: c.hint, writeback_enabled: c.writebackEnabled, status: c.status, last_error: c.lastError,
+          can_comment: ADAPTERS[p].canComment({ clientId: c.clientId, secret: '', config: c.config }),
+        }
+      : { connected: false }
   }
   let linked: { provider: string; external_id: string } | null = null
   if (isUuid(jobId)) {

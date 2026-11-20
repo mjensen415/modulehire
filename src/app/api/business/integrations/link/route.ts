@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { isUuid } from '@/lib/validate'
 import { getOrgRole } from '@/lib/business/org-access'
-import { isProvider } from '@/lib/business/integrations'
+import { isProvider } from '@/lib/business/ats/registry'
 
 // POST { job_id, provider, external_id } — remembers which ATS job a posting came from, so the
 // import dialog opens on it. Set when a posting is started from an ATS job.
