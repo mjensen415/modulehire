@@ -69,14 +69,14 @@ function BusinessLanding() {
   const year = new Date().getFullYear()
   return (
     <div className="warm bl">
-      <nav className="bl-nav" aria-label="Main">
+      <header className="bl-nav">
         <div className="bl-wrap bl-nav-in">
           <Link href="/business" className="bl-brand">
             <Mark />
             <span className="bl-brand-name">ModuleHire</span>
             <span className="bl-tag">BUSINESS</span>
           </Link>
-          <div className="bl-links">
+          <div className="bl-links" role="navigation" aria-label="Main">
             <Link href="#how-it-works" className="bl-link">How it works</Link>
             <Link href={DEMO_HREF} className="bl-link">Demo</Link>
             <Link href="#pricing" className="bl-link">Pricing</Link>
@@ -84,7 +84,7 @@ function BusinessLanding() {
             <Link href={SIGNUP_HREF} className="bl-btn">Start free</Link>
           </div>
         </div>
-      </nav>
+      </header>
 
       <main className="bl-wrap">
         <header className="bl-hero">
