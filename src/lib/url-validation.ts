@@ -137,6 +137,19 @@ export async function safeFetchText(
   start: URL,
   opts: { maxBytes: number; timeoutMs: number; maxRedirects?: number; headers?: Record<string, string> },
 ): Promise<SafeFetchResult> {
+  const res = await safeFetchBuffer(start, opts)
+  return res.ok ? { ...res, body: res.body.toString('utf8') } : res
+}
+
+export type SafeFetchBufferResult =
+  | { ok: true; status: number; contentType: string; body: Buffer; finalUrl: URL }
+  | Extract<SafeFetchResult, { ok: false }>
+
+/** safeFetchText's binary twin (files such as resumes from a signed ATS link). */
+export async function safeFetchBuffer(
+  start: URL,
+  opts: { maxBytes: number; timeoutMs: number; maxRedirects?: number; headers?: Record<string, string> },
+): Promise<SafeFetchBufferResult> {
   const deadline = Date.now() + opts.timeoutMs
   let url = start
   for (let hop = 0; hop <= (opts.maxRedirects ?? 3); hop++) {
@@ -157,7 +170,7 @@ export async function safeFetchText(
 }
 
 type OnceResult =
-  | { ok: true; status: number; contentType: string; location?: string; body: string }
+  | { ok: true; status: number; contentType: string; location?: string; body: Buffer }
   | { ok: false; reason: 'blocked' | 'too_large' | 'network'; detail?: string }
 
 function requestOnce(url: URL, headers: Record<string, string>, maxBytes: number, timeoutMs: number): Promise<OnceResult> {
@@ -179,7 +192,7 @@ function requestOnce(url: URL, headers: Record<string, string>, maxBytes: number
         const contentType = String(res.headers['content-type'] ?? '')
         if (status >= 300 && status < 400) {
           res.resume()
-          return done({ ok: true, status, contentType, location: res.headers.location, body: '' })
+          return done({ ok: true, status, contentType, location: res.headers.location, body: Buffer.alloc(0) })
         }
         const declared = Number(res.headers['content-length'] ?? 0)
         if (declared > maxBytes) { res.destroy(); return done({ ok: false, reason: 'too_large' }) }
@@ -190,7 +203,7 @@ function requestOnce(url: URL, headers: Record<string, string>, maxBytes: number
           if (size > maxBytes) { res.destroy(); done({ ok: false, reason: 'too_large' }); return }
           chunks.push(c)
         })
-        res.on('end', () => done({ ok: true, status, contentType, body: Buffer.concat(chunks).toString('utf8') }))
+        res.on('end', () => done({ ok: true, status, contentType, body: Buffer.concat(chunks) }))
         res.on('error', (e) => done({ ok: false, reason: 'network', detail: e.message }))
       },
     )
