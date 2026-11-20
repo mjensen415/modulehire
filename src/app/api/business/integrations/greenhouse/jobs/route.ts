@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { listOpenJobs } from '@/lib/business/greenhouse'
 import { markGreenhouseError } from '@/lib/business/integrations'
-import { greenhouseContext, greenhouseFailure } from '../_shared'
+import { greenhouseContext, greenhouseFailure } from '../../_shared'
 
 // GET ?job_id= | ?org_id= — the org's open Greenhouse jobs.
 export async function GET(req: Request) {

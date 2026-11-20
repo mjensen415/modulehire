@@ -73,7 +73,7 @@ export type IntakeInput = {
   rawText: string
   name?: string | null
   email?: string | null
-  source: 'upload' | 'csv' | 'import' | 'greenhouse'
+  source: 'upload' | 'csv' | 'import' | 'greenhouse' | 'workable'
   externalSource?: ExternalSource | null
   externalId?: string | null
   atsStage?: string | null

@@ -20,21 +20,10 @@ import {
   postScoreNote,
   resumeForApplication,
 } from '@/lib/business/greenhouse'
-import { BUSINESS_APP_URL } from '@/lib/business/integrations'
-import { greenhouseContext, greenhouseFailure } from '../_shared'
+import { scoreNote } from '@/lib/business/integrations'
+import { greenhouseContext, greenhouseFailure } from '../../_shared'
 
 export const maxDuration = 120
-
-function scoreNote(input: { score: number | null; dealbreaker: boolean; headline: string | null; jobId: string; jobTitle: string }) {
-  const lines = [
-    `ModuleHire score: ${input.score ?? 'not scored'}/100 for ${input.jobTitle}`,
-    input.dealbreaker ? 'Misses at least one dealbreaker requirement.' : null,
-    input.headline ? `Summary: ${input.headline}` : null,
-    `Evidence for each requirement: ${BUSINESS_APP_URL}/business/jobs/${input.jobId}`,
-    'Scored by AI from the resume. Use it as one input; a person makes the decision.',
-  ]
-  return lines.filter(Boolean).join('\n')
-}
 
 // POST { job_id, gh_job_id, application_id } — imports and scores one Greenhouse application.
 // Re-reads the application, the candidate's AI opt-out and the resume link at import time.

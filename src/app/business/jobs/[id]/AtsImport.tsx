@@ -1,7 +1,7 @@
 'use client'
 
 // "Import from your ATS" on a posting: a candidate export file (CSV or Excel) plus resumes
-// (a zip or the files themselves), or a direct Greenhouse pull when the org has connected it.
+// (a zip or the files themselves), or a direct pull from Greenhouse or Workable when connected.
 // Every candidate goes through one request at a time (3 in parallel) so large pipelines never hit
 // the function time limit, and duplicates on the posting are skipped server-side.
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -22,12 +22,19 @@ import {
 } from '@/lib/business/ats-import'
 
 type Props = { jobId: string; jobTitle: string; onClose: () => void; onImported: () => void }
-type GhStatus = { connected: boolean; can_manage: boolean; status: string | null; last_error: string | null; linked_gh_job_id: string | null; writeback_enabled: boolean }
-type GhJob = { id: number; name: string; requisition_id: string | null }
-type GhApplicant = {
-  application_id: number; candidate_id: number; name: string | null; email: string | null; stage: string | null
-  resume: { filename: string } | null; opted_out: boolean; already_imported: boolean
+type Direct = 'greenhouse' | 'workable'
+type IntStatus = {
+  integrations: Record<Direct, { connected: boolean; writeback_enabled?: boolean; status?: string; can_comment?: boolean }>
+  linked: { provider: string; external_id: string } | null
 }
+type DirectJob = { id: string | number; name: string; requisition_id: string | null }
+// One shape for both providers: key = Greenhouse application id or Workable candidate id.
+type DirectApplicant = {
+  key: string; name: string | null; email: string | null; stage: string | null
+  resume: { filename: string } | null; resumeUnknown: boolean; opted_out: boolean; already_imported: boolean
+}
+const DIRECT_LABEL: Record<Direct, string> = { greenhouse: 'Greenhouse', workable: 'Workable' }
+const NOTE_WORD: Record<Direct, string> = { greenhouse: 'note', workable: 'comment' }
 type LogLine = { label: string; state: 'created' | 'duplicate' | 'skipped' | 'failed'; detail?: string }
 type Task = { label: string; run: () => Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> }
 
@@ -85,9 +92,10 @@ async function filesFrom(list: File[]): Promise<File[]> {
 }
 
 export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Props) {
-  const [mode, setMode] = useState<'pick' | 'file' | 'greenhouse'>('pick')
+  const [mode, setMode] = useState<'pick' | 'file' | 'direct'>('pick')
   const [ats, setAts] = useState<AtsKey>('greenhouse')
-  const [gh, setGh] = useState<GhStatus | null>(null)
+  const [ints, setInts] = useState<IntStatus | null>(null)
+  const [direct, setDirect] = useState<Direct>('greenhouse')
   const [error, setError] = useState('')
 
   // File flow
@@ -100,11 +108,11 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
   const sheetInput = useRef<HTMLInputElement>(null)
   const resumeInput = useRef<HTMLInputElement>(null)
 
-  // Greenhouse flow
-  const [ghJobs, setGhJobs] = useState<GhJob[] | null>(null)
+  // Direct (Greenhouse / Workable) flow
+  const [ghJobs, setGhJobs] = useState<DirectJob[] | null>(null)
   const [ghJobId, setGhJobId] = useState<string>('')
-  const [ghApplicants, setGhApplicants] = useState<GhApplicant[] | null>(null)
-  const [ghSelected, setGhSelected] = useState<Set<number>>(new Set())
+  const [ghApplicants, setGhApplicants] = useState<DirectApplicant[] | null>(null)
+  const [ghSelected, setGhSelected] = useState<Set<string>>(new Set())
   const [ghLoading, setGhLoading] = useState(false)
 
   // Shared run
@@ -116,10 +124,10 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
   const cancelRef = useRef(false)
 
   useEffect(() => {
-    fetch(`/api/business/integrations/greenhouse?job_id=${jobId}`)
+    fetch(`/api/business/integrations?job_id=${jobId}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setGh(d))
-      .catch(() => setGh(null))
+      .then((d) => setInts(d))
+      .catch(() => setInts(null))
   }, [jobId])
 
   useEffect(() => {
@@ -189,7 +197,8 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
             line = { label: t.label, state: 'skipped', detail: String(data.reason ?? 'Skipped') }
           } else {
             const score = data.overall_score
-            const note = data.note_error ? ' · note to Greenhouse failed' : data.note_posted ? ' · score posted to Greenhouse' : ''
+            const label = DIRECT_LABEL[direct]
+            const note = data.note_error ? ` · ${NOTE_WORD[direct]} to ${label} failed` : data.note_posted ? ` · score posted to ${label}` : ''
             line = { label: t.label, state: 'created', detail: `${typeof score === 'number' ? `${score}/100` : 'Scored'}${note}` }
           }
         } catch {
@@ -237,18 +246,19 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
     runTasks(tasks)
   }
 
-  async function openGreenhouse() {
-    setMode('greenhouse'); setError('')
-    if (ghJobs) return
+  async function openDirect(p: Direct) {
+    if (p !== direct) { setGhJobs(null); setGhJobId(''); setGhApplicants(null); setGhSelected(new Set()) }
+    setDirect(p); setMode('direct'); setError('')
+    if (ghJobs && p === direct) return
     setGhLoading(true)
     try {
-      const res = await fetch(`/api/business/integrations/greenhouse/jobs?job_id=${jobId}`)
+      const res = await fetch(`/api/business/integrations/${p}/jobs?job_id=${jobId}`)
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Could not load Greenhouse jobs')
+      if (!res.ok) throw new Error(data.error ?? `Could not load ${DIRECT_LABEL[p]} jobs`)
       setGhJobs(data.jobs)
-      if (gh?.linked_gh_job_id && data.jobs.some((j: GhJob) => String(j.id) === gh.linked_gh_job_id)) {
-        setGhJobId(gh.linked_gh_job_id)
-        loadGhApplicants(gh.linked_gh_job_id)
+      const linked = ints?.linked
+      if (linked?.provider === p && data.jobs.some((j: DirectJob) => String(j.id) === linked.external_id)) {
+        loadDirectApplicants(p, linked.external_id)
       }
     } catch (e) {
       setError((e as Error).message)
@@ -257,16 +267,24 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
     }
   }
 
-  async function loadGhApplicants(id: string) {
+  async function loadDirectApplicants(p: Direct, id: string) {
     setGhJobId(id); setGhApplicants(null); setGhSelected(new Set()); setError('')
     if (!id) return
     setGhLoading(true)
     try {
-      const { ok, data } = await post('/api/business/integrations/greenhouse/applicants', JSON.stringify({ job_id: jobId, gh_job_id: Number(id) }), true)
+      const payload = p === 'greenhouse' ? { job_id: jobId, gh_job_id: Number(id) } : { job_id: jobId, shortcode: id }
+      const { ok, data } = await post(`/api/business/integrations/${p}/applicants`, JSON.stringify(payload), true)
       if (!ok) throw new Error(String(data.error ?? 'Could not load candidates'))
-      const list = data.applicants as GhApplicant[]
+      type Raw = { application_id?: number; candidate_id: number | string; name: string | null; email: string | null; stage: string | null; resume: { filename: string } | null; opted_out: boolean; already_imported: boolean }
+      const list: DirectApplicant[] = (data.applicants as Raw[]).map((a) => ({
+        key: String(p === 'greenhouse' ? a.application_id : a.candidate_id),
+        name: a.name, email: a.email, stage: a.stage, resume: a.resume,
+        // Workable's candidate list doesn't always say whether there's a resume; it's checked at import.
+        resumeUnknown: p === 'workable' && !a.resume,
+        opted_out: a.opted_out, already_imported: a.already_imported,
+      }))
       setGhApplicants(list)
-      setGhSelected(new Set(list.filter((a) => a.resume && !a.opted_out && !a.already_imported).map((a) => a.application_id)))
+      setGhSelected(new Set(list.filter(canImport).map((a) => a.key)))
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -274,18 +292,33 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
     }
   }
 
-  function startGreenhouseImport() {
+  function canImport(a: DirectApplicant) {
+    return (!!a.resume || a.resumeUnknown) && !a.opted_out && !a.already_imported
+  }
+
+  function startDirectImport() {
+    const p = direct
     const tasks: Task[] = (ghApplicants ?? [])
-      .filter((a) => ghSelected.has(a.application_id))
+      .filter((a) => ghSelected.has(a.key))
       .map((a) => ({
-        label: a.name ?? a.email ?? `Application ${a.application_id}`,
-        run: () => post('/api/business/integrations/greenhouse/import', JSON.stringify({ job_id: jobId, gh_job_id: Number(ghJobId), application_id: a.application_id }), true),
+        label: a.name ?? a.email ?? `Candidate ${a.key}`,
+        run: () => post(
+          `/api/business/integrations/${p}/import`,
+          JSON.stringify(p === 'greenhouse'
+            ? { job_id: jobId, gh_job_id: Number(ghJobId), application_id: Number(a.key) }
+            : { job_id: jobId, shortcode: ghJobId, candidate_id: a.key }),
+          true,
+        ),
       }))
     runTasks(tasks)
   }
 
   const counts = log.reduce((acc, l) => ({ ...acc, [l.state]: (acc[l.state] ?? 0) + 1 }), {} as Record<string, number>)
-  const ghEligible = (ghApplicants ?? []).filter((a) => a.resume && !a.opted_out && !a.already_imported)
+  const ghEligible = (ghApplicants ?? []).filter(canImport)
+  const connected = (['greenhouse', 'workable'] as Direct[]).filter((p) => ints?.integrations?.[p]?.connected)
+  const dLabel = DIRECT_LABEL[direct]
+  const dInfo = ints?.integrations?.[direct]
+  const dWriteback = !!dInfo?.writeback_enabled && dInfo?.can_comment !== false
   const showRun = running || log.length > 0
 
   return (
@@ -331,17 +364,18 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
             </>
           ) : mode === 'pick' ? (
             <>
-              {gh?.connected && (
-                <div className="ati-direct">
+              {connected.map((p) => (
+                <div key={p} className="ati-direct">
                   <div>
-                    <b>Greenhouse is connected</b>
-                    Pull candidates and resumes straight from a Greenhouse job{gh.writeback_enabled ? ', and post each score back as a note' : ''}.
+                    <b>{DIRECT_LABEL[p]} is connected</b>
+                    Pull candidates and resumes straight from a {DIRECT_LABEL[p]} job
+                    {ints?.integrations[p].writeback_enabled && ints?.integrations[p].can_comment !== false ? `, and post each score back as a ${NOTE_WORD[p]}` : ''}.
                   </div>
-                  <button className="ati-btn" onClick={openGreenhouse}>Pull from Greenhouse</button>
+                  <button className="ati-btn" onClick={() => openDirect(p)}>Pull from {DIRECT_LABEL[p]}</button>
                 </div>
-              )}
+              ))}
               <div>
-                <div className="ati-label">{gh?.connected ? 'Or import an export file from' : 'Where are the candidates now?'}</div>
+                <div className="ati-label">{connected.length ? 'Or import an export file from' : 'Where are the candidates now?'}</div>
                 <div className="ati-tiles">
                   {ATS_KEYS.map((k) => (
                     <button key={k} type="button" className="ati-tile" aria-pressed={ats === k} onClick={() => setAts(k)}>
@@ -353,8 +387,8 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
               </div>
               <div className="ati-note">
                 Export your candidates from {ATS_PRESETS[ats].label === 'Another ATS or a spreadsheet' ? 'your system' : ATS_PRESETS[ats].label} as a CSV or Excel file, and download their resumes (a zip is fine). We match each resume to a candidate by its file name, email, candidate ID or name, and you can check the match before anything is scored.
-                {!gh?.connected && ats === 'greenhouse' && (
-                  <> Using Greenhouse? You can also <a href="/business/settings#integrations">connect it in Settings</a> and skip the files.</>
+                {(ats === 'greenhouse' || ats === 'workable') && !ints?.integrations?.[ats]?.connected && (
+                  <> Using {DIRECT_LABEL[ats]}? You can also <a href="/business/settings#integrations">connect it in Settings</a> and skip the files.</>
                 )}
               </div>
               <div className="ati-actions">
@@ -439,28 +473,30 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
           ) : (
             <>
               <label className="ati-field">
-                Greenhouse job
-                <select value={ghJobId} onChange={(e) => loadGhApplicants(e.target.value)} disabled={ghLoading || !ghJobs}>
+                {dLabel} job
+                <select value={ghJobId} onChange={(e) => loadDirectApplicants(direct, e.target.value)} disabled={ghLoading || !ghJobs}>
                   <option value="">{ghJobs ? 'Pick an open job' : 'Loading jobs…'}</option>
                   {(ghJobs ?? []).map((j) => <option key={j.id} value={j.id}>{j.name}{j.requisition_id ? ` (${j.requisition_id})` : ''}</option>)}
                 </select>
               </label>
-              {ghLoading && ghJobId && <div className="ati-note">Loading candidates from Greenhouse…</div>}
+              {ghLoading && ghJobId && <div className="ati-note">Loading candidates from {dLabel}…</div>}
               {ghApplicants && (
                 ghApplicants.length === 0 ? (
-                  <div className="ati-note">No active candidates on this Greenhouse job.</div>
+                  <div className="ati-note">No active candidates on this {dLabel} job.</div>
                 ) : (
                   <>
                     <div className="ati-stats">
-                      <div className="ati-stat"><b>{ghApplicants.length}</b><span>active in Greenhouse</span></div>
+                      <div className="ati-stat"><b>{ghApplicants.length}</b><span>active in {dLabel}</span></div>
                       <div className="ati-stat"><b className="ati-ok">{ghSelected.size}</b><span>selected to score</span></div>
-                      <div className="ati-stat"><b>{ghApplicants.filter((a) => a.opted_out).length}</b><span>opted out of AI review</span></div>
+                      {direct === 'greenhouse'
+                        ? <div className="ati-stat"><b>{ghApplicants.filter((a) => a.opted_out).length}</b><span>opted out of AI review</span></div>
+                        : <div className="ati-stat"><b>{ghApplicants.filter((a) => a.already_imported).length}</b><span>already on this posting</span></div>}
                     </div>
                     <label className="ati-check">
                       <input
                         type="checkbox"
-                        checked={ghEligible.length > 0 && ghEligible.every((a) => ghSelected.has(a.application_id))}
-                        onChange={(e) => setGhSelected(e.target.checked ? new Set(ghEligible.map((a) => a.application_id)) : new Set())}
+                        checked={ghEligible.length > 0 && ghEligible.every((a) => ghSelected.has(a.key))}
+                        onChange={(e) => setGhSelected(e.target.checked ? new Set(ghEligible.map((a) => a.key)) : new Set())}
                       />
                       Select everyone who can be scored
                     </label>
@@ -469,21 +505,21 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
                         <thead><tr><th /><th>Name</th><th>Stage</th><th>Resume</th></tr></thead>
                         <tbody>
                           {ghApplicants.map((a) => {
-                            const blocked = a.opted_out ? 'Opted out of AI review' : a.already_imported ? 'Already here' : !a.resume ? 'No resume' : ''
+                            const blocked = a.opted_out ? 'Opted out of AI review' : a.already_imported ? 'Already here' : !a.resume && !a.resumeUnknown ? 'No resume' : ''
                             return (
-                              <tr key={a.application_id}>
+                              <tr key={a.key}>
                                 <td>
                                   <input
                                     type="checkbox"
                                     aria-label={`Import ${a.name ?? 'candidate'}`}
                                     disabled={!!blocked}
-                                    checked={ghSelected.has(a.application_id)}
-                                    onChange={(e) => setGhSelected((s) => { const n = new Set(s); if (e.target.checked) n.add(a.application_id); else n.delete(a.application_id); return n })}
+                                    checked={ghSelected.has(a.key)}
+                                    onChange={(e) => setGhSelected((s) => { const n = new Set(s); if (e.target.checked) n.add(a.key); else n.delete(a.key); return n })}
                                   />
                                 </td>
                                 <td>{a.name ?? a.email ?? 'Unnamed'}</td>
                                 <td>{a.stage ?? '–'}</td>
-                                <td className={blocked ? 'ati-warn' : 'ati-ok'}>{blocked || a.resume?.filename}</td>
+                                <td className={blocked ? 'ati-warn' : a.resumeUnknown ? '' : 'ati-ok'}>{blocked || a.resume?.filename || 'Checked at import'}</td>
                               </tr>
                             )
                           })}
@@ -491,15 +527,15 @@ export default function AtsImport({ jobId, jobTitle, onClose, onImported }: Prop
                       </table>
                     </div>
                     <div className="ati-note">
-                      Candidates who opted out of AI review in Greenhouse are never imported or scored.
-                      {gh?.writeback_enabled ? ' Each score is posted back to the candidate in Greenhouse as a note.' : ''}
+                      {direct === 'greenhouse' ? 'Candidates who opted out of AI review in Greenhouse are never imported or scored. ' : 'Disqualified and hired candidates are left out. '}
+                      {dWriteback ? `Each score is posted back to the candidate in ${dLabel} as a ${NOTE_WORD[direct]}.` : ''}
                     </div>
                   </>
                 )
               )}
               <div className="ati-actions">
                 <button className="ati-btn ghost" onClick={() => setMode('pick')}>Back</button>
-                <button className="ati-btn" disabled={!ghSelected.size || ghLoading} onClick={startGreenhouseImport}>
+                <button className="ati-btn" disabled={!ghSelected.size || ghLoading} onClick={startDirectImport}>
                   Import and score {ghSelected.size || ''}
                 </button>
               </div>

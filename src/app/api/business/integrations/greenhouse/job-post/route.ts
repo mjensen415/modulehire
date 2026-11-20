@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { jobPostText } from '@/lib/business/greenhouse'
-import { greenhouseContext, greenhouseFailure } from '../_shared'
+import { greenhouseContext, greenhouseFailure } from '../../_shared'
 
 // GET ?org_id=&gh_job_id= — a Greenhouse job's posting as plain text, to start a ModuleHire
 // posting from it (the new-posting page fills its title and description).

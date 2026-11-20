@@ -3,7 +3,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { isUuid } from '@/lib/validate'
 import { checkAndLog } from '@/lib/rate-limit'
 import { listJobApplicants } from '@/lib/business/greenhouse'
-import { greenhouseContext, greenhouseFailure } from '../_shared'
+import { greenhouseContext, greenhouseFailure } from '../../_shared'
 
 export const maxDuration = 120
 
