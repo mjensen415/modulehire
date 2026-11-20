@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import IntegrationsCard from './IntegrationsCard'
+import './settings.css'
 
 type Org = { id: string; name: string; slug: string; tier: string; role: string; created_at: string }
 
@@ -13,20 +14,27 @@ type UsageResponse = {
   has_billing_account: boolean
 }
 
+type TabKey = 'organization' | 'team' | 'integrations' | 'billing'
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'organization', label: 'Organization' },
+  { key: 'team', label: 'Team' },
+  { key: 'integrations', label: 'Integrations' },
+  { key: 'billing', label: 'Plan and billing' },
+]
+const TAB_ALIASES: Record<string, TabKey> = { organization: 'organization', team: 'team', integrations: 'integrations', billing: 'billing', plan: 'billing' }
+
 function UsageBar({ label, used, limit }: { label: string; used: number; limit: number | null }) {
   const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0
   const full = limit !== null && used >= limit
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 5 }}>
-        <span style={{ color: 'var(--text2)' }}>{label}</span>
-        <span style={{ color: full ? '#ef4444' : 'var(--text)', fontWeight: 600 }}>
-          {used}{limit === null ? '' : ` of ${limit}`}{limit === null ? ' (unlimited)' : ''}
-        </span>
+      <div className={`bs-usage-row${full ? ' full' : ''}`}>
+        <span>{label}</span>
+        <span>{used}{limit === null ? ' (unlimited)' : ` of ${limit}`}</span>
       </div>
       {limit !== null && (
-        <div style={{ height: 5, background: 'var(--bg3)', borderRadius: 3, overflow: 'hidden' }}>
-          <div style={{ width: `${pct}%`, height: '100%', background: full ? '#ef4444' : 'var(--teal)' }} />
+        <div className={`bs-bar${full ? ' full' : ''}`} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={limit} aria-valuenow={used}>
+          <i style={{ width: `${pct}%` }} />
         </div>
       )}
     </div>
@@ -80,55 +88,41 @@ function PlanCard({ orgId, isOwner }: { orgId: string; isOwner: boolean }) {
   const isFree = info?.plan.tier === 'starter'
 
   return (
-    <div className="section-card" id="plan">
-      <div className="section-head">
-        <div className="section-head-title">Plan</div>
-      </div>
-      <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {justUpgraded && !isFree && info && (
-          <div style={{ fontSize: 13, color: '#1d9e75', background: 'rgba(29,158,117,0.1)', border: '1px solid rgba(29,158,117,0.3)', borderRadius: 8, padding: '9px 12px' }}>
-            You&apos;re on Team. Thanks!
-          </div>
-        )}
-        {justUpgraded && isFree && (
-          <div style={{ fontSize: 13, color: 'var(--text2)', background: 'var(--bg3)', borderRadius: 8, padding: '9px 12px' }}>
-            Payment received. Your plan will update in a few seconds.
-          </div>
-        )}
+    <div className="biz-card" id="plan">
+      <div className="biz-card-head"><h2 className="biz-h2">Plan</h2></div>
+      <div className="bs-card">
+        {justUpgraded && !isFree && info && <div className="bs-success" role="status">You&apos;re on Team. Thanks!</div>}
+        {justUpgraded && isFree && <div className="bs-info" role="status">Payment received. Your plan will update in a few seconds.</div>}
         {!info ? (
-          <div style={{ color: 'var(--text3)', fontSize: 13 }}>Loading…</div>
+          <p className="bs-note" role="status">Loading…</p>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div className="bs-plan-top">
               <div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em', marginBottom: 4 }}>
-                  {info.plan.name}
-                </div>
-                <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>
+                <p className="bs-plan-name">{info.plan.name}</p>
+                <p className="bs-note">
                   {isFree
                     ? `Upgrade to Team for ${info.team.price}/month: unlimited active jobs, ${info.team.monthlyScores} scored applicants a month.`
                     : info.plan.tier === 'enterprise'
                       ? 'Custom plan. Contact info@modulehire.com for changes.'
                       : `${info.team.price}/month, billed monthly.`}
-                </div>
+                </p>
               </div>
               {isOwner && isFree && (
-                <button className="btn-primary" style={{ flexShrink: 0 }} disabled={busy} onClick={() => go('/api/business/billing/checkout')}>
-                  {busy ? 'Opening…' : `Upgrade to Team`}
+                <button type="button" className="biz-btn" disabled={busy} onClick={() => go('/api/business/billing/checkout')}>
+                  {busy ? 'Opening…' : 'Upgrade to Team'}
                 </button>
               )}
               {isOwner && info.plan.tier === 'growth' && info.has_billing_account && (
-                <button className="btn-ghost" style={{ flexShrink: 0 }} disabled={busy} onClick={() => go('/api/business/billing/portal')}>
+                <button type="button" className="biz-btn biz-btn-ghost" disabled={busy} onClick={() => go('/api/business/billing/portal')}>
                   {busy ? 'Opening…' : 'Manage billing'}
                 </button>
               )}
             </div>
             <UsageBar label="Active job postings" used={info.usage.activeJobs} limit={info.plan.activeJobs} />
             <UsageBar label="Applicants scored this month" used={info.usage.scoresThisMonth} limit={info.plan.monthlyScores} />
-            {!isOwner && isFree && (
-              <div style={{ fontSize: 12, color: 'var(--text3)' }}>Ask the organization owner to upgrade.</div>
-            )}
-            {error && <div style={{ fontSize: 12.5, color: '#ef4444' }}>{error}</div>}
+            {!isOwner && isFree && <p className="bs-note">Ask the organization owner to upgrade.</p>}
+            {error && <div className="bs-error" role="alert">{error}</div>}
           </>
         )}
       </div>
@@ -147,6 +141,8 @@ export default function BusinessSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const [tab, setTab] = useState<TabKey>('organization')
+  const tabRefs = useRef<Record<TabKey, HTMLButtonElement | null>>({ organization: null, team: null, integrations: null, billing: null })
 
   useEffect(() => {
     fetch('/api/business/organizations')
@@ -158,6 +154,32 @@ export default function BusinessSettingsPage() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  // ?tab=integrations (or the older #integrations / #plan links); a Stripe return opens billing.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const wanted = params.get('tab') ?? window.location.hash.replace('#', '')
+    const next = params.get('upgraded') === '1' ? 'billing' : TAB_ALIASES[wanted]
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional post-mount URL read
+    if (next) setTab(next)
+  }, [])
+
+  function selectTab(next: TabKey, focus = false) {
+    setTab(next)
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', next)
+    url.hash = ''
+    window.history.replaceState(null, '', url.toString())
+    if (focus) tabRefs.current[next]?.focus()
+  }
+
+  function onTabKey(e: React.KeyboardEvent) {
+    const i = TABS.findIndex((t) => t.key === tab)
+    const move = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
+    if (move) { e.preventDefault(); selectTab(TABS[(i + move + TABS.length) % TABS.length].key, true) }
+    else if (e.key === 'Home') { e.preventDefault(); selectTab(TABS[0].key, true) }
+    else if (e.key === 'End') { e.preventDefault(); selectTab(TABS[TABS.length - 1].key, true) }
+  }
 
   async function handleSaveName(e: React.FormEvent) {
     e.preventDefault()
@@ -184,83 +206,96 @@ export default function BusinessSettingsPage() {
   }
 
   const isDirty = nameInput.trim() !== (org?.name ?? '')
+  const isOwner = org?.role === 'owner'
 
   return (
-    <div style={{ maxWidth: 520 }}>
-      <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', marginBottom: 24, letterSpacing: '-0.02em' }}>
-        Settings
-      </h1>
+    <div className="biz-inner bs-inner">
+      <header className="bs-head">
+        <h1 className="biz-h1">Settings</h1>
+        {org && (
+          <div className="biz-tabs" role="tablist" aria-label="Settings sections" onKeyDown={onTabKey}>
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                ref={(el) => { tabRefs.current[t.key] = el }}
+                type="button"
+                role="tab"
+                id={`bs-tab-${t.key}`}
+                aria-selected={tab === t.key}
+                aria-controls={`bs-panel-${t.key}`}
+                tabIndex={tab === t.key ? 0 : -1}
+                onClick={() => selectTab(t.key)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </header>
 
       {loading ? (
-        <div style={{ color: 'var(--text3)', fontSize: 13.5 }}>Loading…</div>
+        <p className="bs-note" role="status">Loading…</p>
       ) : !org ? (
-        <div style={{ color: 'var(--text3)', fontSize: 13.5 }}>No organization found.</div>
+        <div className="biz-card biz-empty">
+          <h2>No organization found</h2>
+          <p>Create an organization to manage its settings.</p>
+          <a className="biz-btn" href="/business/onboarding">Create organization</a>
+        </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Organization name */}
-          <div className="section-card">
-            <div className="section-head">
-              <div className="section-head-title">Organization</div>
-              <div style={{ fontSize: 11.5, color: 'var(--text3)' }}>
-                Created {formatDate(org.created_at)}
+        <div className="bs-panel" role="tabpanel" id={`bs-panel-${tab}`} aria-labelledby={`bs-tab-${tab}`} tabIndex={0}>
+          {tab === 'organization' && (
+            <div className="biz-card">
+              <div className="biz-card-head">
+                <h2 className="biz-h2">Organization</h2>
+                <span className="biz-muted" style={{ fontSize: 13 }}>Created {formatDate(org.created_at)}</span>
+              </div>
+              <div className="bs-card">
+                {error && <div className="bs-error" role="alert">{error}</div>}
+                <form onSubmit={handleSaveName}>
+                  <label className="bs-field">
+                    Organization name
+                    <span className="bs-inline">
+                      <input
+                        className="bs-input"
+                        type="text"
+                        value={nameInput}
+                        onChange={(e) => { setNameInput(e.target.value); setSaved(false) }}
+                        maxLength={100}
+                        disabled={!isOwner}
+                      />
+                      {isOwner && (
+                        <button type="submit" className="biz-btn" disabled={saving || !isDirty || !nameInput.trim()}>
+                          {saving ? 'Saving…' : saved ? 'Saved' : 'Save'}
+                        </button>
+                      )}
+                    </span>
+                  </label>
+                  {!isOwner && <p className="bs-note" style={{ marginTop: 6 }}>Only owners can rename the organization.</p>}
+                </form>
+                <dl style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div className="bs-kv"><dt>Slug</dt><dd><span className="bs-mono">{org.slug}</span></dd></div>
+                </dl>
               </div>
             </div>
-            <div style={{ padding: 20 }}>
-              {error && (
-                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444', borderRadius: 8, padding: '9px 14px', fontSize: 13, color: '#ef4444', marginBottom: 14 }}>
-                  {error}
-                </div>
-              )}
-              <form onSubmit={handleSaveName}>
-                <label className="form-label">Organization name</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    className="form-input"
-                    type="text"
-                    value={nameInput}
-                    onChange={(e) => { setNameInput(e.target.value); setSaved(false) }}
-                    maxLength={100}
-                    style={{ flex: 1 }}
-                    disabled={org.role !== 'owner'}
-                  />
-                  {org.role === 'owner' && (
-                    <button
-                      type="submit"
-                      className="btn-primary"
-                      disabled={saving || !isDirty || !nameInput.trim()}
-                      style={{ flexShrink: 0 }}
-                    >
-                      {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
-                    </button>
-                  )}
-                </div>
-                {org.role !== 'owner' && (
-                  <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>
-                    Only owners can rename the organization.
-                  </div>
-                )}
-              </form>
+          )}
 
-              <div style={{ borderTop: '1px solid var(--border)', marginTop: 20, paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 500 }}>Slug</span>
-                  <span style={{ fontSize: 12.5, color: 'var(--text2)', fontFamily: 'var(--mono)', background: 'var(--bg3)', padding: '3px 8px', borderRadius: 5 }}>
-                    {org.slug}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 500 }}>Your role</span>
-                  <span style={{ fontSize: 12.5, color: 'var(--text)', fontWeight: 600, textTransform: 'capitalize' }}>{org.role}</span>
-                </div>
+          {tab === 'team' && (
+            <div className="biz-card">
+              <div className="biz-card-head"><h2 className="biz-h2">Team</h2></div>
+              <div className="bs-card">
+                <dl style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div className="bs-kv"><dt>Your role</dt><dd><span className="biz-chip teal">{org.role}</span></dd></div>
+                </dl>
+                <p className="bs-note">
+                  Owners rename the organization and manage the plan and billing. Owners and admins connect and manage ATS integrations.
+                </p>
               </div>
             </div>
-          </div>
+          )}
 
-          <PlanCard orgId={org.id} isOwner={org.role === 'owner'} />
+          {tab === 'integrations' && <IntegrationsCard orgId={org.id} />}
 
-          <IntegrationsCard orgId={org.id} />
-
+          {tab === 'billing' && <PlanCard orgId={org.id} isOwner={isOwner} />}
         </div>
       )}
     </div>
